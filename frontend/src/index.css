@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-800 min-h-screen;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(203 213 225 / 0.8) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: rgb(203 213 225 / 0.8);
+    border-radius: 9999px;
+  }
+}
+
+@layer utilities {
+  .scrollbar-overlay {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(203 213 225 / 0.8) transparent;
+  }
+  .scrollbar-overlay::-webkit-scrollbar {
+    width: 4px;
+  }
+  .scrollbar-overlay::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-overlay::-webkit-scrollbar-thumb {
+    background-color: rgb(203 213 225 / 0.8);
+    border-radius: 9999px;
+  }
+}
