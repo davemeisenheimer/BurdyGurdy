@@ -2,7 +2,7 @@ import { Router } from 'express';
 import axios from 'axios';
 import { getTaxonomy, getRegionalSpecies, ebirdClient, getCommonSpeciesCodes, getBackyardSpeciesRanking, getSpeciesList } from '../services/ebird';
 import { getRecordings } from '../services/xenocanto';
-import { getSpeciesPhotoUrl, getSpeciesPhotoUrls } from '../services/macaulay';
+import { getSpeciesPhotoUrl, getSpeciesPhotoUrls, getSpeciesPhotoUrlsForQuestion } from '../services/macaulay';
 import { getWikipediaSummary, getWikipediaRangeMap, getWikipediaRangeMapLegend, getWikipediaPhotos } from '../services/wikipedia';
 import { cache } from '../cache';
 import { BACKYARD_FAMILIES } from '../constants';
@@ -16,23 +16,26 @@ const router = Router();
 router.get('/region/:regionCode', async (req, res) => {
   try {
     const { regionCode } = req.params;
-    const [observations, taxonomy, backyardCodes, top100Codes] = await Promise.all([
-      getRegionalSpecies(regionCode),
+    const backParam = parseInt(req.query.back as string);
+    const back = [1, 7, 30].includes(backParam) ? backParam : 30;
+    const [observations, taxonomy, backyardCodes, top100Codes, historicalCodes] = await Promise.all([
+      getRegionalSpecies(regionCode, back),
       getTaxonomy(),
       getBackyardSpeciesRanking(regionCode),
       getCommonSpeciesCodes(regionCode),
+      getSpeciesList(regionCode),
     ]);
 
     const taxMap = new Map(taxonomy.map(t => [t.speciesCode, t]));
     const commonCodes = backyardCodes.length >= 10 ? backyardCodes : top100Codes;
     const commonRank = new Map(commonCodes.map((code, i) => [code, i]));
 
-    // Deduplicate
-    const seen = new Set<string>();
-    const unique = observations
+    // Build recent species (deduplicated), tagged as not historical
+    const recentCodes = new Set<string>();
+    const recent = observations
       .filter(obs => {
-        if (seen.has(obs.speciesCode)) return false;
-        seen.add(obs.speciesCode);
+        if (recentCodes.has(obs.speciesCode)) return false;
+        recentCodes.add(obs.speciesCode);
         return true;
       })
       .map(obs => {
@@ -46,17 +49,43 @@ router.get('/region/:regionCode', async (req, res) => {
           order: tax?.order ?? '',
           isBackyard: BACKYARD_FAMILIES.has(tax?.familySciName ?? ''),
           commonRank: commonRank.get(obs.speciesCode) ?? 9999,
+          isHistorical: false,
         };
       });
 
-    // Sort: backyard species first (by commonness), then other species (by commonness)
-    unique.sort((a, b) => {
-      if (a.isBackyard !== b.isBackyard) return a.isBackyard ? -1 : 1;
+    // Build historical-only species (in spplist but not in recent observations)
+    const historical = (historicalCodes as string[])
+      .filter(code => !recentCodes.has(code) && taxMap.has(code))
+      .map(code => {
+        const tax = taxMap.get(code)!;
+        return {
+          speciesCode: code,
+          comName: tax.comName,
+          sciName: tax.sciName,
+          familyComName: tax.familyComName ?? '',
+          familySciName: tax.familySciName ?? '',
+          order: tax.order ?? '',
+          isBackyard: BACKYARD_FAMILIES.has(tax.familySciName ?? ''),
+          commonRank: commonRank.get(code) ?? 9999,
+          isHistorical: true,
+        };
+      });
+
+    const all = [...recent, ...historical];
+
+    // Sort into 4 priority groups:
+    //   0: recent + common    1: recent + not common
+    //   2: historical + common    3: historical + not common
+    // Within each group, order by commonness rank.
+    all.sort((a, b) => {
+      const groupA = (a.isHistorical ? 2 : 0) + (a.isBackyard ? 0 : 1);
+      const groupB = (b.isHistorical ? 2 : 0) + (b.isBackyard ? 0 : 1);
+      if (groupA !== groupB) return groupA - groupB;
       return a.commonRank - b.commonRank;
     });
 
-    // Strip internal sort key before sending
-    res.json(unique.map(({ commonRank: _cr, ...rest }) => rest));
+    // Strip raw sort key; expose derived flags for client-side filtering
+    res.json(all.map(({ commonRank, ...rest }) => ({ ...rest, isCommon: commonRank < 9999 })));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch regional birds' });
@@ -222,7 +251,7 @@ router.get('/regions/locate', async (req, res) => {
     return res.status(400).json({ detail: 'Invalid coordinates' });
   }
 
-  const nominatimZoom = mapZoom >= 8 ? 10 : 5;
+  const nominatimZoom = mapZoom >= 8 ? 10 : mapZoom >= 4 ? 5 : 3;
   const cacheKey = `locate2:${lat.toFixed(2)},${lng.toFixed(2)},${nominatimZoom}`;
   const cached = cache.get<object>(cacheKey);
   if (cached) return res.json(cached);
@@ -239,6 +268,15 @@ router.get('/regions/locate', async (req, res) => {
 
     const countryCode = (addr.country_code as string | undefined)?.toUpperCase();
     if (!countryCode) return res.status(404).json({ detail: 'Could not determine country' });
+
+    const countryName: string = addr.country ?? countryCode;
+
+    // At country zoom, return the country directly without state/county resolution
+    if (nominatimZoom <= 3) {
+      const result = { regionCode: countryCode, regionName: countryName };
+      cache.set(cacheKey, result, 24 * 60 * 60 * 1000);
+      return res.json(result);
+    }
 
     // Different countries use different address fields for the state/province:
     // US → addr.state, Canada → addr.province (zoom=5) or addr.state (zoom=10)
@@ -308,7 +346,11 @@ router.get('/regions/locate', async (req, res) => {
 
     const regionCode = sub2Code ?? sub1Code ?? countryCode;
     const regionName = sub2Name ?? sub1Name;
-    const broader = sub2Code && sub1Code ? { code: sub1Code, name: sub1Name } : undefined;
+    const broader = sub2Code && sub1Code
+      ? { code: sub1Code, name: sub1Name }
+      : sub1Code
+      ? { code: countryCode, name: countryName }
+      : undefined;
 
     const result = { regionCode, regionName, broader };
     cache.set(cacheKey, result, 24 * 60 * 60 * 1000);
@@ -316,6 +358,32 @@ router.get('/regions/locate', async (req, res) => {
   } catch (err) {
     console.error('Locate region error:', (err as Error).message);
     res.status(500).json({ detail: 'Geocoding failed' });
+  }
+});
+
+// GET /api/birds/recent/:speciesCode?regionCode=CA-ON-OT
+// Returns up to 3 most recent eBird observations of a species in a region (last 30 days).
+router.get('/recent/:speciesCode', async (req, res) => {
+  const { speciesCode } = req.params;
+  const regionCode = String(req.query.regionCode ?? '');
+  if (!regionCode) return res.status(400).json({ error: 'regionCode required' });
+  const maxResults = Math.min(10, Math.max(1, parseInt(String(req.query.maxResults ?? '5')) || 5));
+
+  const cacheKey = `recent:${regionCode}:${speciesCode}:${maxResults}`;
+  const cached = cache.get<object[]>(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    const result = await ebirdClient().get(`/data/obs/${regionCode}/recent/${speciesCode}`, {
+      params: { maxResults, back: 30 },
+    });
+    const sightings = (result.data as Array<{ locName: string; obsDt: string; howMany?: number; lat?: number; lng?: number }>)
+      .slice(0, maxResults)
+      .map(s => ({ locName: s.locName, obsDt: s.obsDt, howMany: s.howMany ?? null, lat: s.lat ?? null, lng: s.lng ?? null }));
+    cache.set(cacheKey, sightings, 60 * 60 * 1000); // 1 hour
+    res.json(sightings);
+  } catch {
+    res.json([]);
   }
 });
 
@@ -331,17 +399,17 @@ router.get('/photo/:speciesCode', async (req, res) => {
   }
 });
 
-// GET /api/birds/photos/:speciesCode?comName=...&sciName=...
-// Returns all available photo URLs for the species (for reveal-panel navigation)
+// GET /api/birds/photos/:speciesCode?comName=...&sciName=...&forQuestion=true
+// Returns photo URLs for the species. forQuestion=true applies appearance-only filtering.
 router.get('/photos/:speciesCode', async (req, res) => {
   try {
-    const comName = req.query.comName ? String(req.query.comName) : '';
-    const sciName = req.query.sciName ? String(req.query.sciName) : comName;
-    const [photoData, wikiPhotos] = await Promise.all([
-      getSpeciesPhotoUrls(req.params.speciesCode, comName, sciName),
-      getWikipediaPhotos(sciName, comName),
-    ]);
-    res.json({ primary: photoData.primary, optional: wikiPhotos });
+    const comName = req.query.comName ? String(req.query.comName) : undefined;
+    const sciName = req.query.sciName ? String(req.query.sciName) : undefined;
+    const forQuestion = req.query.forQuestion === 'true';
+    const photos = forQuestion
+      ? await getSpeciesPhotoUrlsForQuestion(req.params.speciesCode, comName, sciName)
+      : await getSpeciesPhotoUrls(req.params.speciesCode, comName, sciName);
+    res.json(photos);
   } catch {
     res.json({ primary: null, optional: [] });
   }

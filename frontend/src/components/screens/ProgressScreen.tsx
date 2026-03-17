@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, Fragment } from 'react';
 import { db } from '../../lib/db';
-import { setExcluded } from '../../lib/adaptive';
+import { setExcluded, STRUGGLING_THRESHOLD } from '../../lib/adaptive';
+import { MASTERY_LABELS, masteryBadgeClass } from '../../lib/mastery';
 import type { BirdProgress, QuestionType } from '../../types';
 
 interface Props {
@@ -28,7 +29,6 @@ interface BirdSummary {
 
 type Filter = 'learning' | 'favourites' | 'struggling' | 'mastered' | 'excluded';
 
-const MASTERY_LABELS = ['Easy', 'Medium', 'Hard'];
 
 export function ProgressScreen({ onBack }: Props) {
   const [birds, setBirds]               = useState<BirdSummary[]>([]);
@@ -96,6 +96,8 @@ export function ProgressScreen({ onBack }: Props) {
 
   const handleClearHistory = async () => {
     await db.progress.clear();
+    // Reset promotion queue so the next adaptive session starts from the beginning
+    await db.regionSpecies.toCollection().modify({ promotionIndex: 0 });
     setBirds([]);
     setConfirmClear(false);
   };
@@ -113,7 +115,7 @@ export function ProgressScreen({ onBack }: Props) {
   const filteredUnsorted = birds.filter(b => {
     if (filter === 'learning')        return b.isInProgress;
     if (filter === 'favourites') return b.favourited && !b.excluded;
-    if (filter === 'struggling') return !b.excluded && b.totalAttempts >= 3 && b.overallAccuracy < 0.6;
+    if (filter === 'struggling') return !b.excluded && b.totalAttempts >= 3 && b.overallAccuracy < STRUGGLING_THRESHOLD;
     if (filter === 'mastered')   return !b.excluded && b.isInHistory;
     if (filter === 'excluded')   return b.excluded;
     return !b.excluded;
@@ -135,11 +137,6 @@ export function ProgressScreen({ onBack }: Props) {
     return 'bg-red-400';
   };
 
-  const masteryBadgeColor = (level: number) => {
-    if (level >= 2) return 'bg-purple-100 text-purple-700';
-    if (level === 1) return 'bg-sky-100 text-sky-700';
-    return 'bg-slate-100 text-slate-500';
-  };
 
   const progressBadge = (r: BirdProgress) => {
       const total = r.correct + r.incorrect;
@@ -312,7 +309,7 @@ export function ProgressScreen({ onBack }: Props) {
                     const threshold = lvl >= 2 ? 5 : 3;
                     const streak = leading.consecutiveCorrect ?? 0;
                     return (
-                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${masteryBadgeColor(lvl)}`}>
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${masteryBadgeClass(lvl)}`}>
                         {streak}/{threshold} {MASTERY_LABELS[lvl] ?? 'Hard'} distractors
                       </span>
                     );

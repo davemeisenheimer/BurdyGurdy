@@ -7,6 +7,7 @@ import { MapRegionPicker } from '../ui/MapRegionPicker';
 
 interface Props {
   initialConfig: QuizConfig;
+  isDesktop: boolean;
   onStart: (config: QuizConfig) => void;
   onProgress: () => void;
   onSettings: () => void;
@@ -21,7 +22,7 @@ const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: 'sono',   label: 'Spectrogram' },
 ];
 
-export function HomeScreen({ initialConfig, onStart, onProgress, onSettings }: Props) {
+export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSettings }: Props) {
   const [regionCode, setRegionCode] = useState(initialConfig.regionCode);
   const [selectedTypes, setSelectedTypes] = useState<QuestionType[]>(initialConfig.questionTypes);
   const [mode, setMode] = useState<GameMode>(initialConfig.mode);
@@ -40,13 +41,15 @@ export function HomeScreen({ initialConfig, onStart, onProgress, onSettings }: P
   };
 
   const handleStart = () => {
-    onStart({ regionCode, questionTypes: selectedTypes, mode, questionsPerRound, groupId });
+    onStart({ regionCode: isDesktop ? regionCode : initialConfig.regionCode, questionTypes: selectedTypes, mode, questionsPerRound, groupId });
   };
 
   return (
-    <div className="min-h-dvh flex flex-col p-3 sm:p-6">
-      <div className="w-full max-w-md mx-auto flex flex-col flex-1">
-        <div className="text-center relative">
+    <div className="h-dvh overflow-y-auto flex flex-col p-3 sm:p-6">
+      <div className="w-full max-w-md mx-auto flex flex-col flex-1 min-h-0">
+
+        {/* Header */}
+        <div className="text-center relative pb-4 shrink-0">
           <button
             onClick={() => setShowHelp(true)}
             className="absolute right-0 top-0 w-8 h-8 rounded-full border border-slate-300 text-slate-500 hover:bg-slate-100 text-sm font-semibold"
@@ -66,11 +69,12 @@ export function HomeScreen({ initialConfig, onStart, onProgress, onSettings }: P
           <p className="text-slate-500 mt-2">Learn the birds that make sense</p>
         </div>
 
-        <div className="flex-1 max-h-[1em]" />
+        {/* Card — grows to fill remaining height; sections flex apart */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col flex-1 px-6 py-6">
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
-          {/* Region */}
-          <div>
+          {/* Region — desktop only; mobile sets region in Settings */}
+          {isDesktop && (<>
+          <div className="shrink-0">
             <label className="block text-sm font-semibold text-slate-700 mb-1">Region</label>
             <div className="flex gap-2">
               <div className="flex-1">
@@ -86,9 +90,11 @@ export function HomeScreen({ initialConfig, onStart, onProgress, onSettings }: P
             </div>
             <p className="text-xs text-slate-400 mt-1">Search by place name, enter an eBird code directly (e.g. CA-ON, CA-ON-OT, US-WA, or CR), or pick on the map.</p>
           </div>
+          <div className="flex-1 min-h-4" />
+          </>)}
 
           {/* Question types */}
-          <div>
+          <div className="shrink-0">
             <label className="block text-sm font-semibold text-slate-700 mb-2">Question Types</label>
             <div className="grid grid-cols-3 gap-2">
               {QUESTION_TYPES.map(({ value, label }) => (
@@ -106,9 +112,10 @@ export function HomeScreen({ initialConfig, onStart, onProgress, onSettings }: P
               ))}
             </div>
           </div>
+          <div className="flex-1 min-h-4" />
 
           {/* Bird group */}
-          <div>
+          <div className="shrink-0">
             <label className="block text-sm font-semibold text-slate-700 mb-2">Bird Group</label>
             <div className="grid grid-cols-3 gap-2">
               {BIRD_GROUPS.map(g => (
@@ -126,9 +133,10 @@ export function HomeScreen({ initialConfig, onStart, onProgress, onSettings }: P
               ))}
             </div>
           </div>
+          <div className="flex-1 min-h-4" />
 
           {/* Mode */}
-          <div>
+          <div className="shrink-0">
             <label className="block text-sm font-semibold text-slate-700 mb-2">Learning Mode</label>
             <div className="flex gap-2">
               {(['adaptive', 'random'] as GameMode[]).map(m => (
@@ -149,9 +157,10 @@ export function HomeScreen({ initialConfig, onStart, onProgress, onSettings }: P
               Adaptive focuses on birds you find difficult. Random picks evenly.
             </p>
           </div>
+          <div className="flex-1 min-h-4" />
 
           {/* Questions per round */}
-          <div>
+          <div className="shrink-0">
             <label className="block text-sm font-semibold text-slate-700 mb-1">
               Questions per Round: <span className="text-forest-700">{questionsPerRound}</span>
             </label>
@@ -165,8 +174,10 @@ export function HomeScreen({ initialConfig, onStart, onProgress, onSettings }: P
               className="w-full accent-forest-600"
             />
           </div>
+          <div className="flex-1 min-h-4" />
 
-          <div className="space-y-3">
+          {/* Buttons */}
+          <div className="shrink-0 space-y-3">
             <button
               onClick={handleStart}
               disabled={selectedTypes.length === 0 || !regionCode}
@@ -186,7 +197,7 @@ export function HomeScreen({ initialConfig, onStart, onProgress, onSettings }: P
       </div>
 
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
-      {showMap && (
+      {isDesktop && showMap && (
         <MapRegionPicker
           onSelect={(code, name) => { setRegionCode(code); setRegionDisplayName(name); }}
           onClose={() => setShowMap(false)}

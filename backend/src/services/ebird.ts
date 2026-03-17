@@ -46,13 +46,13 @@ export async function getTaxonomy(): Promise<EBirdSpecies[]> {
 }
 
 /** Species observed in a region recently, ordered by frequency (most common first). Cached 1h. */
-export async function getRegionalSpecies(regionCode: string): Promise<EBirdObservation[]> {
-  const key = `regional:${regionCode}`;
+export async function getRegionalSpecies(regionCode: string, back = 30): Promise<EBirdObservation[]> {
+  const key = `regional:${regionCode}:${back}`;
   const cached = cache.get<EBirdObservation[]>(key);
   if (cached) return cached;
 
   const res = await ebirdClient().get(`/data/obs/${regionCode}/recent`, {
-    params: { maxResults: 200, includeProvisional: true },
+    params: { maxResults: 200, back, includeProvisional: true },
   });
   cache.set(key, res.data, TTL_1H);
   return res.data;

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getTaxonomy, getRegionalSpecies, getCommonSpeciesCodes, getBackyardSpeciesRanking } from '../services/ebird';
+import { getTaxonomy, getRegionalSpecies, getCommonSpeciesCodes, getBackyardSpeciesRanking, getSpeciesList } from '../services/ebird';
 import { getRecordings } from '../services/xenocanto';
 import { getSpeciesPhotoUrl } from '../services/macaulay';
 import { BACKYARD_FAMILIES, GROUP_ORDERS } from '../constants';
@@ -22,6 +22,7 @@ export interface QuizQuestion {
   audioUrl?: string;
   sonoUrl?: string;
   imageUrl?: string;
+  imageCredit?: string;
   options: string[];
   optionAudioUrls?: string[];
   correctAnswer: string;
@@ -301,11 +302,12 @@ router.post('/questions', async (req, res) => {
 
     const paletteCodes = new Set<string>(paletteSpeciesCodes as string[]);
 
-    const [observations, taxonomy, backyardCodes, top100Codes] = await Promise.all([
+    const [observations, taxonomy, backyardCodes, top100Codes, historicalCodes] = await Promise.all([
       getRegionalSpecies(regionCode),
       getTaxonomy(),
       getBackyardSpeciesRanking(regionCode),
       getCommonSpeciesCodes(regionCode),
+      getSpeciesList(regionCode),
     ]);
 
     // Use backyard (private location) ranking as primary; fall back to top100 if too sparse
@@ -326,14 +328,14 @@ router.post('/questions', async (req, res) => {
       .filter(s => s.tax) as PoolSpecies[];
 
     const groupOrders   = GROUP_ORDERS[groupId] ?? [];
-    const filteredPool  = groupOrders.length > 0
+    let filteredPool  = groupOrders.length > 0
       ? pool.filter(s => groupOrders.includes(s.tax!.order))
       : pool;
 
     // Sort filteredPool: backyard-family species first (by commonness), then others (by commonness).
     // This ensures the initial questions favour familiar backyard birds over rarities.
     const commonRank = new Map(commonCodes.map((code, i) => [code, i]));
-    const questionPool = [...filteredPool].sort((a, b) => {
+    let questionPool = [...filteredPool].sort((a, b) => {
       const aBackyard = BACKYARD_FAMILIES.has(a.tax!.familySciName ?? '');
       const bBackyard = BACKYARD_FAMILIES.has(b.tax!.familySciName ?? '');
       if (aBackyard !== bBackyard) return aBackyard ? -1 : 1;
@@ -341,6 +343,28 @@ router.post('/questions', async (req, res) => {
       const rb = commonRank.get(b.speciesCode) ?? 9999;
       return ra - rb;
     });
+
+    // Supplement with the full historical species list as a low-priority fallback.
+    // Historical species are appended after recent ones and given a much lower selection
+    // weight (0.05 vs 1.0) so they only appear when the recent pool runs short.
+    // In adaptive mode they are skipped entirely (no weight entry means no candidate).
+    const recentCodes = new Set(questionPool.map(s => s.speciesCode));
+    const historicalExtras: PoolSpecies[] = (historicalCodes as string[])
+      .filter(code => !recentCodes.has(code) && taxMap.has(code))
+      .map(code => {
+        const tax = taxMap.get(code)!;
+        return {
+          speciesCode: code,
+          comName: tax.comName,
+          sciName: tax.sciName,
+          tax: { familySciName: tax.familySciName, familyComName: tax.familyComName, order: tax.order },
+        } as PoolSpecies;
+      })
+      .filter(s => groupOrders.length === 0 || groupOrders.includes(s.tax!.order));
+    // Historical extras supplement the distractor pool only — not question subjects.
+    // This prevents extinct/rare historical species (e.g. Passenger Pigeon) from
+    // appearing as correct answers while still providing taxonomic variety for distractors.
+    filteredPool  = [...filteredPool,  ...historicalExtras];
 
     // Build (species, type) candidate pairs.
     // In adaptive mode (weights dict is non-empty): only include birds that have been
@@ -368,8 +392,8 @@ router.post('/questions', async (req, res) => {
     if (adaptiveMode && level0Min > 0) {
       const level0Candidates = candidates.filter(c => (ml[`${c.species.speciesCode}:${c.type}`] ?? 0) === 0);
       const otherCandidates  = candidates.filter(c => (ml[`${c.species.speciesCode}:${c.type}`] ?? 0) > 0);
-      const pickedLevel0 = pickFromPool(level0Candidates, level0Min + 3);
-      const pickedOther  = pickFromPool(otherCandidates,  (count - level0Min) + 5);
+      const pickedLevel0 = pickFromPool(level0Candidates, count + 5);
+      const pickedOther  = pickFromPool(otherCandidates,  count + 5);
       picked = [...pickedLevel0, ...pickedOther];
     } else {
       picked = pickFromPool(candidates, count + 5);
@@ -418,7 +442,7 @@ router.post('/questions', async (req, res) => {
 
         const [recordings, photoUrl] = await Promise.all([
           getRecordings(species.sciName),
-          needsPhoto ? getSpeciesPhotoUrl(species.speciesCode, species.comName, species.sciName) : Promise.resolve(null),
+          needsPhoto ? getSpeciesPhotoUrl(species.speciesCode, species.comName, species.sciName, masteryLevels[`${species.speciesCode}:${type}`]) : Promise.resolve(null),
         ]);
 
         if (recordings.length > 0) {
@@ -427,7 +451,7 @@ router.post('/questions', async (req, res) => {
           q.sonoUrl  = rec.sono?.med ?? rec.sono?.small;
         }
 
-        if (photoUrl) q.imageUrl = photoUrl;
+        if (photoUrl) { q.imageUrl = photoUrl.url; q.imageCredit = photoUrl.credit; }
 
         if (isSongAnswer) {
           const distractorRecs = await Promise.all(

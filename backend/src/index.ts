@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import { cache } from './cache';
 import birdsRouter from './routes/birds';
 import quizRouter from './routes/quiz';
 
@@ -18,6 +19,16 @@ app.use('/api/birds', birdsRouter);
 app.use('/api/quiz', quizRouter);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+
+// Secret cache-clear endpoint — token must match ADMIN_TOKEN env var
+app.post('/api/admin/cache-clear', (req, res) => {
+  const token = process.env.ADMIN_TOKEN;
+  if (!token || req.query.token !== token) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  cache.clear();
+  res.json({ ok: true, message: 'Server cache cleared' });
+});
 
 // Serve frontend in production
 const frontendDist = path.join(__dirname, '../../frontend/dist');

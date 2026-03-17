@@ -58,7 +58,7 @@ export function MapRegionPicker({ onSelect, onClose }: Props) {
     onClose();
   };
 
-  const zoomedIn = zoom >= 8;
+  const zoomLevel = zoom >= 8 ? 'county' : zoom >= 4 ? 'state' : 'country';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
@@ -71,9 +71,11 @@ export function MapRegionPicker({ onSelect, onClose }: Props) {
           <div>
             <h2 className="font-semibold text-slate-800">Choose Region</h2>
             <p className="text-xs text-slate-500">
-              {zoomedIn
+              {zoomLevel === 'county'
                 ? 'Click to identify county / district'
-                : 'Click to identify state / province · zoom in for smaller regions'}
+                : zoomLevel === 'state'
+                ? 'Click to identify state / province · zoom in for county, zoom out for country'
+                : 'Click to identify country · zoom in for state / province'}
             </p>
           </div>
           <button
@@ -146,7 +148,7 @@ export function MapRegionPicker({ onSelect, onClose }: Props) {
                     onClick={() => confirm(result.broader!.code, result.broader!.name)}
                     className="shrink-0 px-4 py-2 rounded-xl border border-slate-300 hover:border-forest-400 text-slate-700 font-semibold text-sm transition-colors"
                   >
-                    Use province / state
+                    {result.broader!.code.includes('-') ? 'Use province / state' : 'Use country'}
                   </button>
                 </div>
               )}

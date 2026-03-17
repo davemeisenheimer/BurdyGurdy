@@ -4,6 +4,12 @@ import { cache } from '../cache';
 const TTL = 7 * 24 * 60 * 60 * 1000; // 7 days — Wikipedia content is stable
 const HEADERS = { 'User-Agent': 'BurdyGurdy/1.0 (bird identification learning app)' };
 
+export interface AttributedPhoto {
+  url: string;
+  credit: string; // e.g. "© John Smith · Wikimedia Commons (CC BY-SA 4.0)"
+  source?: 'macaulay' | 'inat' | 'wiki';
+}
+
 export interface WikiSummary {
   extract: string;        // full introductory extract
   url: string;            // canonical desktop Wikipedia URL
@@ -87,14 +93,54 @@ export async function getWikipediaRangeMapLegend(sciName: string, comName: strin
   return [];
 }
 
+/** Strip HTML tags from a string (used to clean Wikimedia Artist metadata). */
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, '').trim();
+}
+
+/** Batch-fetch attribution metadata for a list of Wikimedia file titles. */
+async function fetchWikiAttribution(titles: string[]): Promise<Map<string, string>> {
+  if (titles.length === 0) return new Map();
+  try {
+    const res = await axios.get('https://en.wikipedia.org/w/api.php', {
+      params: {
+        action: 'query',
+        titles: titles.join('|'),
+        prop: 'imageinfo',
+        iiprop: 'extmetadata',
+        iiextmetadatafilter: 'Artist|LicenseShortName',
+        format: 'json',
+        origin: '*',
+      },
+      headers: HEADERS,
+    });
+    const pages = res.data?.query?.pages ?? {};
+    const map = new Map<string, string>();
+    for (const page of Object.values(pages) as Array<{
+      title?: string;
+      imageinfo?: Array<{ extmetadata?: { Artist?: { value?: string }; LicenseShortName?: { value?: string } } }>;
+    }>) {
+      if (!page.title || !page.imageinfo?.[0]) continue;
+      const meta = page.imageinfo[0].extmetadata;
+      const artist  = meta?.Artist?.value          ? stripHtml(meta.Artist.value)          : '';
+      const license = meta?.LicenseShortName?.value ?? '';
+      const parts   = [artist ? `© ${artist}` : '', 'Wikimedia Commons', license].filter(Boolean);
+      map.set(page.title, parts.join(' · '));
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
 /**
  * Fetches high-quality bird photos from the Wikipedia article's media list.
- * Returns JPG/PNG image URLs, excluding range maps, icons, flags, and diagrams.
- * Requires at least 300px width to filter out thumbnails and icons.
+ * Returns AttributedPhoto objects with CC attribution, excluding range maps,
+ * icons, flags, and diagrams. Requires known width of at least 300px.
  */
-export async function getWikipediaPhotos(sciName: string, comName: string): Promise<string[]> {
-  const cacheKey = `wikiphotos:${sciName}`;
-  const hit = cache.get<string[]>(cacheKey);
+export async function getWikipediaPhotos(sciName: string, comName: string): Promise<AttributedPhoto[]> {
+  const cacheKey = `wikiphotos6:${sciName}`;
+  const hit = cache.get<AttributedPhoto[]>(cacheKey);
   if (hit !== undefined) return hit;
 
   const candidates = [
@@ -102,7 +148,7 @@ export async function getWikipediaPhotos(sciName: string, comName: string): Prom
     comName.replace(/ /g, '_'),
   ];
 
-  const EXCLUDE   = /range|distribution|map|flag|logo|icon|symbol|chart|graph|diagram|coat_of_arms|silhouette|feather|egg|eggs|nest|clutch/i;
+  const EXCLUDE   = /range|distribution|map|license|plate|iucn|mhnt|flag|logo|icon|symbol|chart|graph|diagram|coat_of_arms|silhouette|feather/i;
   const PHOTO_EXT = /\.(jpg|jpeg|png)$/i;
 
   for (const title of candidates) {
@@ -117,24 +163,36 @@ export async function getWikipediaPhotos(sciName: string, comName: string): Prom
         srcset?: Array<{ src?: string }>;
       }> = res.data?.items ?? [];
 
-      const photos: string[] = [];
+      const found: Array<{ title: string; url: string }> = [];
       for (const item of items) {
         if (!item.title || EXCLUDE.test(item.title)) continue;
         if (!PHOTO_EXT.test(item.title)) continue;
-        // Skip small decorative images
-        if (item.original?.width && item.original.width < 300) continue;
 
-        const url = item.original?.source ??
-          (item.srcset?.[0]?.src
-            ? item.srcset[0].src!.startsWith('//')
-              ? `https:${item.srcset[0].src}`
-              : item.srcset[0].src
-            : null);
-        if (url) photos.push(url);
-        if (photos.length >= 8) break;
+        // Prefer original.source (full-res direct URL); fall back to the largest srcset entry.
+        // Some Wikimedia items omit original.source and only provide srcset thumbnails.
+        let url: string | null = null;
+        if (item.original?.source) {
+          url = item.original.source;
+        } else {
+          const src = item.srcset?.[item.srcset.length - 1]?.src ?? null;
+          if (src) url = src.startsWith('//') ? `https:${src}` : src;
+        }
+        if (!url) continue;
+
+        // Reject only if we know the image is too small
+        if (item.original?.width && item.original.width < 250) continue;
+
+        found.push({ title: item.title, url });
+        if (found.length >= 8) break;
       }
 
-      if (photos.length > 0) {
+      if (found.length > 0) {
+        const attribution = await fetchWikiAttribution(found.map(f => f.title));
+        const photos: AttributedPhoto[] = found.map(f => ({
+          url: f.url,
+          credit: attribution.get(f.title) ?? 'Wikimedia Commons',
+          source: 'wiki' as const,
+        }));
         cache.set(cacheKey, photos, TTL);
         return photos;
       }

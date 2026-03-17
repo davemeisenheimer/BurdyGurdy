@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { QuizQuestion, QuestionType, BirdSpecies } from '../types';
+import type { QuizQuestion, QuestionType, BirdSpecies, AttributedPhoto } from '../types';
 
 const api = axios.create({ baseURL: (import.meta.env.VITE_API_URL ?? '') + '/api' });
 
@@ -51,8 +51,8 @@ export async function fetchAllSpecies(): Promise<AllSpeciesEntry[]> {
   return res.data;
 }
 
-export async function fetchRegionSpecies(regionCode: string): Promise<BirdSpecies[]> {
-  const res = await api.get<BirdSpecies[]>(`/birds/region/${regionCode}`);
+export async function fetchRegionSpecies(regionCode: string, back = 30): Promise<BirdSpecies[]> {
+  const res = await api.get<BirdSpecies[]>(`/birds/region/${regionCode}`, { params: { back } });
   return res.data;
 }
 
@@ -68,7 +68,7 @@ export interface BirdInfoData {
     country: string | null;
     en: string | null;      // English name from xeno-canto (confirmation)
   }>;
-  photos: { primary: string | null; optional: string[] };
+  photos: { primary: AttributedPhoto | null; optional: AttributedPhoto[] };
 }
 
 export async function fetchBirdInfo(
@@ -95,10 +95,28 @@ export async function fetchBirdPhoto(speciesCode: string, comName?: string, sciN
   return res.data.url;
 }
 
-export async function fetchBirdPhotos(speciesCode: string, comName?: string, sciName?: string): Promise<{ primary: string | null; optional: string[] }> {
+export interface RecentSighting {
+  locName: string;
+  obsDt: string;
+  howMany: number | null;
+  lat: number | null;
+  lng: number | null;
+}
+
+export async function fetchRecentSightings(speciesCode: string, regionCode: string, maxResults = 5): Promise<RecentSighting[]> {
+  try {
+    const res = await api.get<RecentSighting[]>(`/birds/recent/${speciesCode}`, { params: { regionCode, maxResults } });
+    return res.data;
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchBirdPhotos(speciesCode: string, comName?: string, sciName?: string, forQuestion = false): Promise<{ primary: AttributedPhoto | null; optional: AttributedPhoto[] }> {
   const params: Record<string, string> = {};
   if (comName) params.comName = comName;
   if (sciName) params.sciName = sciName;
-  const res = await api.get<{ primary: string | null; optional: string[] }>(`/birds/photos/${speciesCode}`, { params });
+  if (forQuestion) params.forQuestion = 'true';
+  const res = await api.get<{ primary: AttributedPhoto | null; optional: AttributedPhoto[] }>(`/birds/photos/${speciesCode}`, { params });
   return { primary: res.data.primary ?? null, optional: res.data.optional ?? [] };
 }

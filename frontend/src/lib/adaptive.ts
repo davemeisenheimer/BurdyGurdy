@@ -1,46 +1,58 @@
 import { db } from './db';
 import { getRegionSpecies } from './regionCache';
-import type { QuestionType } from '../types';
+import { MASTERY_ADVANCE_STREAK, GRADUATION_STREAK } from './mastery';
+import type { QuestionType, LevelUpEvent } from '../types';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
 // Learning palette size limits
-export const MAX_LEVEL_0_SIZE_FIRST   = 3;  // Max birds simultaneously in level 0
-export const MAX_LEVEL_0_SIZE_SECOND  = 6
-export const MAX_LEVEL_0_SIZE_THIRD   = 12
-export const MAX_LEVEL_0_SIZE         = 15;
+export const MAX_LEVEL_0_SIZE_FIRST   = 6;  // Max birds simultaneously in level 0
+export const MAX_LEVEL_0_SIZE_SECOND  = 8
+export const MAX_LEVEL_0_SIZE_THIRD   = 10
+export const MAX_LEVEL_0_SIZE         = 12;
 
 // Weight given to birds in the learning palette (levels 0, 1, 2)
-const PALETTE_WEIGHT = 100.0;
+const PALETTE_WEIGHT = 20.0;
 // Weight given to birds in the mastered palette (history)
 const HISTORY_WEIGHT = 1.0;
 
-// Consecutive-correct streak to advance mastery level (0→1 and 1→2)
-const MASTERY_ADVANCE_STREAK = 3;
-// Consecutive-correct streak at level 2 to graduate to the mastered palette
-const GRADUATION_STREAK = 5;
 
 // ── Weight formula ────────────────────────────────────────────────────────────
 
-function calcWeight(inHistory: boolean, favourited: boolean): number {
+export const STRUGGLING_THRESHOLD = 0.90; // accuracy below this = struggling
+
+function calcWeight(inHistory: boolean, favourited: boolean, correct: number, incorrect: number): number {
   if (favourited) return PALETTE_WEIGHT;
-  return inHistory ? HISTORY_WEIGHT : PALETTE_WEIGHT;
+  const total = correct + incorrect;
+  const struggling = total > 0 && correct / total < STRUGGLING_THRESHOLD;
+  if (inHistory) return struggling ? PALETTE_WEIGHT : HISTORY_WEIGHT;
+  return struggling ? PALETTE_WEIGHT * 1.5 : PALETTE_WEIGHT;
 }
 
 // ── recordAnswer ─────────────────────────────────────────────────────────────
 
+export interface RecordAnswerResult {
+  advancedFromLevel0: boolean;
+  levelUp: LevelUpEvent | null;
+  updatedMastery: { masteryLevel: number; consecutiveCorrect: number; inHistory: boolean };
+}
+
 /**
  * Records a quiz answer and updates mastery/streak in IndexedDB.
- * Returns true if a level 0 → 1 advancement occurred (triggers promotion).
+ * Returns whether a level 0→1 advancement occurred (triggers promotion)
+ * and a LevelUpEvent if any level advancement or graduation happened.
  */
 export async function recordAnswer(
   speciesCode: string,
   questionType: QuestionType,
   correct: boolean,
   comName: string,
-): Promise<boolean> {
+): Promise<RecordAnswerResult> {
   const existing = await db.progress.get([speciesCode, questionType]);
   let advancedFromLevel0 = false;
+  let levelUp: LevelUpEvent | null = null;
+
+  let updatedMastery: RecordAnswerResult['updatedMastery'];
 
   if (existing) {
     const newCorrect   = existing.correct   + (correct ? 1 : 0);
@@ -57,8 +69,10 @@ export async function recordAnswer(
         newMastery++;
         newStreak = 0;
         if (prevMastery === 0 && newMastery === 1) advancedFromLevel0 = true;
+        levelUp = { speciesCode, comName, questionType, newLevel: newMastery, graduated: false };
       } else if (newMastery >= 2 && newStreak >= GRADUATION_STREAK && !newInHistory) {
         newInHistory = true;
+        levelUp = { speciesCode, comName, questionType, newLevel: 3, graduated: true };
       }
     } else {
       newStreak = 0;
@@ -70,12 +84,21 @@ export async function recordAnswer(
       correct: newCorrect,
       incorrect: newIncorrect,
       lastAsked: Date.now(),
-      weight: calcWeight(newInHistory, existing.favourited ?? false),
+      weight: calcWeight(newInHistory, existing.favourited ?? false, newCorrect, newIncorrect),
       masteryLevel: newMastery,
       consecutiveCorrect: newStreak,
       inHistory: newInHistory,
     });
+
+    // When a level just advanced, show the completed level at its threshold rather than
+    // the new level at 0 — e.g. "3/3 Easy" instead of "0/3 Medium".
+    if (levelUp && !levelUp.graduated) {
+      updatedMastery = { masteryLevel: prevMastery, consecutiveCorrect: MASTERY_ADVANCE_STREAK, inHistory: false };
+    } else {
+      updatedMastery = { masteryLevel: newMastery, consecutiveCorrect: newStreak, inHistory: newInHistory };
+    }
   } else {
+    const newStreak = correct ? 1 : 0;
     await db.progress.put({
       speciesCode,
       questionType,
@@ -87,12 +110,13 @@ export async function recordAnswer(
       favourited: false,
       excluded: false,
       masteryLevel: 0,
-      consecutiveCorrect: correct ? 1 : 0,
+      consecutiveCorrect: newStreak,
       inHistory: false,
     });
+    updatedMastery = { masteryLevel: 0, consecutiveCorrect: newStreak, inHistory: false };
   }
 
-  return advancedFromLevel0;
+  return { advancedFromLevel0, levelUp, updatedMastery };
 }
 
 // ── Palette seeding & promotion ───────────────────────────────────────────────
@@ -129,8 +153,9 @@ async function addToPalette(
  * starting from the stored promotionIndex and advancing it forward.
  * The list is ordered backyard-common-first, so promotions always follow that order.
  */
-async function promoteNext(regionCode: string, types: QuestionType[], count: number): Promise<void> {
-  const cache = await db.regionSpecies.get(regionCode);
+async function promoteNext(regionCode: string, types: QuestionType[], count: number, back = 30): Promise<void> {
+  const cacheKey = `${regionCode}:${back}`;
+  const cache = await db.regionSpecies.get(cacheKey);
 
   if (!cache) return;
 
@@ -166,9 +191,9 @@ async function getPromotionCount(level0Count: number) {
  * Tops up level 0 to the dynamic target size, which grows as the user masters more birds.
  * Promotions follow the backyard-common-first order stored in the region species cache.
  */
-export async function maintainLevel0Palette(regionCode: string, types: QuestionType[]): Promise<void> {
+export async function maintainLevel0Palette(regionCode: string, types: QuestionType[], back = 30): Promise<void> {
   // Ensure the region species list is cached before we try to read promotionIndex
-  await getRegionSpecies(regionCode);
+  await getRegionSpecies(regionCode, back);
   const records = await db.progress.toArray();
   const recordSet = new Set(
     records
@@ -182,15 +207,15 @@ export async function maintainLevel0Palette(regionCode: string, types: QuestionT
   const promotionCount = await getPromotionCount(level0Count);
 
   if (promotionCount <= 0) return;
-  
-  await promoteNext(regionCode, types, promotionCount);
+
+  await promoteNext(regionCode, types, promotionCount, back);
 }
 
 /**
  * Called after a level 0 → 1 advancement.
  * Adds up to 2 birds from the next positions in the sorted region list.
  */
-export async function checkAndPromote(regionCode: string, types: QuestionType[]): Promise<void> {
+export async function checkAndPromote(regionCode: string, types: QuestionType[], back = 30): Promise<void> {
   const records = await db.progress.toArray();
 
   const level0Count = new Set(
@@ -206,7 +231,7 @@ export async function checkAndPromote(regionCode: string, types: QuestionType[])
 
   if (slotsToFill <= 0) return;
 
-  await promoteNext(regionCode, types, slotsToFill);
+  await promoteNext(regionCode, types, slotsToFill, back);
 }
 
 // ── Favourite ────────────────────────────────────────────────────────────────
@@ -218,13 +243,13 @@ export async function setFavourite(
 ): Promise<void> {
   const existing = await db.progress.get([speciesCode, questionType]);
   if (existing) {
-    const weight = calcWeight(existing.inHistory ?? false, favourited);
+    const weight = calcWeight(existing.inHistory ?? false, favourited, existing.correct ?? 0, existing.incorrect ?? 0);
     await db.progress.put({ ...existing, favourited, weight });
   } else {
     await db.progress.put({
       speciesCode, questionType, comName: speciesCode,
       correct: 0, incorrect: 0, lastAsked: Date.now(),
-      weight: calcWeight(false, favourited),
+      weight: calcWeight(false, favourited, 0, 0),
       favourited, excluded: false,
       masteryLevel: 0, consecutiveCorrect: 0, inHistory: false,
     });
@@ -290,7 +315,7 @@ export async function getAdaptiveParams(): Promise<AdaptiveParams> {
 
     for (const record of speciesRecords) {
       const key    = `${speciesCode}:${record.questionType}`;
-      weights[key] = calcWeight(record.inHistory ?? false, record.favourited ?? false);
+      weights[key] = calcWeight(record.inHistory ?? false, record.favourited ?? false, record.correct ?? 0, record.incorrect ?? 0);
     }
   }
 

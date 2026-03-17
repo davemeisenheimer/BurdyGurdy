@@ -1,6 +1,16 @@
 import { useState, useCallback, useEffect } from 'react';
-import type { QuizQuestion, QuizConfig } from '../types';
-import { fetchQuizQuestions, fetchBirdPhotos } from '../lib/api';
+
+function weightedPick<T>(candidates: Array<{ item: T; weight: number }>): T | null {
+  if (candidates.length === 0) return null;
+  const total = candidates.reduce((s, c) => s + c.weight, 0);
+  if (total === 0) return null;
+  let r = Math.random() * total;
+  for (const c of candidates) { r -= c.weight; if (r <= 0) return c.item; }
+  return candidates[candidates.length - 1].item;
+}
+import type { QuizQuestion, QuizConfig, AttributedPhoto, LevelUpEvent } from '../types';
+import { fetchQuizQuestions, fetchBirdPhotos, fetchBirdInfo, fetchRecentSightings } from '../lib/api';
+import type { RecentSighting } from '../lib/api';
 import { db } from '../lib/db';
 import {
   recordAnswer, setFavourite, getFavourited,
@@ -31,16 +41,23 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false) {
   });
   const [currentFavourited, setCurrentFavourited] = useState(false);
   const [currentExcluded, setCurrentExcluded]     = useState(false);
-  const [revealPhotos, setRevealPhotos] = useState<{ primary: string | null; optional: string[] }>({ primary: null, optional: [] });
-  const [questionPhotos, setQuestionPhotos] = useState<{ primary: string | null; optional: string[] } | null>(null);
+  const [revealPhotos, setRevealPhotos] = useState<{ primary: AttributedPhoto | null; optional: AttributedPhoto[] }>({ primary: null, optional: [] });
+  const [revealRangeMapUrl, setRevealRangeMapUrl] = useState<string | null>(null);
+  const [revealSightings, setRevealSightings] = useState<RecentSighting[]>([]);
+  const [questionPhoto, setQuestionPhoto] = useState<{ questionId: string; photo: AttributedPhoto } | null>(null);
+  const [roundLevelUps, setRoundLevelUps] = useState<LevelUpEvent[]>([]);
+  const [isFirstEncounter, setIsFirstEncounter] = useState(false);
+  const [currentMastery, setCurrentMastery] = useState<{ masteryLevel: number; consecutiveCorrect: number; inHistory: boolean } | null>(null);
 
   const currentQuestion = state.questions[state.currentIndex] ?? null;
+  const nextQuestion_   = state.questions[state.currentIndex + 1] ?? null;
   const isCorrect =
     state.selectedAnswer !== null &&
     state.selectedAnswer === currentQuestion?.correctAnswer;
 
   // Sync favourite + excluded status when current question changes (adaptive only)
   useEffect(() => {
+    setCurrentMastery(null);
     if (!currentQuestion || config.mode !== 'adaptive') {
       setCurrentFavourited(false);
       setCurrentExcluded(false);
@@ -50,57 +67,138 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false) {
     getExcluded(currentQuestion.speciesCode, currentQuestion.type).then(setCurrentExcluded);
   }, [currentQuestion?.id, config.mode]);
 
-  // Eagerly fetch photos during question state (for secondary photos in questions)
+  // Detect first encounter: seeded palette birds have lastAsked === 0 until first answer
   useEffect(() => {
-    if (!randomizeQuestionPhotos || !currentQuestion || state.status !== 'active') {
-      setQuestionPhotos(null);
+    if (!currentQuestion || config.mode !== 'adaptive') {
+      setIsFirstEncounter(false);
       return;
     }
-    let cancelled = false;
-    fetchBirdPhotos(currentQuestion.speciesCode, currentQuestion.comName, currentQuestion.sciName)
-      .then(async ({ primary, optional }) => {
-        if (cancelled) return;
-        const blocked = await db.blockedPhotos.toArray();
-        const blockedSet = new Set(blocked.map(b => b.url));
-        setQuestionPhotos({
-          primary,
-          optional: optional.filter(url => !blockedSet.has(url)),
-        });
-      })
-      .catch(() => { if (!cancelled) setQuestionPhotos(null); });
-    return () => { cancelled = true; };
-  }, [currentQuestion?.id, state.status, randomizeQuestionPhotos]);
+    db.progress.get([currentQuestion.speciesCode, currentQuestion.type])
+      .then(record => setIsFirstEncounter(record?.lastAsked === 0))
+      .catch(() => setIsFirstEncounter(false));
+  }, [currentQuestion?.id, config.mode]);
 
-  // Fetch reveal photos when an answer is submitted; filter out user-blocked URLs
+  // Preload the next question's image during the reveal state to avoid a flash on Next
   useEffect(() => {
-    if (state.status !== 'answered' || !currentQuestion) {
-      setRevealPhotos({ primary: null, optional: [] });
-      return;
+    if (state.status !== 'answered' || !nextQuestion_?.imageUrl) return;
+    const img = new Image();
+    img.src = nextQuestion_.imageUrl;
+  }, [state.status, nextQuestion_?.imageUrl]);
+
+  // Pre-fetch and lock in the question photo before the question becomes active.
+  // During 'answered': pre-fetch for the NEXT question so the pick is ready when it transitions to 'active'.
+  // During 'active': fallback fetch for the CURRENT question (covers the first question of each round).
+  useEffect(() => {
+    if (!randomizeQuestionPhotos) return;
+
+    let targetQuestion = null;
+    if (state.status === 'answered' && nextQuestion_) {
+      targetQuestion = nextQuestion_;
+    } else if (state.status === 'active' && currentQuestion && questionPhoto?.questionId !== currentQuestion.id) {
+      targetQuestion = currentQuestion;
     }
-    fetchBirdPhotos(currentQuestion.speciesCode, currentQuestion.comName, currentQuestion.sciName)
-      .then(async ({ primary, optional }) => {
-        const blocked = await db.blockedPhotos.toArray();
+    if (!targetQuestion) return;
+
+    const q = targetQuestion;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { primary, optional } = await fetchBirdPhotos(q.speciesCode, q.comName, q.sciName, true);
+        if (cancelled) return;
+        const [blocked, progressRecord] = await Promise.all([
+          db.blockedPhotos.toArray(),
+          db.progress.get([q.speciesCode, q.type]),
+        ]);
+        if (cancelled) return;
         const blockedSet = new Set(blocked.map(b => b.url));
-        setRevealPhotos({
-          primary,
-          optional: optional.filter(url => !blockedSet.has(url)),
-        });
-      })
-      .catch(() => setRevealPhotos({ primary: null, optional: [] }));
-  }, [state.status, currentQuestion?.id]);
+
+        const inatPhoto     = primary                                                           && !blockedSet.has(primary.url)  ? primary     : null;
+        const macaulayPhoto = optional.find(p => p.source === 'macaulay' && !blockedSet.has(p.url)) ?? null;
+        const wikiPhotos    = optional.filter(p => p.source === 'wiki'   && !blockedSet.has(p.url));
+
+        const mastery = progressRecord?.masteryLevel ?? 0;
+
+        let selected: AttributedPhoto | null = null;
+        if (mastery <= 0) {
+          // Level 0: primary only
+          selected = inatPhoto ?? macaulayPhoto ?? wikiPhotos[0] ?? null;
+        } else if (mastery === 1) {
+          // Level 1: 75% secondary, 25% primary
+          selected = weightedPick([
+            ...(macaulayPhoto ? [{ item: macaulayPhoto, weight: 3 }] : []),
+            ...(inatPhoto     ? [{ item: inatPhoto,     weight: 1 }] : []),
+          ]) ?? inatPhoto ?? macaulayPhoto ?? wikiPhotos[0] ?? null;
+        } else {
+          // Level 2+: 1/3 primary, 1/3 secondary, 1/3 Wiki (split equally among wiki photos)
+          // Using weight=1 for primary and secondary and weight=1/N for each wiki photo gives
+          // total weight=3, so P(primary)=1/3, P(secondary)=1/3, P(each wiki)=1/(3N).
+          const wikiWeight = wikiPhotos.length > 0 ? 1 / wikiPhotos.length : 0;
+          selected = weightedPick([
+            ...(inatPhoto     ? [{ item: inatPhoto,     weight: 1         }] : []),
+            ...(macaulayPhoto ? [{ item: macaulayPhoto, weight: 1         }] : []),
+            ...wikiPhotos.map(p => ({ item: p,          weight: wikiWeight })),
+          ]) ?? inatPhoto ?? macaulayPhoto ?? wikiPhotos[0] ?? null;
+        }
+
+        if (selected && !cancelled) {
+          setQuestionPhoto({ questionId: q.id, photo: selected });
+        }
+      } catch { /* non-fatal */ }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentQuestion?.id, nextQuestion_?.id, state.status, randomizeQuestionPhotos]);
+
+  // Fetch reveal photos and range map when the question changes.
+  // Intentionally depends only on question id — NOT state.status — so answering
+  // (active → answered) does not cancel an in-flight fetch.
+  useEffect(() => {
+    if (!currentQuestion) return;
+    setRevealPhotos({ primary: null, optional: [] });
+    setRevealRangeMapUrl(null);
+    let cancelled = false;
+    Promise.all([
+      fetchBirdPhotos(currentQuestion.speciesCode, currentQuestion.comName, currentQuestion.sciName),
+      fetchBirdInfo(currentQuestion.speciesCode, currentQuestion.comName, currentQuestion.sciName),
+      config.regionCode ? fetchRecentSightings(currentQuestion.speciesCode, config.regionCode, 1) : Promise.resolve([]),
+    ]).then(async ([{ primary, optional }, info, sightings]) => {
+      if (cancelled) return;
+      const blocked = await db.blockedPhotos.toArray();
+      const blockedSet = new Set(blocked.map(b => b.url));
+      setRevealPhotos({
+        primary,
+        optional: optional.filter(p => !blockedSet.has(p.url)),
+      });
+      setRevealRangeMapUrl(info?.rangeMapUrl ?? null);
+      setRevealSightings(sightings);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentQuestion?.id]);
+
+  // Clear reveal data when returning to idle/loading (round reset)
+  useEffect(() => {
+    if (state.status === 'idle' || state.status === 'loading') {
+      setRevealPhotos({ primary: null, optional: [] });
+      setRevealRangeMapUrl(null);
+      setRevealSightings([]);
+    }
+  }, [state.status]);
 
   const startQuiz = useCallback(async (overrideConfig?: QuizConfig) => {
     const cfg = overrideConfig ?? config;
     setState(s => ({ ...s, status: 'loading', error: null }));
+    setRoundLevelUps([]);
     try {
       let weights = {};
       let masteryLevels = {};
       let banned: string[] = [];
       let paletteSpeciesCodes: string[] = [];
 
+      const back = cfg.recentDays ?? 30;
       if (cfg.mode === 'adaptive') {
         // Seed initial palette and warm cache first; both use the same regionCode
-        await maintainLevel0Palette(cfg.regionCode, cfg.questionTypes);
+        await maintainLevel0Palette(cfg.regionCode, cfg.questionTypes, back);
         const params = await getAdaptiveParams();
         weights             = params.weights;
         masteryLevels       = params.masteryLevels;
@@ -108,7 +206,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false) {
         paletteSpeciesCodes = params.paletteSpeciesCodes;
       } else {
         // Warm the region species cache in the background for non-adaptive modes
-        getRegionSpecies(cfg.regionCode).catch(() => {/* non-fatal */});
+        getRegionSpecies(cfg.regionCode, back).catch(() => {/* non-fatal */});
       }
 
       const questions = await fetchQuizQuestions(
@@ -162,9 +260,11 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false) {
       },
     }));
 
-    const advancedFromLevel0 = await recordAnswer(q.speciesCode, q.type, correct, q.comName);
+    const { advancedFromLevel0, levelUp, updatedMastery } = await recordAnswer(q.speciesCode, q.type, correct, q.comName);
+    if (levelUp) setRoundLevelUps(prev => [...prev, levelUp]);
+    setCurrentMastery(updatedMastery);
     if (advancedFromLevel0 && config.mode === 'adaptive') {
-      checkAndPromote(config.regionCode, config.questionTypes).catch(() => {/* non-fatal */});
+      checkAndPromote(config.regionCode, config.questionTypes, config.recentDays ?? 30).catch(() => {/* non-fatal */});
     }
   }, [state.questions, state.currentIndex, state.status, config]);
 
@@ -173,14 +273,24 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false) {
     const next = !currentFavourited;
     setCurrentFavourited(next);
     await setFavourite(currentQuestion.speciesCode, currentQuestion.type, next);
-  }, [currentQuestion, currentFavourited]);
+    // Mutually exclusive: turning on favourite clears excluded
+    if (next && currentExcluded) {
+      setCurrentExcluded(false);
+      await setExcluded(currentQuestion.speciesCode, false);
+    }
+  }, [currentQuestion, currentFavourited, currentExcluded]);
 
   const toggleExcluded = useCallback(async () => {
     if (!currentQuestion) return;
     const next = !currentExcluded;
     setCurrentExcluded(next);
     await setExcluded(currentQuestion.speciesCode, next);
-  }, [currentQuestion, currentExcluded]);
+    // Mutually exclusive: turning on excluded clears favourite
+    if (next && currentFavourited) {
+      setCurrentFavourited(false);
+      await setFavourite(currentQuestion.speciesCode, currentQuestion.type, false);
+    }
+  }, [currentQuestion, currentExcluded, currentFavourited]);
 
   const nextQuestion = useCallback(() => {
     setState(s => {
@@ -192,7 +302,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false) {
 
   const removeOptionalPhoto = useCallback(async (url: string) => {
     await db.blockedPhotos.put({ url });
-    setRevealPhotos(prev => ({ ...prev, optional: prev.optional.filter(u => u !== url) }));
+    setRevealPhotos(prev => ({ ...prev, optional: prev.optional.filter(u => u.url !== url) }));
   }, []);
 
   return {
@@ -202,7 +312,12 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false) {
     currentFavourited,
     currentExcluded,
     revealPhotos,
-    questionPhotos,
+    revealRangeMapUrl,
+    revealSightings,
+    questionPhoto: questionPhoto !== null && questionPhoto.questionId === currentQuestion?.id ? questionPhoto.photo : null,
+    roundLevelUps,
+    isFirstEncounter,
+    currentMastery,
     startQuiz,
     submitAnswer,
     toggleFavourite,

@@ -5,11 +5,17 @@ import { QuizScreen } from './components/screens/QuizScreen';
 import { ResultScreen } from './components/screens/ResultScreen';
 import { ProgressScreen } from './components/screens/ProgressScreen';
 import { SettingsScreen } from './components/screens/SettingsScreen';
-import { PhotoCurationPanel } from './components/panels/PhotoCurationPanel';
+import { VictoryScreen } from './components/screens/VictoryScreen';
+// import { PhotoCurationPanel } from './components/panels/PhotoCurationPanel';
 import { BirdInfoPanel } from './components/panels/BirdInfoPanel';
 import { useQuiz } from './hooks/useQuiz';
-import { loadSettings, saveSettings } from './lib/settings';
+import { loadSettings, saveSettings, loadQuizPrefs, saveQuizPrefs } from './lib/settings';
 import type { AppSettings } from './lib/settings';
+import { checkVictoryCondition, hasSeenVictory, markVictorySeen } from './lib/victory';
+import { locateRegion } from './lib/api';
+import type { LocateResult } from './lib/api';
+
+const RECENT_DAYS: Record<'day' | 'week' | 'month', number> = { day: 1, week: 7, month: 30 };
 
 const DEFAULT_CONFIG: QuizConfig = {
   regionCode: 'CA-ON-OT',
@@ -17,6 +23,7 @@ const DEFAULT_CONFIG: QuizConfig = {
   mode: 'adaptive',
   questionsPerRound: 10,
   groupId: 'all',
+  recentDays: 30,
 };
 
 function expandQuestionTypes(types: QuestionType[], s: AppSettings): QuestionType[] {
@@ -35,7 +42,17 @@ function expandQuestionTypes(types: QuestionType[], s: AppSettings): QuestionTyp
 }
 
 export default function App() {
-  const [config, setConfig] = useState<QuizConfig>(DEFAULT_CONFIG);
+  const [config, setConfig] = useState<QuizConfig>(() => {
+    const prefs = loadQuizPrefs();
+    return {
+      ...DEFAULT_CONFIG,
+      ...(prefs.questionTypes ? { questionTypes: prefs.questionTypes as QuizConfig['questionTypes'] } : {}),
+      ...(prefs.mode          ? { mode: prefs.mode as QuizConfig['mode'] }                          : {}),
+      ...(prefs.questionsPerRound != null ? { questionsPerRound: prefs.questionsPerRound }           : {}),
+      ...(prefs.regionCode    ? { regionCode: prefs.regionCode }                                     : {}),
+    };
+  });
+  const [geoPrompt, setGeoPrompt] = useState<LocateResult | null>(null);
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
   useEffect(() => {
@@ -44,16 +61,48 @@ export default function App() {
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, []);
-  const [screen, setScreen] = useState<'home' | 'quiz' | 'result' | 'progress' | 'settings'>('home');
-  const [rightPanel, setRightPanel] = useState<'curation' | 'info'>('info');
-  const { state, currentQuestion, isCorrect, currentFavourited, currentExcluded, revealPhotos, questionPhotos, startQuiz, submitAnswer, toggleFavourite, toggleExcluded, nextQuestion, removeOptionalPhoto } = useQuiz(config, settings.randomizeQuestionPhotos);
+  const handleRegionChange = (code: string) => {
+    setConfig(c => ({ ...c, regionCode: code }));
+    const prefs = loadQuizPrefs();
+    saveQuizPrefs({ ...prefs, regionCode: code });
+  };
+
+  // On load, try to detect location and offer a region update if it differs from saved
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const result = await locateRegion(pos.coords.latitude, pos.coords.longitude, 10);
+          setConfig(c => {
+            if (result.regionCode !== c.regionCode) setGeoPrompt(result);
+            return c;
+          });
+        } catch { /* non-fatal */ }
+      },
+      () => { /* user denied or unavailable — non-fatal */ },
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const [screen, setScreen] = useState<'home' | 'quiz' | 'result' | 'progress' | 'settings' | 'victory'>('home');
+  // const [rightPanel, setRightPanel] = useState<'curation' | 'info'>('info');
+  const { state, currentQuestion, isCorrect, currentFavourited, currentExcluded, revealPhotos, revealRangeMapUrl, revealSightings, questionPhoto, roundLevelUps, isFirstEncounter, currentMastery, startQuiz, submitAnswer, toggleFavourite, toggleExcluded, nextQuestion, removeOptionalPhoto } = useQuiz(config, settings.randomizeQuestionPhotos);
 
   const handleStart = async (newConfig: QuizConfig) => {
-    setConfig(newConfig);
+    saveQuizPrefs({
+      questionTypes: newConfig.questionTypes,
+      mode: newConfig.mode,
+      questionsPerRound: newConfig.questionsPerRound,
+      regionCode: newConfig.regionCode,
+    });
+    const recentDays = RECENT_DAYS[settings.recentWindow];
+    const fullConfig = { ...newConfig, recentDays };
+    setConfig(fullConfig);
     setScreen('quiz');
     await startQuiz({
-      ...newConfig,
-      questionTypes: expandQuestionTypes(newConfig.questionTypes, settings),
+      ...fullConfig,
+      questionTypes: expandQuestionTypes(fullConfig.questionTypes, settings),
     });
   };
 
@@ -67,10 +116,22 @@ export default function App() {
     saveSettings(s);
   };
 
-  // Sync screen with quiz state
-  if (screen === 'quiz' && state.status === 'complete') {
-    setScreen('result');
-  }
+  // When a round completes, check for victory before showing result screen
+  useEffect(() => {
+    if (state.status !== 'complete' || screen !== 'quiz') return;
+    const expandedTypes = expandQuestionTypes(config.questionTypes, settings);
+    checkVictoryCondition(config.regionCode, config.recentDays ?? 30, expandedTypes)
+      .then(won => {
+        if (won && !hasSeenVictory(settings.recentWindow, expandedTypes)) {
+          markVictorySeen(settings.recentWindow, expandedTypes);
+          setScreen('victory');
+        } else {
+          setScreen('result');
+        }
+      })
+      .catch(() => setScreen('result'));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.status]);
 
   return (
     <div className="font-sans lg:flex lg:h-screen">
@@ -78,37 +139,22 @@ export default function App() {
       {/* ── Right panel: desktop only ── */}
       <div className="hidden lg:flex lg:order-2 flex-col flex-1 border-l-2 border-slate-200 overflow-hidden">
 
-        {/* Tab toggle — temporary, remove once curation is done */}
-        <div className="shrink-0 flex border-b border-slate-200 bg-white">
-          <button
-            onClick={() => setRightPanel('curation')}
-            className={`flex-1 py-2 text-xs font-semibold transition-colors ${
-              rightPanel === 'curation'
-                ? 'text-amber-700 border-b-2 border-amber-500 bg-amber-50'
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            Photo Curation
-          </button>
-          <button
-            onClick={() => setRightPanel('info')}
-            className={`flex-1 py-2 text-xs font-semibold transition-colors ${
-              rightPanel === 'info'
-                ? 'text-forest-700 border-b-2 border-forest-600 bg-forest-50'
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            Bird Info
-          </button>
+        {/* Photo Curation tab disabled — uncomment to re-enable */}
+        {/* <div className="shrink-0 flex border-b border-slate-200 bg-white">
+          <button onClick={() => setRightPanel('curation')} ...>Photo Curation</button>
+          <button onClick={() => setRightPanel('info')} ...>Bird Info</button>
         </div>
-
-        {rightPanel === 'curation' && <PhotoCurationPanel />}
-        {rightPanel === 'info' && (
+        {rightPanel === 'curation' && <PhotoCurationPanel />} */}
+        {(
           <BirdInfoPanel
-            question={currentQuestion}
-            isAnswered={state.status === 'answered' || state.status === 'complete'}
+            question={screen === 'quiz' && (state.status === 'active' || state.status === 'answered') ? currentQuestion : null}
+            isAnswered={state.status === 'answered'}
             isCorrect={isCorrect}
             selectedAnswer={state.selectedAnswer}
+            regionCode={config.regionCode}
+            maxRecentSightings={settings.maxRecentSightings}
+            autoScrollRelatedSpecies={settings.autoScrollRelatedSpecies}
+            autoplayRevealAudio={settings.autoplayRevealAudio}
           />
         )}
       </div>
@@ -118,6 +164,7 @@ export default function App() {
       {screen === 'home' && (
         <HomeScreen
           initialConfig={config}
+          isDesktop={isDesktop}
           onStart={handleStart}
           onProgress={() => setScreen('progress')}
           onSettings={() => setScreen('settings')}
@@ -133,6 +180,9 @@ export default function App() {
           initialSettings={settings}
           onSave={handleSaveSettings}
           onBack={() => setScreen('home')}
+          isDesktop={isDesktop}
+          regionCode={config.regionCode}
+          onRegionChange={handleRegionChange}
         />
       )}
 
@@ -171,7 +221,11 @@ export default function App() {
           isFavourited={currentFavourited}
           isExcluded={currentExcluded}
           revealPhotos={revealPhotos}
-          questionPhotos={questionPhotos}
+          revealRangeMapUrl={revealRangeMapUrl}
+          revealSightings={revealSightings}
+          questionPhoto={questionPhoto}
+          isFirstEncounter={isFirstEncounter}
+          currentMastery={currentMastery}
           showMediaInCarousel={!isDesktop}
           autoplayRevealAudio={settings.autoplayRevealAudio}
           onRemoveOptionalPhoto={removeOptionalPhoto}
@@ -186,11 +240,52 @@ export default function App() {
         <ResultScreen
           score={state.score}
           config={config}
+          questionTypes={expandQuestionTypes(config.questionTypes, settings)}
+          levelUps={roundLevelUps}
           onRestart={() => handleStart(config)}
           onHome={() => setScreen('home')}
         />
       )}
+
+      {screen === 'victory' && (
+        <VictoryScreen
+          recentWindow={settings.recentWindow}
+          questionTypes={expandQuestionTypes(config.questionTypes, settings)}
+          onKeepPlaying={() => handleStart(config)}
+          onHome={() => setScreen('home')}
+        />
+      )}
       </div>{/* end game column */}
+
+      {/* Geolocation prompt */}
+      {geoPrompt && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 p-4 bg-white border-t border-slate-200 shadow-xl lg:left-auto lg:right-4 lg:bottom-4 lg:w-88 lg:rounded-xl lg:border lg:shadow-lg">
+          <p className="text-sm font-semibold text-slate-800 mb-0.5">We detected your location</p>
+          <p className="text-xs text-slate-500 mb-3">{geoPrompt.regionName}</p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => { handleRegionChange(geoPrompt.regionCode); setGeoPrompt(null); }}
+              className="px-3 py-1.5 bg-forest-600 text-white text-xs rounded-lg font-medium hover:bg-forest-700"
+            >
+              Use {geoPrompt.regionName}
+            </button>
+            {geoPrompt.broader && (
+              <button
+                onClick={() => { handleRegionChange(geoPrompt.broader!.code); setGeoPrompt(null); }}
+                className="px-3 py-1.5 border border-slate-300 text-slate-700 text-xs rounded-lg hover:bg-slate-50"
+              >
+                Use {geoPrompt.broader.name}
+              </button>
+            )}
+            <button
+              onClick={() => setGeoPrompt(null)}
+              className="px-3 py-1.5 text-slate-400 text-xs hover:text-slate-600"
+            >
+              Keep current
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

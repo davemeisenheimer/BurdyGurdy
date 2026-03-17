@@ -8,24 +8,27 @@ const TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
  * Returns the ordered regional species list from cache, fetching from the backend if needed.
  * Order: backyard-family species (most common first), then other species (most common first).
  * This ordering is the promotion queue — new birds enter the Learning Palette from the top.
+ * Uses a composite cache key "${regionCode}:${back}" so different observation windows are cached separately.
  */
-export async function getRegionSpecies(regionCode: string): Promise<CachedSpecies[]> {
-  const cached = await db.regionSpecies.get(regionCode);
+export async function getRegionSpecies(regionCode: string, back = 30): Promise<CachedSpecies[]> {
+  const cacheKey = `${regionCode}:${back}`;
+  const cached = await db.regionSpecies.get(cacheKey);
   if (cached && Date.now() - cached.cachedAt < TTL_MS) {
     return cached.species;
   }
 
-  const full = await fetchRegionSpecies(regionCode);
+  const full = await fetchRegionSpecies(regionCode, back);
   const species: CachedSpecies[] = full.map(s => ({
     speciesCode: s.speciesCode,
     comName: s.comName,
     sciName: s.sciName,
+    isHistorical: s.isHistorical,
   }));
 
   // Preserve promotionIndex across cache refreshes so we don't restart the promotion queue
-  const existing = await db.regionSpecies.get(regionCode);
+  const existing = await db.regionSpecies.get(cacheKey);
   await db.regionSpecies.put({
-    regionCode,
+    regionCode: cacheKey,
     species,
     cachedAt: Date.now(),
     promotionIndex: existing?.promotionIndex ?? 0,
@@ -38,9 +41,9 @@ export async function getRegionSpecies(regionCode: string): Promise<CachedSpecie
  * "Unseen" means no progress record exists for this species in the DB.
  * Returns null if all regional species have already been introduced.
  */
-export async function getNextUnseenSpecies(regionCode: string): Promise<CachedSpecies | null> {
+export async function getNextUnseenSpecies(regionCode: string, back = 30): Promise<CachedSpecies | null> {
   const [regionSpecies, progressRecords] = await Promise.all([
-    getRegionSpecies(regionCode),
+    getRegionSpecies(regionCode, back),
     db.progress.toArray(),
   ]);
 

@@ -19,6 +19,10 @@ class TTLCache {
     }
     return entry.data as T;
   }
+
+  clear(): void {
+    this.store.clear();
+  }
 }
 
 export const cache = new TTLCache();

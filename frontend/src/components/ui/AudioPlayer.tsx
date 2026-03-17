@@ -12,13 +12,18 @@ export function AudioPlayer({ url, sonoUrl }: Props) {
 
   // Auto-play on mount / new question; silently swallow rejection (browser autoplay policy)
   // so the spectrogram + play button still shows when autoplay is blocked.
-  // The audio element's onError handles true load failures separately.
+  // Manage src imperatively so cleanup can safely release the resource via src='' + load()
+  // without racing with React's prop update.
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
+    audio.src = url;
     setAudioError(false);
     audio.play().catch(() => { /* autoplay blocked — user can tap to start */ });
-    return () => { audio.pause(); };
+    return () => {
+      audio.pause();
+      audio.src = ''; // releases source reference; avoid load() here as it fires an async error event
+    };
   }, [url]);
 
   const toggle = (e?: React.MouseEvent) => {
@@ -36,7 +41,6 @@ export function AudioPlayer({ url, sonoUrl }: Props) {
   const audioEl = (
     <audio
       ref={audioRef}
-      src={url}
       loop
       onPlay={() => setPlaying(true)}
       onPause={() => setPlaying(false)}

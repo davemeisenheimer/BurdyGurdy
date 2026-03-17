@@ -43,8 +43,8 @@ export function PhotoCurationPanel() {
     try {
       const { primary, optional } = await fetchBirdPhotos(bird.speciesCode, bird.comName, bird.sciName);
       setPhotos([
-        ...(primary ? [{ url: primary, label: 'Primary' }] : []),
-        ...optional.map((url, i) => ({ url, label: `Opt ${i + 1}` })),
+        ...(primary ? [{ url: primary.url, label: 'Primary' }] : []),
+        ...optional.map((p, i) => ({ url: p.url, label: `Opt ${i + 1}` })),
       ]);
     } finally {
       setLoadingPhotos(false);

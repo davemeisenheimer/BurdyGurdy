@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import type { QuizQuestion } from '../../types';
+import type { QuizQuestion, AttributedPhoto } from '../../types';
+import type { RecentSighting } from '../../lib/api';
 import { AudioPlayer } from '../ui/AudioPlayer';
 import { AnswerOption } from '../ui/AnswerOption';
 import { ProgressBar } from '../ui/ProgressBar';
+import { masteryBadgeClass, masteryLabel, masteryThreshold, MASTERY_LABELS } from '../../lib/mastery';
 
 interface Props {
   question: QuizQuestion;
@@ -14,8 +16,12 @@ interface Props {
   isAdaptive: boolean;
   isFavourited: boolean;
   isExcluded: boolean;
-  revealPhotos: { primary: string | null; optional: string[] };
-  questionPhotos: { primary: string | null; optional: string[] } | null;
+  isFirstEncounter?: boolean;
+  currentMastery?: { masteryLevel: number; consecutiveCorrect: number; inHistory: boolean } | null;
+  revealPhotos: { primary: AttributedPhoto | null; optional: AttributedPhoto[] };
+  questionPhoto: AttributedPhoto | null;
+  revealRangeMapUrl?: string | null;
+  revealSightings?: RecentSighting[];
   showMediaInCarousel?: boolean;
   autoplayRevealAudio?: boolean;
   onRemoveOptionalPhoto: (url: string) => void;
@@ -43,7 +49,7 @@ const TYPE_LABELS: Record<string, string> = {
 const PROMPTS: Record<string, string> = {
   song: 'Which bird is singing?',
   latin: 'Match the Latin name to a common name:',
-  family: 'What bird family does this belong to?',
+  family: 'Which bird belongs to this family?',
   image: 'Which bird is this?',
   order: 'What bird belongs to this order?',
   sono: 'Which bird made this sound?',
@@ -74,8 +80,12 @@ export function QuizScreen({
   isAdaptive,
   isFavourited,
   isExcluded,
+  isFirstEncounter = false,
+  currentMastery = null,
   revealPhotos,
-  questionPhotos,
+  revealRangeMapUrl = null,
+  revealSightings = [],
+  questionPhoto,
   showMediaInCarousel = true,
   autoplayRevealAudio = true,
   onRemoveOptionalPhoto,
@@ -88,24 +98,27 @@ export function QuizScreen({
   const stimType = getStimulusType(question.type);
   const isSongAnswer = (question.type as string).endsWith('-song');
 
-  // Flat list for reveal carousel: primary first, then optional (dismissable), then spectrogram last
+  // Flat list for reveal carousel: primary first, then optional (dismissable), then range map, then spectrogram last
   const allRevealPhotos = [
-    ...(revealPhotos.primary ? [{ url: revealPhotos.primary, isOptional: false, isSono: false }] : []),
-    ...revealPhotos.optional.map(url => ({ url, isOptional: true, isSono: false })),
-    ...(question.sonoUrl && showMediaInCarousel ? [{ url: question.sonoUrl, isOptional: false, isSono: true }] : []),
+    ...(revealPhotos.primary ? [{ url: revealPhotos.primary.url, credit: revealPhotos.primary.credit, isOptional: false, isSono: false, isRangeMap: false }] : []),
+    ...revealPhotos.optional.map(p => ({ url: p.url, credit: p.credit, isOptional: true, isSono: false, isRangeMap: false })),
+    ...(revealRangeMapUrl && showMediaInCarousel ? [{ url: revealRangeMapUrl, credit: '', isOptional: false, isSono: false, isRangeMap: true }] : []),
+    ...(question.sonoUrl && showMediaInCarousel ? [{ url: question.sonoUrl, credit: '', isOptional: false, isSono: true, isRangeMap: false }] : []),
   ];
 
-  // Randomly-selected photo for image questions (randomizeQuestionPhotos: picks from all available)
-  const [questionDisplayPhoto, setQuestionDisplayPhoto] = useState<string | null>(question.imageUrl ?? null);
-  useEffect(() => { setQuestionDisplayPhoto(question.imageUrl ?? null); }, [question.id]);
-  useEffect(() => {
-    if (!questionPhotos) return;
-    const pool = [question.imageUrl, ...questionPhotos.optional].filter((u): u is string => !!u);
-    if (pool.length > 1) setQuestionDisplayPhoto(pool[Math.floor(Math.random() * pool.length)]);
-  }, [question.id, questionPhotos]);
+  // The question photo — pre-selected in useQuiz (with pre-fetch) to avoid mid-render switches.
+  // Falls back to the base photo from question data if no pre-selected photo is ready yet.
+  const basePhoto: AttributedPhoto | null = question.imageUrl ? { url: question.imageUrl, credit: question.imageCredit ?? '' } : null;
+  const questionDisplayPhoto = questionPhoto ?? basePhoto;
 
   const [photoIdx, setPhotoIdx] = useState(0);
   useEffect(() => { setPhotoIdx(0); }, [question.id]);
+
+  // Fade-in: track whether the current question photo has finished loading
+  const [questionPhotoLoaded, setQuestionPhotoLoaded] = useState(false);
+  const questionPhotoUrl = questionDisplayPhoto?.url ?? null;
+  useEffect(() => { setQuestionPhotoLoaded(false); }, [questionPhotoUrl]);
+
 
   // Reveal-state audio
   const revealAudioRef = useRef<HTMLAudioElement>(null);
@@ -114,6 +127,13 @@ export function QuizScreen({
     revealAudioRef.current?.pause();
     setRevealPlaying(false);
   }, [question.id]);
+  // Pause audio when quiz screen unmounts (round ends)
+  useEffect(() => {
+    return () => {
+      revealAudioRef.current?.pause();
+      optionAudioRef.current?.pause();
+    };
+  }, []);
   const toggleRevealAudio = () => {
     const audio = revealAudioRef.current;
     if (!audio) return;
@@ -147,6 +167,11 @@ export function QuizScreen({
   };
 
   const currentRevealPhoto = allRevealPhotos[photoIdx] ?? null;
+
+  // Fade-in: track whether the current reveal carousel photo has finished loading
+  const [revealPhotoLoaded, setRevealPhotoLoaded] = useState(false);
+  const revealPhotoUrl = currentRevealPhoto?.url ?? null;
+  useEffect(() => { setRevealPhotoLoaded(false); }, [revealPhotoUrl]);
 
   const getOptionStatus = (option: string) => {
     if (!answered) return 'default';
@@ -184,14 +209,23 @@ export function QuizScreen({
             <div className="relative h-full bg-slate-900 flex items-center justify-center">
               {questionDisplayPhoto && (
                 <img
-                  src={questionDisplayPhoto}
+                  src={questionDisplayPhoto.url}
                   alt="Mystery bird"
-                  className="max-h-full max-w-full object-contain"
+                  className={`max-h-full max-w-full object-contain transition-opacity duration-500 ${questionPhotoLoaded ? 'opacity-100' : 'opacity-0'}`}
+                  onLoad={() => setQuestionPhotoLoaded(true)}
                 />
+              )}
+              {isFirstEncounter && (
+                <span className="absolute bottom-10 right-3 z-10 bg-slate-700 border-2 border-amber-400 text-white text-xs font-bold px-2.5 py-1.5 rounded-full shadow-md leading-none">
+                  ✨ New bird!
+                </span>
               )}
               <div className="absolute inset-x-0 bottom-0 px-5 py-4 bg-gradient-to-t from-black/70 to-transparent">
                 <p className="text-xs uppercase tracking-wider text-white/70 font-semibold">{TYPE_LABELS[question.type]}</p>
                 <h2 className="text-xl font-semibold text-white">{PROMPTS[question.type]}</h2>
+                {questionDisplayPhoto?.credit && (
+                  <p className="text-[10px] text-white/40 mt-1 truncate">{questionDisplayPhoto.credit}</p>
+                )}
               </div>
             </div>
           ) : stimType === 'sono' ? (
@@ -202,6 +236,11 @@ export function QuizScreen({
                 alt="Song spectrogram"
                 className="w-full object-contain"
               />
+              {isFirstEncounter && (
+                <span className="absolute bottom-10 right-3 z-10 bg-slate-700 border-2 border-amber-400 text-white text-xs font-bold px-2.5 py-1.5 rounded-full shadow-md leading-none">
+                  ✨ New bird!
+                </span>
+              )}
               <div className="absolute inset-x-0 bottom-0 px-5 py-4 bg-gradient-to-t from-black/70 to-transparent">
                 <p className="text-xs uppercase tracking-wider text-white/70 font-semibold">{TYPE_LABELS[question.type]}</p>
                 <h2 className="text-xl font-semibold text-white">{PROMPTS[question.type]}</h2>
@@ -209,7 +248,12 @@ export function QuizScreen({
             </div>
           ) : (
             /* Text/audio stimulus */
-            <div className="h-full flex flex-col px-5 pt-5 pb-4">
+            <div className="relative h-full flex flex-col px-5 pt-5 pb-4">
+              {isFirstEncounter && (
+                <span className="absolute bottom-10 right-3 z-10 bg-slate-700 border-2 border-amber-400 text-white text-xs font-bold px-2.5 py-1.5 rounded-full shadow-md leading-none">
+                  ✨ New bird!
+                </span>
+              )}
               <p className="shrink-0 text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">
                 {TYPE_LABELS[question.type]}
               </p>
@@ -255,10 +299,17 @@ export function QuizScreen({
             )}
 
             {/* Status strip */}
-            <div className={`shrink-0 px-5 py-3 border-b ${isCorrect ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}>
+            <div className={`shrink-0 px-5 py-3 border-b flex items-center justify-between gap-3 ${isCorrect ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}>
               <p className={`font-semibold ${isCorrect ? 'text-green-700' : 'text-red-700'}`}>
                 {isCorrect ? '✓ Correct!' : `✗ The answer was ${question.correctAnswer}`}
               </p>
+              {currentMastery && (
+                <span className={`shrink-0 text-xs px-2 py-1 rounded-full font-medium ${masteryBadgeClass(currentMastery.masteryLevel, currentMastery.inHistory)}`}>
+                  {currentMastery.inHistory
+                    ? masteryLabel(0, true)
+                    : `${currentMastery.consecutiveCorrect}/${masteryThreshold(currentMastery.masteryLevel)} ${MASTERY_LABELS[currentMastery.masteryLevel] ?? 'Hard'}`}
+                </span>
+              )}
             </div>
 
             {/* Photo/spectrogram carousel */}
@@ -267,13 +318,19 @@ export function QuizScreen({
                 <img
                   src={currentRevealPhoto.url}
                   alt={currentRevealPhoto.isSono ? 'Song spectrogram' : question.comName}
-                  className={currentRevealPhoto.isSono ? 'w-full object-contain' : 'max-h-full max-w-full object-contain'}
+                  className={`${currentRevealPhoto.isSono ? 'w-full object-contain' : 'max-h-full max-w-full object-contain'} transition-opacity duration-500 ${revealPhotoLoaded ? 'opacity-100' : 'opacity-0'}`}
+                  onLoad={() => setRevealPhotoLoaded(true)}
                   onError={e => { (e.target as HTMLImageElement).parentElement!.style.display = 'none'; }}
                 />
-                {/* Spectrogram label — top-right (sono slides are never dismissable, so no conflict with ✕) */}
+                {/* Slide type label — top-right for sono and range map (never dismissable, so no conflict with ✕) */}
                 {currentRevealPhoto.isSono && (
                   <span className="absolute top-2 right-2 bg-black/60 text-white text-xs font-semibold px-2 py-0.5 rounded-full">
                     Spectrogram
+                  </span>
+                )}
+                {currentRevealPhoto.isRangeMap && (
+                  <span className="absolute top-2 right-2 bg-black/60 text-white text-xs font-semibold px-2 py-0.5 rounded-full">
+                    Range Map
                   </span>
                 )}
                 {/* Play/pause button for song audio */}
@@ -295,6 +352,11 @@ export function QuizScreen({
                     aria-label="Remove this photo"
                   >✕</button>
                 )}
+                {currentRevealPhoto.credit && !currentRevealPhoto.isSono && (
+                  <span className="absolute bottom-1 left-1 bg-black/50 text-white/60 text-[10px] px-1.5 py-0.5 rounded max-w-[93%] truncate">
+                    {currentRevealPhoto.credit}
+                  </span>
+                )}
                 {allRevealPhotos.length > 1 && (
                   <>
                     <button
@@ -307,7 +369,7 @@ export function QuizScreen({
                       className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full w-8 h-8 flex items-center justify-center text-lg leading-none"
                       aria-label="Next photo"
                     >›</button>
-                    <span className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/50 text-white text-xs px-2 py-0.5 rounded-full">
+                    <span className="absolute bottom-1 right-1 bg-black/50 text-white text-xs px-2 py-0.5 rounded-full">
                       {photoIdx + 1} / {allRevealPhotos.length}
                     </span>
                   </>
@@ -316,47 +378,93 @@ export function QuizScreen({
             )}
 
             {/* Bird details — fixed height below photo */}
-            <div className="shrink-0 px-4 py-3 border-t border-slate-100">
-              <p className="font-semibold text-slate-800 leading-tight">{question.comName}</p>
+            <div className="shrink-0 px-4 pt-2.5 pb-2 border-t border-slate-100">
+              {/* Name row — eBird link shown inline on mobile only */}
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="font-semibold text-slate-800 leading-tight">{question.comName}</p>
+                {showMediaInCarousel && (
+                  <a
+                    href={`https://ebird.org/species/${question.speciesCode}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 text-xs text-sky-600 hover:underline"
+                  >
+                    View on eBird →
+                  </a>
+                )}
+              </div>
+              {/* Latin name + family */}
               <p className="text-sm text-slate-500 mt-0.5">
                 <span className="italic">{question.sciName}</span> · {question.familyComName}
               </p>
-              <div className="flex items-center justify-between mt-2">
-                <a
-                  href={`https://ebird.org/species/${question.speciesCode}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-sky-600 hover:underline"
-                >
-                  View on eBird →
-                </a>
-                {isAdaptive && (
-                  <div className="flex flex-col items-end gap-1">
-                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={isFavourited}
-                        onChange={onToggleFavourite}
-                        className="w-4 h-4 accent-amber-500 cursor-pointer"
-                      />
-                      <span className="text-sm font-medium text-slate-600">
-                        {isFavourited ? '★ Ask more often' : '☆ Ask more often'}
-                      </span>
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={isExcluded}
-                        onChange={onToggleExcluded}
-                        className="w-4 h-4 accent-red-500 cursor-pointer"
-                      />
-                      <span className="text-sm font-medium text-slate-500">
-                        Don't show again
-                      </span>
-                    </label>
-                  </div>
-                )}
-              </div>
+              {/* Checkboxes (left) + sightings on mobile / eBird link on desktop (right) */}
+              {(isAdaptive || (showMediaInCarousel && revealSightings.length > 0)) && (
+                <div className="flex items-stretch gap-3 mt-1.5">
+                  {isAdaptive && (
+                    <div className="flex flex-col gap-1">
+                      <label className={`flex items-center gap-1.5 cursor-pointer select-none ${isExcluded ? 'opacity-40 pointer-events-none' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={isFavourited}
+                          onChange={onToggleFavourite}
+                          disabled={isExcluded}
+                          className="w-4 h-4 accent-amber-500 cursor-pointer"
+                        />
+                        <span className="text-sm font-medium text-slate-600">
+                          {isFavourited ? '★ Ask more often' : '☆ Ask more often'}
+                        </span>
+                      </label>
+                      <label className={`flex items-center gap-1.5 cursor-pointer select-none ${isFavourited ? 'opacity-40 pointer-events-none' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={isExcluded}
+                          onChange={onToggleExcluded}
+                          disabled={isFavourited}
+                          className="w-4 h-4 accent-red-500 cursor-pointer"
+                        />
+                        <span className="text-sm font-medium text-slate-500">
+                          Don't show again
+                        </span>
+                      </label>
+                    </div>
+                  )}
+                  {showMediaInCarousel ? (
+                    revealSightings.length > 0 && (
+                      <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                        {revealSightings.slice(0, 1).map((s, i) => {
+                          const d = new Date(s.obsDt.replace(' ', 'T'));
+                          const date = isNaN(d.getTime()) ? s.obsDt : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                          return (
+                            <div key={i} className="bg-sky-50 border border-sky-100 rounded-lg px-2 py-1.5 flex flex-col justify-between">
+                              <p className="text-xs font-medium text-slate-700 leading-tight truncate">{s.locName}</p>
+                              <div className="flex items-baseline justify-between gap-1">
+                                <p className="text-[10px] text-slate-400 leading-tight">{date}{s.howMany != null ? ` · ×${s.howMany}` : ''}</p>
+                                {s.lat != null && s.lng != null && (
+                                  <a
+                                    href={`https://www.google.com/maps?q=${s.lat},${s.lng}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[10px] text-sky-500 leading-tight shrink-0 hover:underline"
+                                  >{s.lat.toFixed(3)}, {s.lng.toFixed(3)}</a>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )
+                  ) : (
+                    <a
+                      href={`https://ebird.org/species/${question.speciesCode}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ml-auto self-end text-xs text-sky-600 hover:underline"
+                    >
+                      View on eBird →
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
