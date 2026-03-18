@@ -6,6 +6,7 @@ import { getSpeciesPhotoUrl, getSpeciesPhotoUrls, getSpeciesPhotoUrlsForQuestion
 import { getWikipediaSummary, getWikipediaRangeMap, getWikipediaRangeMapLegend, getWikipediaPhotos } from '../services/wikipedia';
 import { cache } from '../cache';
 import { BACKYARD_FAMILIES } from '../constants';
+import { filterObservationsToKnownSpecies } from '../lib/speciesFilter';
 
 const router = Router();
 
@@ -30,14 +31,11 @@ router.get('/region/:regionCode', async (req, res) => {
     const commonCodes = backyardCodes.length >= 10 ? backyardCodes : top100Codes;
     const commonRank = new Map(commonCodes.map((code, i) => [code, i]));
 
-    // Build recent species (deduplicated), tagged as not historical
-    const recentCodes = new Set<string>();
-    const recent = observations
-      .filter(obs => {
-        if (recentCodes.has(obs.speciesCode)) return false;
-        recentCodes.add(obs.speciesCode);
-        return true;
-      })
+    // Build recent species (deduplicated, hybrids/slashes/spuhs excluded),
+    // tagged as not historical
+    const knownObservations = filterObservationsToKnownSpecies(observations, taxMap);
+    const recentCodes = new Set(knownObservations.map(obs => obs.speciesCode));
+    const recent = knownObservations
       .map(obs => {
         const tax = taxMap.get(obs.speciesCode);
         return {

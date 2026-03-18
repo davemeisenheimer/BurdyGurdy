@@ -4,7 +4,8 @@ import type { RecentSighting } from '../../lib/api';
 import { AudioPlayer } from '../ui/AudioPlayer';
 import { AnswerOption } from '../ui/AnswerOption';
 import { ProgressBar } from '../ui/ProgressBar';
-import { masteryBadgeClass, masteryLabel, masteryThreshold, MASTERY_LABELS } from '../../lib/mastery';
+import { masteryBadgeClass, masteryLabel, masteryThreshold, MASTERY_LABELS, isStruggling } from '../../lib/mastery';
+import { MasteryBadge } from '../ui/MasteryBadge';
 
 interface Props {
   question: QuizQuestion;
@@ -17,7 +18,7 @@ interface Props {
   isFavourited: boolean;
   isExcluded: boolean;
   isFirstEncounter?: boolean;
-  currentMastery?: { masteryLevel: number; consecutiveCorrect: number; inHistory: boolean } | null;
+  currentMastery?: { masteryLevel: number; consecutiveCorrect: number; inHistory: boolean; correct: number; incorrect: number } | null;
   revealPhotos: { primary: AttributedPhoto | null; optional: AttributedPhoto[] };
   questionPhoto: AttributedPhoto | null;
   revealRangeMapUrl?: string | null;
@@ -168,6 +169,8 @@ export function QuizScreen({
 
   const currentRevealPhoto = allRevealPhotos[photoIdx] ?? null;
 
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+
   // Fade-in: track whether the current reveal carousel photo has finished loading
   const [revealPhotoLoaded, setRevealPhotoLoaded] = useState(false);
   const revealPhotoUrl = currentRevealPhoto?.url ?? null;
@@ -304,11 +307,14 @@ export function QuizScreen({
                 {isCorrect ? '✓ Correct!' : `✗ The answer was ${question.correctAnswer}`}
               </p>
               {currentMastery && (
-                <span className={`shrink-0 text-xs px-2 py-1 rounded-full font-medium ${masteryBadgeClass(currentMastery.masteryLevel, currentMastery.inHistory)}`}>
+                <MasteryBadge
+                  className={`text-xs px-2 py-1 rounded-full font-medium ${masteryBadgeClass(currentMastery.masteryLevel, currentMastery.inHistory)}`}
+                  isStruggling={!currentMastery.inHistory && isStruggling(currentMastery.correct, currentMastery.incorrect)}
+                >
                   {currentMastery.inHistory
                     ? masteryLabel(0, true)
                     : `${currentMastery.consecutiveCorrect}/${masteryThreshold(currentMastery.masteryLevel)} ${MASTERY_LABELS[currentMastery.masteryLevel] ?? 'Hard'}`}
-                </span>
+                </MasteryBadge>
               )}
             </div>
 
@@ -318,9 +324,10 @@ export function QuizScreen({
                 <img
                   src={currentRevealPhoto.url}
                   alt={currentRevealPhoto.isSono ? 'Song spectrogram' : question.comName}
-                  className={`${currentRevealPhoto.isSono ? 'w-full object-contain' : 'max-h-full max-w-full object-contain'} transition-opacity duration-500 ${revealPhotoLoaded ? 'opacity-100' : 'opacity-0'}`}
+                  className={`${currentRevealPhoto.isSono ? 'w-full object-contain' : 'max-h-full max-w-full object-contain'} transition-opacity duration-500 ${revealPhotoLoaded ? 'opacity-100' : 'opacity-0'} ${showMediaInCarousel ? 'cursor-zoom-in' : ''}`}
                   onLoad={() => setRevealPhotoLoaded(true)}
                   onError={e => { (e.target as HTMLImageElement).parentElement!.style.display = 'none'; }}
+                  onClick={() => { if (showMediaInCarousel) setLightboxOpen(true); }}
                 />
                 {/* Slide type label — top-right for sono and range map (never dismissable, so no conflict with ✕) */}
                 {currentRevealPhoto.isSono && (
@@ -498,6 +505,50 @@ export function QuizScreen({
       >
         {currentIndex + 1 >= totalQuestions ? 'See Results' : 'Next Question'}
       </button>
+
+      {/* Lightbox — fullscreen photo viewer (mobile only) */}
+      {lightboxOpen && currentRevealPhoto && (
+        <div
+          className="fixed inset-0 z-50 bg-black flex items-center justify-center"
+          onClick={() => setLightboxOpen(false)}
+        >
+          <img
+            src={currentRevealPhoto.url}
+            alt={currentRevealPhoto.isSono ? 'Song spectrogram' : question.comName}
+            className="max-h-full max-w-full object-contain"
+            onClick={e => e.stopPropagation()}
+          />
+          {/* Close button */}
+          <button
+            onClick={() => setLightboxOpen(false)}
+            className="absolute top-4 right-4 bg-black/60 hover:bg-black/80 text-white rounded-full w-9 h-9 flex items-center justify-center text-lg leading-none"
+            aria-label="Close fullscreen"
+          >✕</button>
+          {/* Carousel navigation */}
+          {allRevealPhotos.length > 1 && (
+            <>
+              <button
+                onClick={e => { e.stopPropagation(); setPhotoIdx(i => (i - 1 + allRevealPhotos.length) % allRevealPhotos.length); }}
+                className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white rounded-full w-10 h-10 flex items-center justify-center text-2xl leading-none"
+                aria-label="Previous photo"
+              >‹</button>
+              <button
+                onClick={e => { e.stopPropagation(); setPhotoIdx(i => (i + 1) % allRevealPhotos.length); }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white rounded-full w-10 h-10 flex items-center justify-center text-2xl leading-none"
+                aria-label="Next photo"
+              >›</button>
+              <span className="absolute bottom-4 right-4 bg-black/50 text-white text-sm px-2.5 py-1 rounded-full">
+                {photoIdx + 1} / {allRevealPhotos.length}
+              </span>
+            </>
+          )}
+          {currentRevealPhoto.credit && !currentRevealPhoto.isSono && (
+            <span className="absolute bottom-4 left-4 bg-black/50 text-white/70 text-xs px-2 py-1 rounded max-w-[70%] truncate">
+              {currentRevealPhoto.credit}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -47,7 +47,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false) {
   const [questionPhoto, setQuestionPhoto] = useState<{ questionId: string; photo: AttributedPhoto } | null>(null);
   const [roundLevelUps, setRoundLevelUps] = useState<LevelUpEvent[]>([]);
   const [isFirstEncounter, setIsFirstEncounter] = useState(false);
-  const [currentMastery, setCurrentMastery] = useState<{ masteryLevel: number; consecutiveCorrect: number; inHistory: boolean } | null>(null);
+  const [currentMastery, setCurrentMastery] = useState<{ masteryLevel: number; consecutiveCorrect: number; inHistory: boolean; correct: number; incorrect: number } | null>(null);
 
   const currentQuestion = state.questions[state.currentIndex] ?? null;
   const nextQuestion_   = state.questions[state.currentIndex + 1] ?? null;
@@ -194,6 +194,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false) {
       let masteryLevels = {};
       let banned: string[] = [];
       let paletteSpeciesCodes: string[] = [];
+      let level0SpeciesCodes: string[] = [];
 
       const back = cfg.recentDays ?? 30;
       if (cfg.mode === 'adaptive') {
@@ -204,6 +205,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false) {
         masteryLevels       = params.masteryLevels;
         banned              = params.banned;
         paletteSpeciesCodes = params.paletteSpeciesCodes;
+        level0SpeciesCodes  = params.level0SpeciesCodes;
       } else {
         // Warm the region species cache in the background for non-adaptive modes
         getRegionSpecies(cfg.regionCode, back).catch(() => {/* non-fatal */});
@@ -218,6 +220,8 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false) {
         masteryLevels,
         banned,
         paletteSpeciesCodes,
+        cfg.recentDays ?? 30,
+        level0SpeciesCodes,
       );
 
       if (questions.length === 0) {

@@ -34,7 +34,7 @@ function calcWeight(inHistory: boolean, favourited: boolean, correct: number, in
 export interface RecordAnswerResult {
   advancedFromLevel0: boolean;
   levelUp: LevelUpEvent | null;
-  updatedMastery: { masteryLevel: number; consecutiveCorrect: number; inHistory: boolean };
+  updatedMastery: { masteryLevel: number; consecutiveCorrect: number; inHistory: boolean; correct: number; incorrect: number };
 }
 
 /**
@@ -93,18 +93,20 @@ export async function recordAnswer(
     // When a level just advanced, show the completed level at its threshold rather than
     // the new level at 0 — e.g. "3/3 Easy" instead of "0/3 Medium".
     if (levelUp && !levelUp.graduated) {
-      updatedMastery = { masteryLevel: prevMastery, consecutiveCorrect: MASTERY_ADVANCE_STREAK, inHistory: false };
+      updatedMastery = { masteryLevel: prevMastery, consecutiveCorrect: MASTERY_ADVANCE_STREAK, inHistory: false, correct: newCorrect, incorrect: newIncorrect };
     } else {
-      updatedMastery = { masteryLevel: newMastery, consecutiveCorrect: newStreak, inHistory: newInHistory };
+      updatedMastery = { masteryLevel: newMastery, consecutiveCorrect: newStreak, inHistory: newInHistory, correct: newCorrect, incorrect: newIncorrect };
     }
   } else {
     const newStreak = correct ? 1 : 0;
+    const newCorrect = correct ? 1 : 0;
+    const newIncorrect = correct ? 0 : 1;
     await db.progress.put({
       speciesCode,
       questionType,
       comName,
-      correct: correct ? 1 : 0,
-      incorrect: correct ? 0 : 1,
+      correct: newCorrect,
+      incorrect: newIncorrect,
       lastAsked: Date.now(),
       weight: PALETTE_WEIGHT,
       favourited: false,
@@ -113,7 +115,7 @@ export async function recordAnswer(
       consecutiveCorrect: newStreak,
       inHistory: false,
     });
-    updatedMastery = { masteryLevel: 0, consecutiveCorrect: newStreak, inHistory: false };
+    updatedMastery = { masteryLevel: 0, consecutiveCorrect: newStreak, inHistory: false, correct: newCorrect, incorrect: newIncorrect };
   }
 
   return { advancedFromLevel0, levelUp, updatedMastery };
@@ -289,6 +291,7 @@ export interface AdaptiveParams {
   masteryLevels: Record<string, number>;
   banned: string[];
   paletteSpeciesCodes: string[];
+  level0SpeciesCodes: string[];
 }
 
 export async function getAdaptiveParams(): Promise<AdaptiveParams> {
@@ -308,10 +311,14 @@ export async function getAdaptiveParams(): Promise<AdaptiveParams> {
 
   const weights: Record<string, number> = {};
   const paletteSpeciesCodes: string[] = [];
+  const level0SpeciesCodes: string[] = [];
 
   for (const [speciesCode, speciesRecords] of bySpecies) {
     const hasActivePaletteType = speciesRecords.some(r => !(r.inHistory ?? false));
     if (hasActivePaletteType) paletteSpeciesCodes.push(speciesCode);
+
+    const isLevel0 = speciesRecords.some(r => (r.masteryLevel ?? 0) === 0 && !(r.inHistory ?? false));
+    if (isLevel0) level0SpeciesCodes.push(speciesCode);
 
     for (const record of speciesRecords) {
       const key    = `${speciesCode}:${record.questionType}`;
@@ -319,7 +326,7 @@ export async function getAdaptiveParams(): Promise<AdaptiveParams> {
     }
   }
 
-  return { weights, masteryLevels, banned: [...bannedSet], paletteSpeciesCodes };
+  return { weights, masteryLevels, banned: [...bannedSet], paletteSpeciesCodes, level0SpeciesCodes };
 }
 
 // ── Legacy ───────────────────────────────────────────────────────────────────

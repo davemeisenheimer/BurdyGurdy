@@ -4,6 +4,7 @@ import { HomeScreen } from './components/screens/HomeScreen';
 import { QuizScreen } from './components/screens/QuizScreen';
 import { ResultScreen } from './components/screens/ResultScreen';
 import { ProgressScreen } from './components/screens/ProgressScreen';
+import { RecentProgressScreen } from './components/screens/RecentProgressScreen';
 import { SettingsScreen } from './components/screens/SettingsScreen';
 import { VictoryScreen } from './components/screens/VictoryScreen';
 // import { PhotoCurationPanel } from './components/panels/PhotoCurationPanel';
@@ -85,7 +86,7 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const [screen, setScreen] = useState<'home' | 'quiz' | 'result' | 'progress' | 'settings' | 'victory'>('home');
+  const [screen, setScreen] = useState<'home' | 'quiz' | 'result' | 'progress' | 'settings' | 'victory' | 'recentprogress'>('home');
   // const [rightPanel, setRightPanel] = useState<'curation' | 'info'>('info');
   const { state, currentQuestion, isCorrect, currentFavourited, currentExcluded, revealPhotos, revealRangeMapUrl, revealSightings, questionPhoto, roundLevelUps, isFirstEncounter, currentMastery, startQuiz, submitAnswer, toggleFavourite, toggleExcluded, nextQuestion, removeOptionalPhoto } = useQuiz(config, settings.randomizeQuestionPhotos);
 
@@ -189,7 +190,7 @@ export default function App() {
       {screen === 'quiz' && state.status === 'loading' && (
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
-            <div className="text-5xl mb-4 animate-bounce">🐦</div>
+            <img src="/BurdyGurdyProgress.gif" alt="" className="h-16 w-auto mb-4 mx-auto" />
             <p className="text-slate-500">Loading birds...</p>
           </div>
         </div>
@@ -244,6 +245,16 @@ export default function App() {
           levelUps={roundLevelUps}
           onRestart={() => handleStart(config)}
           onHome={() => setScreen('home')}
+          onRecentProgress={() => setScreen('recentprogress')}
+        />
+      )}
+
+      {screen === 'recentprogress' && (
+        <RecentProgressScreen
+          regionCode={config.regionCode}
+          recentDays={config.recentDays ?? 30}
+          questionTypes={expandQuestionTypes(config.questionTypes, settings)}
+          onBack={() => setScreen('result')}
         />
       )}
 

@@ -64,7 +64,7 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
           >
             ⚙
           </button>
-          <div className="text-6xl mb-3">🐦</div>
+          <img src="/BurdyNotebook.png" alt="" className="h-16 w-auto mx-auto" />
           <h1 className="text-4xl font-bold text-forest-800">BurdyGurdy</h1>
           <p className="text-slate-500 mt-2">Learn the birds that make sense</p>
         </div>

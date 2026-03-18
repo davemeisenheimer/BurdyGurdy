@@ -17,6 +17,7 @@ interface Props {
   levelUps: LevelUpEvent[];
   onRestart: () => void;
   onHome: () => void;
+  onRecentProgress: () => void;
 }
 
 interface MasteryStats {
@@ -74,7 +75,7 @@ function LevelUpSummary({ levelUps }: { levelUps: LevelUpEvent[] }) {
   );
 }
 
-export function ResultScreen({ score, config, questionTypes, levelUps, onRestart, onHome }: Props) {
+export function ResultScreen({ score, config, questionTypes, levelUps, onRestart, onHome, onRecentProgress }: Props) {
   const pct = Math.round((score.correct / score.total) * 100);
   const emoji = pct >= 80 ? '🎉' : pct >= 60 ? '🙂' : '💪';
   const [masteryStats, setMasteryStats] = useState<MasteryStats | null>(null);
@@ -128,7 +129,13 @@ export function ResultScreen({ score, config, questionTypes, levelUps, onRestart
               <span className="font-semibold text-slate-700">{masteryStats.mastered}</span>
               {' '}out of{' '}
               <span className="font-semibold text-slate-700">{masteryStats.total}</span>
-              {' '}birds seen in your region in the past {windowLabel}.
+              {' '}birds seen in your region in the past {windowLabel}.{' '}
+              <button
+                onClick={onRecentProgress}
+                className="text-forest-600 hover:text-forest-700 hover:underline font-medium"
+              >
+                View recent progress →
+              </button>
             </div>
           )}
         </div>

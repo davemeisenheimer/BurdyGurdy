@@ -32,3 +32,9 @@ export function masteryLabel(level: number, graduated = false): string {
   if (graduated) return 'Mastered';
   return MASTERY_LABELS[Math.min(level, MASTERY_LABELS.length - 1)];
 }
+
+/** True when accuracy is below the struggling threshold (mirrors adaptive.ts calcWeight logic). */
+export function isStruggling(correct: number, incorrect: number): boolean {
+  const total = correct + incorrect;
+  return total > 0 && correct / total < 0.90;
+}

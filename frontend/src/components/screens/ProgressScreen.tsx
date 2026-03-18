@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback, Fragment } from 'react';
 import { db } from '../../lib/db';
 import { setExcluded, STRUGGLING_THRESHOLD } from '../../lib/adaptive';
-import { MASTERY_LABELS, masteryBadgeClass } from '../../lib/mastery';
+import { MASTERY_LABELS, masteryBadgeClass, isStruggling } from '../../lib/mastery';
+import { MasteryBadge } from '../ui/MasteryBadge';
 import type { BirdProgress, QuestionType } from '../../types';
 
 interface Props {
@@ -309,9 +310,12 @@ export function ProgressScreen({ onBack }: Props) {
                     const threshold = lvl >= 2 ? 5 : 3;
                     const streak = leading.consecutiveCorrect ?? 0;
                     return (
-                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${masteryBadgeClass(lvl)}`}>
+                      <MasteryBadge
+                        className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${masteryBadgeClass(lvl)}`}
+                        isStruggling={isStruggling(leading.correct, leading.incorrect)}
+                      >
                         {streak}/{threshold} {MASTERY_LABELS[lvl] ?? 'Hard'} distractors
-                      </span>
+                      </MasteryBadge>
                     );
                   })()}
                 </div>

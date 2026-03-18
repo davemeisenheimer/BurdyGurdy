@@ -12,6 +12,8 @@ export async function fetchQuizQuestions(
   masteryLevels: Record<string, number> = {},
   banned: string[] = [],
   paletteSpeciesCodes: string[] = [],
+  back = 30,
+  level0SpeciesCodes: string[] = [],
 ): Promise<QuizQuestion[]> {
   const res = await api.post<QuizQuestion[]>('/quiz/questions', {
     regionCode,
@@ -22,6 +24,8 @@ export async function fetchQuizQuestions(
     masteryLevels,
     banned,
     paletteSpeciesCodes,
+    back,
+    level0SpeciesCodes,
   });
   return res.data;
 }

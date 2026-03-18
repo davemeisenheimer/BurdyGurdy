@@ -22,7 +22,7 @@ export default defineConfig({
       },
       workbox: {
         // Cache the app shell and static assets
-        globPatterns: ['**/*.{js,css,html,ico,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,ico,svg,png,gif,woff2}'],
         runtimeCaching: [
           {
             // Cache eBird taxonomy (changes rarely)

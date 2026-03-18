@@ -450,7 +450,7 @@ export function BirdInfoPanel({ question, isAnswered, isCorrect, selectedAnswer,
 
             {/* Bird icon + prompt */}
             <div className="flex flex-col items-center mt-8 text-center">
-              <div className="text-6xl mb-3">🐦</div>
+              <img src="/BurdySinging.png" alt="" className="h-16 w-auto mb-3" />
               <p className="text-slate-500 text-sm">Start a quiz on the left to begin identifying birds.</p>
             </div>
 
@@ -462,7 +462,7 @@ export function BirdInfoPanel({ question, isAnswered, isCorrect, selectedAnswer,
 
     return (
       <div className="flex flex-col h-full items-center justify-center bg-slate-50 text-center px-8">
-        <div className="text-5xl mb-4 opacity-30">🐦</div>
+        <img src="/BurdySinging.png" alt="" className="h-12 w-auto mb-4 opacity-30" />
         <p className="text-slate-400 text-sm">Answer the question to reveal bird info</p>
       </div>
     );

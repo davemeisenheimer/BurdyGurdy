@@ -3,6 +3,8 @@ import { getTaxonomy, getRegionalSpecies, getCommonSpeciesCodes, getBackyardSpec
 import { getRecordings } from '../services/xenocanto';
 import { getSpeciesPhotoUrl } from '../services/macaulay';
 import { BACKYARD_FAMILIES, GROUP_ORDERS } from '../constants';
+import { buildCandidates, applyRecentUnmasteredGuarantee } from '../lib/candidateLogic';
+import type { PoolSpecies, Candidate } from '../lib/candidateLogic';
 
 const router = Router();
 
@@ -130,14 +132,7 @@ function similarOrAll(target: PoolSpecies, pool: PoolSpecies[], count: number): 
   return sim.length >= count ? sim : pool;
 }
 
-interface PoolSpecies {
-  speciesCode: string;
-  comName: string;
-  sciName: string;
-  tax: { familySciName: string; familyComName: string; order: string } | undefined;
-}
-
-interface Candidate { species: PoolSpecies; type: QuestionType; weight: number; }
+// PoolSpecies and Candidate are imported from ../lib/candidateLogic
 
 function pickFromPool(pool: Candidate[], target: number): Candidate[] {
   const picked: Candidate[] = [];
@@ -298,12 +293,14 @@ router.post('/questions', async (req, res) => {
       masteryLevels        = {},
       banned               = [],
       paletteSpeciesCodes  = [],
+      back                 = 30,
+      level0SpeciesCodes   = [],
     } = req.body;
 
     const paletteCodes = new Set<string>(paletteSpeciesCodes as string[]);
 
     const [observations, taxonomy, backyardCodes, top100Codes, historicalCodes] = await Promise.all([
-      getRegionalSpecies(regionCode),
+      getRegionalSpecies(regionCode, back),
       getTaxonomy(),
       getBackyardSpeciesRanking(regionCode),
       getCommonSpeciesCodes(regionCode),
@@ -366,35 +363,25 @@ router.post('/questions', async (req, res) => {
     // appearing as correct answers while still providing taxonomic variety for distractors.
     filteredPool  = [...filteredPool,  ...historicalExtras];
 
-    // Build (species, type) candidate pairs.
-    // In adaptive mode (weights dict is non-empty): only include birds that have been
-    // seeded or answered — i.e., those present in the weights dict. Unseen birds are
-    // introduced exclusively via maintainLevel0Palette/checkAndPromote, never via the
-    // candidate pool, which prevents them from sneaking into rounds when the palette is small.
-    // In non-adaptive mode (empty weights dict): include all regional birds equally.
-    const candidates: Candidate[] = [];
     const adaptiveMode = Object.keys(weights as object).length > 0;
-    const ml = masteryLevels as Record<string, number>;
-    for (const species of questionPool) {
-      for (const t of types as QuestionType[]) {
-        const key = `${species.speciesCode}:${t}`;
-        const w = (weights as Record<string, number>)[key];
-        if (adaptiveMode && w === undefined) continue; // skip unseen birds in adaptive mode
-        candidates.push({ species, type: t, weight: Math.max(w ?? 1, 0.001) });
-      }
-    }
+    const weightsMap = weights as Record<string, number>;
 
-    // In adaptive mode: guarantee ≥30% of questions come from level-0 birds (new birds).
-    // Split the candidate pool and pick from each half with independent buffers.
-    const level0Min = adaptiveMode ? Math.ceil(count * 0.3) : 0;
+    const level0Codes = new Set<string>(level0SpeciesCodes as string[]);
+
+    const candidates: Candidate[] = buildCandidates(
+      questionPool, filteredPool, recentCodes, weightsMap, types as QuestionType[], adaptiveMode, level0Codes,
+    );
+
+    const recentUnmasteredMin = adaptiveMode ? Math.ceil(count * 0.5) : 0;
 
     let picked: Candidate[];
-    if (adaptiveMode && level0Min > 0) {
-      const level0Candidates = candidates.filter(c => (ml[`${c.species.speciesCode}:${c.type}`] ?? 0) === 0);
-      const otherCandidates  = candidates.filter(c => (ml[`${c.species.speciesCode}:${c.type}`] ?? 0) > 0);
-      const pickedLevel0 = pickFromPool(level0Candidates, count + 5);
-      const pickedOther  = pickFromPool(otherCandidates,  count + 5);
-      picked = [...pickedLevel0, ...pickedOther];
+    if (adaptiveMode && recentUnmasteredMin > 0) {
+      const isRecentUnmastered = (c: Candidate) => recentCodes.has(c.species.speciesCode) && c.weight >= 5;
+      const ruCandidates    = candidates.filter(isRecentUnmastered);
+      const otherCandidates = candidates.filter(c => !isRecentUnmastered(c));
+      const pickedRU    = pickFromPool(ruCandidates,    count + 5);
+      const pickedOther = pickFromPool(otherCandidates, count + 5);
+      picked = [...pickedRU, ...pickedOther];
     } else {
       picked = pickFromPool(candidates, count + 5);
     }
@@ -484,24 +471,10 @@ router.post('/questions', async (req, res) => {
     });
 
     let finalQuestions: QuizQuestion[];
-    if (adaptiveMode && level0Min > 0) {
-      const level0Valid = allValid.filter(q => (ml[`${q.speciesCode}:${q.type}`] ?? 0) === 0);
-      const otherValid  = allValid.filter(q => (ml[`${q.speciesCode}:${q.type}`] ?? 0) > 0);
-
-      const level0Take = Math.min(level0Valid.length, level0Min);
-      const otherTake  = count - level0Take;
-
-      const result = [
-        ...level0Valid.slice(0, level0Take),
-        ...otherValid.slice(0, otherTake),
-      ];
-
-      // Backfill from level-0 surplus if the other pool was short
-      if (result.length < count) {
-        result.push(...level0Valid.slice(level0Take, level0Take + (count - result.length)));
-      }
-
-      finalQuestions = result.sort(() => Math.random() - 0.5).slice(0, count);
+    if (adaptiveMode && recentUnmasteredMin > 0) {
+      finalQuestions = applyRecentUnmasteredGuarantee(
+        allValid, recentCodes, weightsMap, count, recentUnmasteredMin, level0Codes,
+      );
     } else {
       finalQuestions = allValid.slice(0, count);
     }

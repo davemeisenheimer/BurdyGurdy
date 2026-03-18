@@ -4,8 +4,26 @@ import type { QuestionType } from '../types';
 
 const VICTORY_KEY = 'birdygurdy_victories';
 
+/** Returns a string representing the current period for a given window (resets each day/week/month). */
+function currentPeriod(recentWindow: string): string {
+  const now = new Date();
+  if (recentWindow === 'day') {
+    return now.toISOString().slice(0, 10); // "2026-03-18"
+  }
+  if (recentWindow === 'week') {
+    // ISO week: Monday-aligned week number
+    const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const week = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+  }
+  // month
+  return now.toISOString().slice(0, 7); // "2026-03"
+}
+
 function victoryId(recentWindow: string, types: QuestionType[]): string {
-  return `${recentWindow}:${[...types].sort().join(',')}`;
+  return `${recentWindow}:${currentPeriod(recentWindow)}:${[...types].sort().join(',')}`;
 }
 
 export function hasSeenVictory(recentWindow: string, types: QuestionType[]): boolean {
