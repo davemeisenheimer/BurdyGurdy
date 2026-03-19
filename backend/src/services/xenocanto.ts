@@ -29,28 +29,41 @@ function xcKey(): string {
   return k;
 }
 
-/** Get recordings for a species by scientific name. Cached 24h. */
+/** Get recordings for a species by scientific name. Cached 24h. Returns [] on any error. */
 export async function getRecordings(sciName: string): Promise<XCRecording[]> {
   const cacheKey = `xc:${sciName}`;
   const cached = cache.get<XCRecording[]>(cacheKey);
   if (cached) return cached;
 
-  // v3 uses sp:"genus species" tag syntax
-  const spQuery = `sp:"${sciName}" type:song q:A`;
-  const res = await axios.get<XCResponse>(`${XC_BASE}/recordings`, {
-    params: { query: spQuery, key: xcKey() },
-  });
-
-  let recordings = res.data.recordings ?? [];
-
-  // Fallback: drop quality filter if no A-quality songs found
-  if (recordings.length === 0) {
-    const fallback = await axios.get<XCResponse>(`${XC_BASE}/recordings`, {
-      params: { query: `sp:"${sciName}"`, key: xcKey() },
+  try {
+    // v3 uses sp:"genus species" tag syntax
+    const spQuery = `sp:"${sciName}" type:song q:A`;
+    const res = await axios.get<XCResponse>(`${XC_BASE}/recordings`, {
+      params: { query: spQuery, key: xcKey() },
     });
-    recordings = fallback.data.recordings ?? [];
-  }
 
-  cache.set(cacheKey, recordings, TTL_24H);
-  return recordings;
+    // Guard against HTML error pages returned with a 200 status
+    if (typeof res.data !== 'object' || !Array.isArray(res.data.recordings)) {
+      console.warn(`xeno-canto: unexpected response for "${sciName}"`);
+      return [];
+    }
+
+    let recordings = res.data.recordings;
+
+    // Fallback: drop quality filter if no A-quality songs found
+    if (recordings.length === 0) {
+      const fallback = await axios.get<XCResponse>(`${XC_BASE}/recordings`, {
+        params: { query: `sp:"${sciName}"`, key: xcKey() },
+      });
+      if (typeof fallback.data === 'object' && Array.isArray(fallback.data.recordings)) {
+        recordings = fallback.data.recordings;
+      }
+    }
+
+    cache.set(cacheKey, recordings, TTL_24H);
+    return recordings;
+  } catch (err) {
+    console.warn(`xeno-canto: failed to fetch recordings for "${sciName}":`, (err as Error).message);
+    return [];
+  }
 }

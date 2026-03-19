@@ -1,30 +1,58 @@
 import { useEffect, useRef, useState } from 'react';
 
-interface Props {
-  url: string;
+interface Track {
+  audioUrl: string;
   sonoUrl?: string;
 }
 
-export function AudioPlayer({ url, sonoUrl }: Props) {
+interface Props {
+  url: string;
+  tracks?: Track[];  // paired audio+sono fallbacks; first entry should match url/sonoUrl
+  sonoUrl?: string;
+}
+
+export function AudioPlayer({ url, tracks, sonoUrl }: Props) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [audioError, setAudioError] = useState(false);
+  const [activeSonoUrl, setActiveSonoUrl] = useState<string | undefined>(sonoUrl);
 
-  // Auto-play on mount / new question; silently swallow rejection (browser autoplay policy)
-  // so the spectrogram + play button still shows when autoplay is blocked.
-  // Manage src imperatively so cleanup can safely release the resource via src='' + load()
-  // without racing with React's prop update.
+  // Normalise: if tracks provided use them, otherwise wrap the single url/sonoUrl
+  const allTracks: Track[] = tracks && tracks.length > 0
+    ? tracks
+    : [{ audioUrl: url, sonoUrl }];
+
+  const trackIndexRef = useRef(0);
+
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    audio.src = url;
+    trackIndexRef.current = 0;
+    audio.src = allTracks[0].audioUrl;
+    setActiveSonoUrl(allTracks[0].sonoUrl);
     setAudioError(false);
     audio.play().catch(() => { /* autoplay blocked — user can tap to start */ });
     return () => {
       audio.pause();
-      audio.src = ''; // releases source reference; avoid load() here as it fires an async error event
+      audio.src = '';
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url]);
+
+  const handleError = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const nextIndex = trackIndexRef.current + 1;
+    if (nextIndex < allTracks.length) {
+      trackIndexRef.current = nextIndex;
+      const next = allTracks[nextIndex];
+      audio.src = next.audioUrl;
+      setActiveSonoUrl(next.sonoUrl);
+      audio.play().catch(() => {});
+    } else {
+      setAudioError(true);
+    }
+  };
 
   const toggle = (e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -44,12 +72,12 @@ export function AudioPlayer({ url, sonoUrl }: Props) {
       loop
       onPlay={() => setPlaying(true)}
       onPause={() => setPlaying(false)}
-      onError={() => setAudioError(true)}
+      onError={handleError}
     />
   );
 
   // ── Spectrogram layout ──────────────────────────────────────────────────
-  if (sonoUrl) {
+  if (activeSonoUrl) {
     return (
       <div
         className="relative w-full rounded-xl overflow-hidden bg-slate-900 cursor-pointer select-none"
@@ -57,7 +85,7 @@ export function AudioPlayer({ url, sonoUrl }: Props) {
       >
         {audioEl}
         <img
-          src={sonoUrl}
+          src={activeSonoUrl}
           alt="Song spectrogram"
           className="w-full block"
           draggable={false}

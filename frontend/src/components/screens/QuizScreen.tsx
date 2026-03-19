@@ -265,7 +265,7 @@ export function QuizScreen({
               </h2>
               <div className="flex-1 min-h-0 flex items-center justify-center px-5 pb-4">
                 {stimType === 'song' && question.audioUrl && (
-                  <AudioPlayer url={question.audioUrl} sonoUrl={question.sonoUrl} />
+                  <AudioPlayer url={question.audioUrl} tracks={question.audioTracks} sonoUrl={question.sonoUrl} />
                 )}
                 {stimType === 'latin' && (
                   <span className="text-2xl italic text-slate-700 text-center px-2">

@@ -52,6 +52,7 @@ export interface QuizQuestion {
   familyComName: string;
   order?: string;
   audioUrl?: string;
+  audioTracks?: { audioUrl: string; sonoUrl?: string }[];
   sonoUrl?: string;
   imageUrl?: string;
   imageCredit?: string;

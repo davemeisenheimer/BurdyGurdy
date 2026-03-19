@@ -22,6 +22,7 @@ export interface QuizQuestion {
   familyComName: string;
   order?: string;
   audioUrl?: string;
+  audioTracks?: { audioUrl: string; sonoUrl?: string }[];
   sonoUrl?: string;
   imageUrl?: string;
   imageCredit?: string;
@@ -433,9 +434,15 @@ router.post('/questions', async (req, res) => {
         ]);
 
         if (recordings.length > 0) {
-          const rec = recordings[Math.floor(Math.random() * recordings.length)];
-          q.audioUrl = rec.file;
-          q.sonoUrl  = rec.sono?.med ?? rec.sono?.small;
+          // Shuffle and take up to 3 paired tracks so the frontend can fall back if a URL fails.
+          // Each track keeps its audio and spectrogram together to avoid a mismatch on fallback.
+          const shuffledRecs = [...recordings].sort(() => Math.random() - 0.5).slice(0, 3);
+          q.audioUrl    = shuffledRecs[0].file;
+          q.sonoUrl     = shuffledRecs[0].sono?.med ?? shuffledRecs[0].sono?.small;
+          q.audioTracks = shuffledRecs.map(r => ({
+            audioUrl: r.file,
+            sonoUrl:  r.sono?.med ?? r.sono?.small,
+          }));
         }
 
         if (photoUrl) { q.imageUrl = photoUrl.url; q.imageCredit = photoUrl.credit; }

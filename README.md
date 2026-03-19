@@ -65,6 +65,30 @@ The **My Progress** screen shows every bird you've been quizzed on, with accurac
 
 ---
 
+## Installing on your phone
+
+BurdyGurdy works best when installed to your home screen. This removes the browser address bar and toolbar, giving you a full-screen experience.
+
+### iPhone (Safari)
+
+1. Open the app in **Safari** (must be Safari — Chrome on iOS does not support this)
+2. Tap the **Share** button (the box with an arrow pointing up, in the bottom toolbar)
+3. Scroll down and tap **"Add to Home Screen"**
+4. Tap **"Add"** in the top-right corner
+5. Launch the app from your home screen icon
+
+### Android (Chrome)
+
+1. Open the app in **Chrome**
+2. Tap the **three-dot menu** (⋮) in the top-right corner
+3. Tap **"Add to Home Screen"** or **"Install app"**
+4. Tap **"Add"** or **"Install"** to confirm
+5. Launch the app from your home screen or app drawer
+
+> Chrome may also show an automatic install banner at the bottom of the screen after a couple of visits — you can use that too.
+
+---
+
 ## Tech stack
 
 - **Frontend**: React + TypeScript + Vite + Tailwind CSS
