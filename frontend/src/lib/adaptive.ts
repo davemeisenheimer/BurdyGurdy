@@ -19,7 +19,7 @@ const HISTORY_WEIGHT = 1.0;
 
 // ── Weight formula ────────────────────────────────────────────────────────────
 
-export const STRUGGLING_THRESHOLD = 0.90; // accuracy below this = struggling
+export const STRUGGLING_THRESHOLD = 0.85; // accuracy below this = struggling
 
 function calcWeight(inHistory: boolean, favourited: boolean, correct: number, incorrect: number): number {
   if (favourited) return PALETTE_WEIGHT;
@@ -292,6 +292,7 @@ export interface AdaptiveParams {
   banned: string[];
   paletteSpeciesCodes: string[];
   level0SpeciesCodes: string[];
+  historyKeys: string[];  // "speciesCode:questionType" keys where inHistory=true
 }
 
 export async function getAdaptiveParams(): Promise<AdaptiveParams> {
@@ -312,6 +313,7 @@ export async function getAdaptiveParams(): Promise<AdaptiveParams> {
   const weights: Record<string, number> = {};
   const paletteSpeciesCodes: string[] = [];
   const level0SpeciesCodes: string[] = [];
+  const historyKeys: string[] = [];
 
   for (const [speciesCode, speciesRecords] of bySpecies) {
     const hasActivePaletteType = speciesRecords.some(r => !(r.inHistory ?? false));
@@ -323,10 +325,11 @@ export async function getAdaptiveParams(): Promise<AdaptiveParams> {
     for (const record of speciesRecords) {
       const key    = `${speciesCode}:${record.questionType}`;
       weights[key] = calcWeight(record.inHistory ?? false, record.favourited ?? false, record.correct ?? 0, record.incorrect ?? 0);
+      if (record.inHistory) historyKeys.push(key);
     }
   }
 
-  return { weights, masteryLevels, banned: [...bannedSet], paletteSpeciesCodes, level0SpeciesCodes };
+  return { weights, masteryLevels, banned: [...bannedSet], paletteSpeciesCodes, level0SpeciesCodes, historyKeys };
 }
 
 // ── Legacy ───────────────────────────────────────────────────────────────────

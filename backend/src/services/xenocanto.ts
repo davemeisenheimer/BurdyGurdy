@@ -63,7 +63,15 @@ export async function getRecordings(sciName: string): Promise<XCRecording[]> {
     cache.set(cacheKey, recordings, TTL_24H);
     return recordings;
   } catch (err) {
-    console.warn(`xeno-canto: failed to fetch recordings for "${sciName}":`, (err as Error).message);
+    const axiosErr = err as { response?: { status: number; data: unknown } };
+    const status   = axiosErr.response?.status;
+    const body     = axiosErr.response?.data;
+    console.warn(
+      `xeno-canto: failed to fetch recordings for "${sciName}":`,
+      (err as Error).message,
+      status ? `(HTTP ${status})` : '',
+      body   ? JSON.stringify(body).slice(0, 200) : '',
+    );
     return [];
   }
 }

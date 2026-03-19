@@ -9,7 +9,7 @@ function weightedPick<T>(candidates: Array<{ item: T; weight: number }>): T | nu
   return candidates[candidates.length - 1].item;
 }
 import type { QuizQuestion, QuizConfig, AttributedPhoto, LevelUpEvent } from '../types';
-import { fetchQuizQuestions, fetchBirdPhotos, fetchBirdInfo, fetchRecentSightings } from '../lib/api';
+import { fetchQuizQuestions, fetchBirdPhotos, fetchBirdInfo, fetchRecentSightings, blockPhoto } from '../lib/api';
 import type { RecentSighting } from '../lib/api';
 import { db } from '../lib/db';
 import {
@@ -195,6 +195,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false) {
       let banned: string[] = [];
       let paletteSpeciesCodes: string[] = [];
       let level0SpeciesCodes: string[] = [];
+      let historyKeys: string[] = [];
 
       const back = cfg.recentDays ?? 30;
       if (cfg.mode === 'adaptive') {
@@ -206,6 +207,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false) {
         banned              = params.banned;
         paletteSpeciesCodes = params.paletteSpeciesCodes;
         level0SpeciesCodes  = params.level0SpeciesCodes;
+        historyKeys         = params.historyKeys;
       } else {
         // Warm the region species cache in the background for non-adaptive modes
         getRegionSpecies(cfg.regionCode, back).catch(() => {/* non-fatal */});
@@ -222,6 +224,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false) {
         paletteSpeciesCodes,
         cfg.recentDays ?? 30,
         level0SpeciesCodes,
+        historyKeys,
       );
 
       if (questions.length === 0) {
@@ -306,6 +309,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false) {
 
   const removeOptionalPhoto = useCallback(async (url: string) => {
     await db.blockedPhotos.put({ url });
+    blockPhoto(url).catch(() => { /* non-fatal if token not set or server unreachable */ });
     setRevealPhotos(prev => ({ ...prev, optional: prev.optional.filter(u => u.url !== url) }));
   }, []);
 

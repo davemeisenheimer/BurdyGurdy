@@ -6,6 +6,10 @@ BirdyGurdy is a bird identification quiz app. A React frontend talks to an Expre
 
 ---
 
+## Photo Curation
+Enable the curation tab with:
+localStorage.setItem('curationToken', 'your-token-here')
+
 ## Question Types
 
 | Code | Prompt | Answer |

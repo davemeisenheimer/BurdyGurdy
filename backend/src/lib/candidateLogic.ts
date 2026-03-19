@@ -87,9 +87,16 @@ export function buildCandidates(
 }
 
 /**
- * Splits validated questions into recent-unmastered and other buckets,
- * guaranteeing at least `recentUnmasteredMin` questions from the first bucket.
- * Shuffles the final result.
+ * Guarantees a minimum ratio of "needs practice" questions, split evenly between:
+ *   - Truly unmastered (active palette, not yet graduated)
+ *   - Struggling mastered (graduated but accuracy below threshold)
+ *
+ * total    = recentUnmasteredMin  (≈ 67% of count)
+ * ruFloor  = ceil(total / 2)      — minimum unmastered
+ * smFloor  = total − ruFloor      — minimum struggling-mastered
+ *
+ * Each bucket backfills for the other's shortfall, then regular mastered
+ * birds fill any remaining slots. Shuffles the final result.
  */
 export function applyRecentUnmasteredGuarantee<T extends { speciesCode: string; type: string }>(
   allValid: T[],
@@ -98,28 +105,50 @@ export function applyRecentUnmasteredGuarantee<T extends { speciesCode: string; 
   count: number,
   recentUnmasteredMin: number,
   level0Codes: Set<string> = new Set(),
+  historyKeySet: Set<string> = new Set(),
 ): T[] {
-  // Guaranteed bucket: recent-window unmastered birds OR level-0 birds from anywhere.
-  // Level 0 birds are actively being learned and must appear regardless of the
-  // observation window, preserving the learning progression guarantee.
-  const isRecentUnmastered = (q: T) =>
-    (recentCodes.has(q.speciesCode) && (weightsMap[`${q.speciesCode}:${q.type}`] ?? NEW_ENCOUNTER_WEIGHT) >= 5) ||
-    level0Codes.has(q.speciesCode);
+  const key = (q: T) => `${q.speciesCode}:${q.type}`;
+  const w   = (q: T) => weightsMap[key(q)] ?? NEW_ENCOUNTER_WEIGHT;
 
-  const ruValid    = allValid.filter(q => isRecentUnmastered(q));
-  const otherValid = allValid.filter(q => !isRecentUnmastered(q));
+  const needsPractice = (q: T) =>
+    (recentCodes.has(q.speciesCode) && w(q) >= 5) || level0Codes.has(q.speciesCode);
 
-  const ruTake    = Math.min(ruValid.length, recentUnmasteredMin);
-  const otherTake = count - ruTake;
+  // Unmastered: needs practice AND not yet graduated
+  const isUnmastered = (q: T) => needsPractice(q) && !historyKeySet.has(key(q));
+  // Struggling mastered: needs practice AND already graduated
+  const isStruggling = (q: T) => needsPractice(q) &&  historyKeySet.has(key(q));
+
+  const ruValid    = allValid.filter(isUnmastered);
+  const smValid    = allValid.filter(isStruggling);
+  const otherValid = allValid.filter(q => !needsPractice(q));
+
+  const total   = recentUnmasteredMin;
+  const ruFloor = Math.ceil(total / 2);
+  const smFloor = total - ruFloor;
+
+  let ruTake = Math.min(ruValid.length, ruFloor);
+  let smTake = Math.min(smValid.length, smFloor);
+
+  // Each pool backfills for the other's shortfall
+  smTake += Math.min(smValid.length - smTake, ruFloor - ruTake);
+  ruTake += Math.min(ruValid.length - ruTake, smFloor - smTake);
+
+  const otherTake = count - ruTake - smTake;
 
   const result = [
     ...ruValid.slice(0, ruTake),
-    ...otherValid.slice(0, otherTake),
+    ...smValid.slice(0, smTake),
+    ...otherValid.slice(0, Math.max(0, otherTake)),
   ];
 
-  // Backfill from RU surplus if the other pool was short
+  // Final backfill if any pool was short
   if (result.length < count) {
-    result.push(...ruValid.slice(ruTake, ruTake + (count - result.length)));
+    const surplus = [
+      ...ruValid.slice(ruTake),
+      ...smValid.slice(smTake),
+      ...otherValid.slice(Math.max(0, otherTake)),
+    ];
+    result.push(...surplus.slice(0, count - result.length));
   }
 
   return result.sort(() => Math.random() - 0.5).slice(0, count);

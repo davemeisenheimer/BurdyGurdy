@@ -5,6 +5,7 @@ import path from 'path';
 import { cache } from './cache';
 import birdsRouter from './routes/birds';
 import quizRouter from './routes/quiz';
+import blockedPhotosRouter from './routes/blockedPhotos';
 
 dotenv.config();
 
@@ -17,6 +18,7 @@ app.use(express.json());
 
 app.use('/api/birds', birdsRouter);
 app.use('/api/quiz', quizRouter);
+app.use('/api/blocked-photos', blockedPhotosRouter);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 

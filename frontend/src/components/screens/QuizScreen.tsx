@@ -99,13 +99,16 @@ export function QuizScreen({
   const stimType = getStimulusType(question.type);
   const isSongAnswer = (question.type as string).endsWith('-song');
 
+  const [failedPhotoUrls, setFailedPhotoUrls] = useState<Set<string>>(new Set());
+
   // Flat list for reveal carousel: primary first, then optional (dismissable), then range map, then spectrogram last
+  // Photos that failed to load are excluded so a broken image never hides the carousel.
   const allRevealPhotos = [
     ...(revealPhotos.primary ? [{ url: revealPhotos.primary.url, credit: revealPhotos.primary.credit, isOptional: false, isSono: false, isRangeMap: false }] : []),
     ...revealPhotos.optional.map(p => ({ url: p.url, credit: p.credit, isOptional: true, isSono: false, isRangeMap: false })),
     ...(revealRangeMapUrl && showMediaInCarousel ? [{ url: revealRangeMapUrl, credit: '', isOptional: false, isSono: false, isRangeMap: true }] : []),
     ...(question.sonoUrl && showMediaInCarousel ? [{ url: question.sonoUrl, credit: '', isOptional: false, isSono: true, isRangeMap: false }] : []),
-  ];
+  ].filter(p => !failedPhotoUrls.has(p.url));
 
   // The question photo — pre-selected in useQuiz (with pre-fetch) to avoid mid-render switches.
   // Falls back to the base photo from question data if no pre-selected photo is ready yet.
@@ -326,7 +329,10 @@ export function QuizScreen({
                   alt={currentRevealPhoto.isSono ? 'Song spectrogram' : question.comName}
                   className={`${currentRevealPhoto.isSono ? 'w-full object-contain' : 'max-h-full max-w-full object-contain'} transition-opacity duration-500 ${revealPhotoLoaded ? 'opacity-100' : 'opacity-0'} ${showMediaInCarousel ? 'cursor-zoom-in' : ''}`}
                   onLoad={() => setRevealPhotoLoaded(true)}
-                  onError={e => { (e.target as HTMLImageElement).parentElement!.style.display = 'none'; }}
+                  onError={() => {
+                    setFailedPhotoUrls(prev => new Set(prev).add(currentRevealPhoto.url));
+                    setPhotoIdx(i => Math.max(0, i - 1));
+                  }}
                   onClick={() => { if (showMediaInCarousel) setLightboxOpen(true); }}
                 />
                 {/* Slide type label — top-right for sono and range map (never dismissable, so no conflict with ✕) */}

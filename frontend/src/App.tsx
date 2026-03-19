@@ -13,8 +13,9 @@ import { useQuiz } from './hooks/useQuiz';
 import { loadSettings, saveSettings, loadQuizPrefs, saveQuizPrefs } from './lib/settings';
 import type { AppSettings } from './lib/settings';
 import { checkVictoryCondition, hasSeenVictory, markVictorySeen } from './lib/victory';
-import { locateRegion } from './lib/api';
+import { locateRegion, fetchBlockedPhotos } from './lib/api';
 import type { LocateResult } from './lib/api';
+import { db } from './lib/db';
 
 const RECENT_DAYS: Record<'day' | 'week' | 'month', number> = { day: 1, week: 7, month: 30 };
 
@@ -67,6 +68,13 @@ export default function App() {
     const prefs = loadQuizPrefs();
     saveQuizPrefs({ ...prefs, regionCode: code });
   };
+
+  // On load, fetch server-side blocked photos and merge into local IndexedDB
+  useEffect(() => {
+    fetchBlockedPhotos()
+      .then(urls => Promise.all(urls.map(url => db.blockedPhotos.put({ url }))))
+      .catch(() => { /* non-fatal */ });
+  }, []);
 
   // On load, try to detect location and offer a region update if it differs from saved
   useEffect(() => {

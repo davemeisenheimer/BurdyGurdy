@@ -111,7 +111,8 @@ export function ProgressScreen({ onBack }: Props) {
   const nonExcluded   = birds.filter(b => !b.excluded);
   const excludedCount = birds.filter(b => b.excluded).length;
 
-  const masteredCount = birds.filter(b => !b.excluded && b.isInHistory).length;
+  const masteredCount   = birds.filter(b => !b.excluded && b.isInHistory).length;
+  const strugglingCount = nonExcluded.filter(b => b.totalAttempts >= 3 && b.overallAccuracy < STRUGGLING_THRESHOLD).length;
 
   const filteredUnsorted = birds.filter(b => {
     if (filter === 'learning')        return b.isInProgress;
@@ -142,10 +143,12 @@ export function ProgressScreen({ onBack }: Props) {
   const progressBadge = (r: BirdProgress) => {
       const total = r.correct + r.incorrect;
       const pct   = total > 0 ? Math.round((r.correct / total) * 100) : null;
+      const isStruggling = (r.correct / total) < STRUGGLING_THRESHOLD;
+
       return (
         <span
           key={r.questionType}
-          className={`text-xs px-2 py-0.5 rounded-full ${r.favourited ? 'ring-1 ring-amber-400' : ''} ${
+          className={`relative text-xs px-2 py-0.5 rounded-full ${r.favourited ? 'ring-1 ring-amber-400' : ''} ${
             pct === null ? 'bg-slate-100 text-slate-400'
             : pct >= 85  ? 'bg-green-100 text-green-700'
             : pct >= 60  ? 'bg-amber-100 text-amber-700'
@@ -153,6 +156,11 @@ export function ProgressScreen({ onBack }: Props) {
           }`}
         >
           {TYPE_LABELS[r.questionType]}: {pct !== null ? `${pct}%` : '—'}
+          {isStruggling && (
+            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 text-white text-[9px] leading-none rounded-full flex items-center justify-center font-bold pointer-events-none select-none">
+              !
+            </span>
+          )}
         </span>
       );
   };
@@ -198,22 +206,28 @@ export function ProgressScreen({ onBack }: Props) {
 
         {/* Stats */}
         {nonExcluded.length > 0 && (
-          <div className="grid grid-cols-3 gap-3 mb-6">
-            <div className="bg-white rounded-xl p-4 text-center border border-slate-200">
+          <div className="grid grid-cols-4 gap-2 mb-6">
+            <div className="bg-white rounded-xl p-3 text-center border border-slate-200">
               <div className="text-2xl font-bold text-forest-700">{nonExcluded.length}</div>
-              <div className="text-xs text-slate-500 mt-0.5">Birds Seen</div>
+              <div className="text-xs text-slate-500 mt-0.5">Seen</div>
             </div>
-            <div className="bg-white rounded-xl p-4 text-center border border-slate-200">
-              <div className="text-2xl font-bold text-green-600">
-                {masteredCount}
-              </div>
-              <div className="text-xs text-slate-500 mt-0.5">Mastered</div>
-            </div>
-            <div className="bg-white rounded-xl p-4 text-center border border-slate-200">
+            <div className="bg-white rounded-xl p-3 text-center border border-slate-200">
               <div className="text-2xl font-bold text-amber-500">
                 {nonExcluded.filter(b => b.favourited).length}
               </div>
               <div className="text-xs text-slate-500 mt-0.5">Favourited</div>
+            </div>
+            <div className="bg-white rounded-xl p-3 text-center border border-slate-200">
+              <div className="text-2xl font-bold text-red-500">
+                {strugglingCount}
+              </div>
+              <div className="text-xs text-slate-500 mt-0.5">Struggling</div>
+            </div>
+            <div className="bg-white rounded-xl p-3 text-center border border-slate-200">
+              <div className="text-2xl font-bold text-green-600">
+                {masteredCount}
+              </div>
+              <div className="text-xs text-slate-500 mt-0.5">Mastered</div>
             </div>
           </div>
         )}

@@ -296,6 +296,7 @@ router.post('/questions', async (req, res) => {
       paletteSpeciesCodes  = [],
       back                 = 30,
       level0SpeciesCodes   = [],
+      historyKeys          = [],
     } = req.body;
 
     const paletteCodes = new Set<string>(paletteSpeciesCodes as string[]);
@@ -367,24 +368,44 @@ router.post('/questions', async (req, res) => {
     const adaptiveMode = Object.keys(weights as object).length > 0;
     const weightsMap = weights as Record<string, number>;
 
-    const level0Codes = new Set<string>(level0SpeciesCodes as string[]);
+    const level0Codes   = new Set<string>(level0SpeciesCodes as string[]);
+    const historyKeySet = new Set<string>(historyKeys as string[]);
 
     const candidates: Candidate[] = buildCandidates(
       questionPool, filteredPool, recentCodes, weightsMap, types as QuestionType[], adaptiveMode, level0Codes,
     );
 
-    const recentUnmasteredMin = adaptiveMode ? Math.ceil(count * 0.5) : 0;
+    const recentUnmasteredMin = adaptiveMode ? Math.ceil(count * 0.67) : 0;
 
     let picked: Candidate[];
     if (adaptiveMode && recentUnmasteredMin > 0) {
-      const isRecentUnmastered = (c: Candidate) => recentCodes.has(c.species.speciesCode) && c.weight >= 5;
-      const ruCandidates    = candidates.filter(isRecentUnmastered);
-      const otherCandidates = candidates.filter(c => !isRecentUnmastered(c));
-      const pickedRU    = pickFromPool(ruCandidates,    count + 5);
+      const isUnmastered = (c: Candidate) =>
+        recentCodes.has(c.species.speciesCode) && c.weight >= 5 &&
+        !historyKeySet.has(`${c.species.speciesCode}:${c.type}`);
+      const isStruggling = (c: Candidate) =>
+        recentCodes.has(c.species.speciesCode) && c.weight >= 5 &&
+        historyKeySet.has(`${c.species.speciesCode}:${c.type}`);
+
+      const ruCandidates    = candidates.filter(isUnmastered);
+      const smCandidates    = candidates.filter(isStruggling);
+      const otherCandidates = candidates.filter(c => !isUnmastered(c) && !isStruggling(c));
+
+      const pickedRU    = pickFromPool(ruCandidates,    ruCandidates.length);
+      const pickedSM    = pickFromPool(smCandidates,    smCandidates.length);
       const pickedOther = pickFromPool(otherCandidates, count + 5);
-      picked = [...pickedRU, ...pickedOther];
+      console.log(`[quiz] RU: ${ruCandidates.length}, SM: ${smCandidates.length}, other: ${otherCandidates.length}, min: ${recentUnmasteredMin}/${count}`);
+      picked = [...pickedRU, ...pickedSM, ...pickedOther];
     } else {
       picked = pickFromPool(candidates, count + 5);
+    }
+
+    // Pre-warm xeno-canto cache with limited concurrency to avoid 500 rate-limit errors.
+    // On a warm cache this loop completes instantly (all cache hits).
+    // On a cold start it serialises requests in small batches instead of firing ~40+ at once.
+    const xcUnique = [...new Set(picked.map(c => c.species.sciName))];
+    const XC_BATCH = 6;
+    for (let i = 0; i < xcUnique.length; i += XC_BATCH) {
+      await Promise.all(xcUnique.slice(i, i + XC_BATCH).map(n => getRecordings(n)));
     }
 
     const questions: QuizQuestion[] = await Promise.all(
@@ -479,8 +500,21 @@ router.post('/questions', async (req, res) => {
 
     let finalQuestions: QuizQuestion[];
     if (adaptiveMode && recentUnmasteredMin > 0) {
+      const ruValidCount = allValid.filter(q => {
+        const k = `${q.speciesCode}:${q.type}`;
+        const wt = (weightsMap[k] ?? 20);
+        const np = (recentCodes.has(q.speciesCode) && wt >= 5) || level0Codes.has(q.speciesCode);
+        return np && !historyKeySet.has(k);
+      }).length;
+      const smValidCount = allValid.filter(q => {
+        const k = `${q.speciesCode}:${q.type}`;
+        const wt = (weightsMap[k] ?? 20);
+        const np = recentCodes.has(q.speciesCode) && wt >= 5;
+        return np && historyKeySet.has(k);
+      }).length;
+      console.log(`[quiz] allValid: ${allValid.length}, ruValid: ${ruValidCount}, smValid: ${smValidCount}, target: ${recentUnmasteredMin}/${count}`);
       finalQuestions = applyRecentUnmasteredGuarantee(
-        allValid, recentCodes, weightsMap, count, recentUnmasteredMin, level0Codes,
+        allValid, recentCodes, weightsMap, count, recentUnmasteredMin, level0Codes, historyKeySet,
       );
     } else {
       finalQuestions = allValid.slice(0, count);

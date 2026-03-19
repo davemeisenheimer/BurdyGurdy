@@ -15,7 +15,7 @@ const DEFAULTS: AppSettings = {
   randomizeQuestionPhotos: true,
   maxRecentSightings: 4,
   autoScrollRelatedSpecies: true,
-  recentWindow: 'month',
+  recentWindow: 'day',
 };
 
 const KEY = 'birdygurdy_settings';
