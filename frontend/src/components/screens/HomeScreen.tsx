@@ -221,6 +221,10 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
         </div>
       </div>
 
+      <p className="text-center text-xs text-slate-400 py-3">
+        <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 underline">Privacy Policy</a>
+      </p>
+
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
       {isDesktop && showMap && (
         <MapRegionPicker
