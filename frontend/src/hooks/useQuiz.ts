@@ -9,7 +9,7 @@ function weightedPick<T>(candidates: Array<{ item: T; weight: number }>): T | nu
   return candidates[candidates.length - 1].item;
 }
 import type { QuizQuestion, QuizConfig, AttributedPhoto, LevelUpEvent } from '../types';
-import { fetchQuizQuestions, fetchBirdPhotos, fetchBirdInfo, fetchRecentSightings, blockPhoto } from '../lib/api';
+import { fetchQuizQuestions, fetchBirdPhotos, fetchBirdInfo, fetchRecentSightings } from '../lib/api';
 import type { RecentSighting } from '../lib/api';
 import { db } from '../lib/db';
 import {
@@ -18,6 +18,7 @@ import {
   maintainLevel0Palette, checkAndPromote,
 } from '../lib/adaptive';
 import { getRegionSpecies } from '../lib/regionCache';
+import { uploadUserBlockedPhoto } from '../lib/sync';
 
 export type QuizStatus = 'idle' | 'loading' | 'active' | 'answered' | 'complete' | 'error';
 
@@ -30,7 +31,7 @@ export interface QuizState {
   error: string | null;
 }
 
-export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false) {
+export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, userId?: string | null) {
   const [state, setState] = useState<QuizState>({
     status: 'idle',
     questions: [],
@@ -309,9 +310,9 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false) {
 
   const removeOptionalPhoto = useCallback(async (url: string) => {
     await db.blockedPhotos.put({ url });
-    blockPhoto(url).catch(() => { /* non-fatal if token not set or server unreachable */ });
+    if (userId) uploadUserBlockedPhoto(userId, url).catch(() => {});
     setRevealPhotos(prev => ({ ...prev, optional: prev.optional.filter(u => u.url !== url) }));
-  }, []);
+  }, [userId]);
 
   return {
     state,

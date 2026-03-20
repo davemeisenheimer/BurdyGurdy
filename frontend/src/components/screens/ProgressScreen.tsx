@@ -3,10 +3,12 @@ import { db } from '../../lib/db';
 import { setExcluded, STRUGGLING_THRESHOLD } from '../../lib/adaptive';
 import { MASTERY_LABELS, masteryBadgeClass, isStruggling } from '../../lib/mastery';
 import { MasteryBadge } from '../ui/MasteryBadge';
+import { deleteCloudProgress } from '../../lib/sync';
 import type { BirdProgress, QuestionType } from '../../types';
 
 interface Props {
   onBack: () => void;
+  userId?: string | null;
 }
 
 const TYPE_LABELS: Record<QuestionType, string> = {
@@ -31,7 +33,7 @@ interface BirdSummary {
 type Filter = 'learning' | 'favourites' | 'struggling' | 'mastered' | 'excluded';
 
 
-export function ProgressScreen({ onBack }: Props) {
+export function ProgressScreen({ onBack, userId }: Props) {
   const [birds, setBirds]               = useState<BirdSummary[]>([]);
   const [filter, setFilter]             = useState<Filter>('learning');
   const [loading, setLoading]           = useState(true);
@@ -95,10 +97,11 @@ export function ProgressScreen({ onBack }: Props) {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleClearHistory = async () => {
+  const handleClearHistory = async (clearCloud: boolean) => {
     await db.progress.clear();
     // Reset promotion queue so the next adaptive session starts from the beginning
     await db.regionSpecies.toCollection().modify({ promotionIndex: 0 });
+    if (clearCloud && userId) await deleteCloudProgress(userId);
     setBirds([]);
     setConfirmClear(false);
   };
@@ -186,20 +189,48 @@ export function ProgressScreen({ onBack }: Props) {
               Clear history
             </button>
           ) : (
-            <div className="flex items-center gap-2 ml-4">
-              <span className="text-xs text-slate-500">Are you sure you want to start over?</span>
-              <button
-                onClick={handleClearHistory}
-                className="text-xs px-2 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600"
-              >
-                Yes
-              </button>
-              <button
-                onClick={() => setConfirmClear(false)}
-                className="text-xs px-2 py-1 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-100"
-              >
-                Cancel
-              </button>
+            <div className="flex flex-col items-end gap-1.5 ml-4">
+              {userId ? (
+                <>
+                  <span className="text-xs text-slate-500 text-right">Cloud data will resync on next sign-in unless you clear both.</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleClearHistory(false)}
+                      className="text-xs px-2 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600"
+                    >
+                      Local only
+                    </button>
+                    <button
+                      onClick={() => handleClearHistory(true)}
+                      className="text-xs px-2 py-1 bg-red-700 text-white rounded-lg hover:bg-red-800"
+                    >
+                      Local + cloud
+                    </button>
+                    <button
+                      onClick={() => setConfirmClear(false)}
+                      className="text-xs px-2 py-1 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-100"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500">Are you sure you want to start over?</span>
+                  <button
+                    onClick={() => handleClearHistory(false)}
+                    className="text-xs px-2 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600"
+                  >
+                    Yes
+                  </button>
+                  <button
+                    onClick={() => setConfirmClear(false)}
+                    className="text-xs px-2 py-1 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-100"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

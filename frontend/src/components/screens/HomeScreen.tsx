@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { QuizConfig, QuestionType, GameMode } from '../../types';
 import { RegionSearch } from '../ui/RegionSearch';
 import { BIRD_GROUPS } from '../../lib/birdGroups';
 import { HelpModal } from '../ui/HelpModal';
 import { MapRegionPicker } from '../ui/MapRegionPicker';
+import { AccountPill } from '../ui/AccountPill';
 
 interface Props {
   initialConfig: QuizConfig;
@@ -11,6 +12,10 @@ interface Props {
   onStart: (config: QuizConfig) => void;
   onProgress: () => void;
   onSettings: () => void;
+  userEmail?: string | null;
+  onAuthClick: () => void;
+  onSignOut: () => void;
+  onQuizPrefsChange: (prefs: { questionTypes: QuestionType[]; mode: GameMode; questionsPerRound: number; groupId: string; regionCode: string }) => void;
 }
 
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
@@ -22,22 +27,39 @@ const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: 'sono',   label: 'Spectrogram' },
 ];
 
-export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSettings }: Props) {
+export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSettings, userEmail, onAuthClick, onSignOut, onQuizPrefsChange }: Props) {
   const [regionCode, setRegionCode] = useState(initialConfig.regionCode);
   const [selectedTypes, setSelectedTypes] = useState<QuestionType[]>(initialConfig.questionTypes);
   const [mode, setMode] = useState<GameMode>(initialConfig.mode);
   const [questionsPerRound, setQuestionsPerRound] = useState(initialConfig.questionsPerRound);
-  const [groupId, setGroupId] = useState(initialConfig.groupId);
+  const [groupId, setGroupId] = useState(initialConfig.groupId ?? 'all');
   const [regionDisplayName, setRegionDisplayName] = useState<string | undefined>(undefined);
   const [showHelp, setShowHelp] = useState(false);
   const [showMap, setShowMap] = useState(false);
 
+  // Sync local state when config is updated externally (e.g. cloud download on sign-in)
+  useEffect(() => {
+    setSelectedTypes(initialConfig.questionTypes);
+    setMode(initialConfig.mode);
+    setQuestionsPerRound(initialConfig.questionsPerRound);
+    setGroupId(initialConfig.groupId ?? 'all');
+    if (isDesktop) setRegionCode(initialConfig.regionCode);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialConfig]);
+
+  const notify = (patch: Partial<{ questionTypes: QuestionType[]; mode: GameMode; questionsPerRound: number; groupId: string; regionCode: string }>) => {
+    onQuizPrefsChange({
+      questionTypes: selectedTypes, mode, questionsPerRound, groupId, regionCode,
+      ...patch,
+    });
+  };
+
   const toggleType = (type: QuestionType) => {
-    setSelectedTypes(prev =>
-      prev.includes(type)
-        ? prev.length > 1 ? prev.filter(t => t !== type) : prev
-        : [...prev, type]
-    );
+    const next = selectedTypes.includes(type)
+      ? selectedTypes.length > 1 ? selectedTypes.filter(t => t !== type) : selectedTypes
+      : [...selectedTypes, type];
+    setSelectedTypes(next);
+    notify({ questionTypes: next });
   };
 
   const handleStart = () => {
@@ -57,9 +79,12 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
           >
             ?
           </button>
+          <div className="absolute left-0 top-0">
+            <AccountPill userEmail={userEmail} onAuthClick={onAuthClick} onSignOut={onSignOut} />
+          </div>
           <button
             onClick={onSettings}
-            className="absolute left-0 top-0 w-8 h-8 rounded-full border border-slate-300 text-slate-500 hover:bg-slate-100 text-sm"
+            className="absolute right-10 top-0 w-8 h-8 rounded-full border border-slate-300 text-slate-500 hover:bg-slate-100 text-sm"
             aria-label="Settings"
           >
             ⚙
@@ -78,7 +103,7 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
             <label className="block text-sm font-semibold text-slate-700 mb-1">Region</label>
             <div className="flex gap-2">
               <div className="flex-1">
-                <RegionSearch value={regionCode} onChange={c => { setRegionCode(c); setRegionDisplayName(undefined); }} displayName={regionDisplayName} />
+                <RegionSearch value={regionCode} onChange={c => { setRegionCode(c); setRegionDisplayName(undefined); notify({ regionCode: c }); }} displayName={regionDisplayName} />
               </div>
               <button
                 onClick={() => setShowMap(true)}
@@ -121,7 +146,7 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
               {BIRD_GROUPS.map(g => (
                 <button
                   key={g.id}
-                  onClick={() => setGroupId(g.id)}
+                  onClick={() => { setGroupId(g.id); notify({ groupId: g.id }); }}
                   className={`px-2 py-1.5 rounded-full text-xs font-medium border transition-colors text-center ${
                     groupId === g.id
                       ? 'bg-forest-600 border-forest-600 text-white'
@@ -142,7 +167,7 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
               {(['adaptive', 'random'] as GameMode[]).map(m => (
                 <button
                   key={m}
-                  onClick={() => setMode(m)}
+                  onClick={() => { setMode(m); notify({ mode: m }); }}
                   className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors capitalize ${
                     mode === m
                       ? 'bg-sky-600 border-sky-600 text-white'
@@ -170,7 +195,7 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
               max={25}
               step={5}
               value={questionsPerRound}
-              onChange={e => setQuestionsPerRound(Number(e.target.value))}
+              onChange={e => { const v = Number(e.target.value); setQuestionsPerRound(v); notify({ questionsPerRound: v }); }}
               className="w-full accent-forest-600"
             />
           </div>
@@ -199,7 +224,7 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
       {isDesktop && showMap && (
         <MapRegionPicker
-          onSelect={(code, name) => { setRegionCode(code); setRegionDisplayName(name); }}
+          onSelect={(code, name) => { setRegionCode(code); setRegionDisplayName(name); notify({ regionCode: code }); }}
           onClose={() => setShowMap(false)}
         />
       )}

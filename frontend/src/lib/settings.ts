@@ -43,6 +43,7 @@ export interface QuizConfigPrefs {
   mode?: string;
   questionsPerRound?: number;
   regionCode?: string;
+  groupId?: string;
 }
 
 export function loadQuizPrefs(): QuizConfigPrefs {

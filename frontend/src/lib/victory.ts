@@ -46,6 +46,22 @@ export function markVictorySeen(recentWindow: string, types: QuestionType[]): vo
   } catch { /* non-fatal */ }
 }
 
+export function getVictorySeen(): string[] {
+  try {
+    const raw = localStorage.getItem(VICTORY_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+export function mergeVictorySeen(remoteKeys: string[]): void {
+  try {
+    const raw = localStorage.getItem(VICTORY_KEY);
+    const local: string[] = raw ? JSON.parse(raw) : [];
+    const merged = Array.from(new Set([...local, ...remoteKeys]));
+    localStorage.setItem(VICTORY_KEY, JSON.stringify(merged));
+  } catch { /* non-fatal */ }
+}
+
 /**
  * Checks whether the player has mastered all non-historical birds in the region
  * for the given observation window and question types.
