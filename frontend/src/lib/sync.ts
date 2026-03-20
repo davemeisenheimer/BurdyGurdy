@@ -148,6 +148,50 @@ export async function deleteAllUserBlockedPhotos(userId: string): Promise<void> 
   if (error) console.warn('sync: blocked photos delete failed:', error.message);
 }
 
+// ── Media reports ─────────────────────────────────────────────────────────────
+
+export interface SubmitReportParams {
+  url:         string;
+  mediaType:   'photo' | 'audio';
+  service:     string | null;
+  speciesCode: string;
+  comName:     string;
+  issueType:   'wrong_bird' | 'poor_quality' | 'confusing' | 'other';
+  wrongBird:   string | null;
+  description: string | null;
+}
+
+export async function submitMediaReport(p: SubmitReportParams): Promise<void> {
+  const { error } = await supabase.rpc('submit_media_report', {
+    p_url:          p.url,
+    p_media_type:   p.mediaType,
+    p_service:      p.service,
+    p_species_code: p.speciesCode,
+    p_com_name:     p.comName,
+    p_issue_type:   p.issueType,
+    p_wrong_bird:   p.wrongBird,
+    p_description:  p.description,
+  });
+  if (error) throw error;
+}
+
+/** Downloads all admin-blocked media and caches in IndexedDB. Called for all signed-in users. */
+export async function fetchAdminBlockedMedia(): Promise<void> {
+  const { data, error } = await supabase
+    .from('media_reports')
+    .select('url, media_type, block_scope')
+    .eq('status', 'blocked');
+  if (error || !data) return;
+  await db.adminBlockedMedia.clear();
+  await db.adminBlockedMedia.bulkPut(
+    data.map(r => ({
+      url:        r.url as string,
+      mediaType:  r.media_type as 'photo' | 'audio',
+      blockScope: (r.block_scope ?? 'full') as 'full' | 'question',
+    })),
+  );
+}
+
 // ── Delete ────────────────────────────────────────────────────────────────────
 
 /** Deletes all cloud progress records for the given user. */

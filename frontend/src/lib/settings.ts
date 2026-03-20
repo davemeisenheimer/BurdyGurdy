@@ -6,6 +6,7 @@ export interface AppSettings {
   maxRecentSightings: number;
   autoScrollRelatedSpecies: boolean;
   recentWindow: 'day' | 'week' | 'month';
+  enableAdminFeatures: boolean;
 }
 
 const DEFAULTS: AppSettings = {
@@ -16,6 +17,7 @@ const DEFAULTS: AppSettings = {
   maxRecentSightings: 4,
   autoScrollRelatedSpecies: true,
   recentWindow: 'day',
+  enableAdminFeatures: false,
 };
 
 const KEY = 'birdygurdy_settings';

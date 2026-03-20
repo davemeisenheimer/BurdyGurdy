@@ -75,7 +75,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
       return;
     }
     db.progress.get([currentQuestion.speciesCode, currentQuestion.type])
-      .then(record => setIsFirstEncounter(record?.lastAsked === 0))
+      .then(record => setIsFirstEncounter(!record || record.lastAsked === 0))
       .catch(() => setIsFirstEncounter(false));
   }, [currentQuestion?.id, config.mode]);
 
@@ -272,7 +272,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
     if (levelUp) setRoundLevelUps(prev => [...prev, levelUp]);
     setCurrentMastery(updatedMastery);
     if (advancedFromLevel0 && config.mode === 'adaptive') {
-      checkAndPromote(config.regionCode, config.questionTypes, config.recentDays ?? 30).catch(() => {/* non-fatal */});
+      await checkAndPromote(config.regionCode, config.questionTypes, config.recentDays ?? 30).catch(() => {/* non-fatal */});
     }
   }, [state.questions, state.currentIndex, state.status, config]);
 

@@ -6,6 +6,7 @@ interface Props {
   isPlaying?: boolean;
   onPlayToggle?: () => void;
   hideLabel?: boolean;
+  onReport?: () => void;
 }
 
 const statusStyles: Record<Props['status'], string> = {
@@ -15,7 +16,7 @@ const statusStyles: Record<Props['status'], string> = {
   disabled: 'bg-white border-slate-200 text-slate-400 cursor-not-allowed opacity-60',
 };
 
-export function AnswerOption({ label, status, onClick, audioUrl, isPlaying, onPlayToggle, hideLabel }: Props) {
+export function AnswerOption({ label, status, onClick, audioUrl, isPlaying, onPlayToggle, hideLabel, onReport }: Props) {
   return (
     <button
       onClick={status === 'default' ? onClick : undefined}
@@ -32,7 +33,17 @@ export function AnswerOption({ label, status, onClick, audioUrl, isPlaying, onPl
             {isPlaying ? '⏸' : '▶'}
           </span>
         )}
-        {!hideLabel && <span>{label}</span>}
+        {!hideLabel && <span className="flex-1">{label}</span>}
+        {onReport && (
+          <span
+            role="button"
+            onClick={onReport}
+            className="shrink-0 text-xs text-green-500 hover:text-red-500 transition-colors leading-none"
+            aria-label="Report an error with this media"
+          >
+            ⚑ Report error
+          </span>
+        )}
       </span>
     </button>
   );

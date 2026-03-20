@@ -1,10 +1,17 @@
 import Dexie, { type Table } from 'dexie';
 import type { BirdProgress, RegionSpeciesCache } from '../types';
 
+export interface AdminBlockedMediaEntry {
+  url:        string;
+  mediaType:  'photo' | 'audio';
+  blockScope: 'full' | 'question';
+}
+
 class BirdyGurdyDB extends Dexie {
-  progress!: Table<BirdProgress>;
-  regionSpecies!: Table<RegionSpeciesCache>;
-  blockedPhotos!: Table<{ url: string }>;
+  progress!:          Table<BirdProgress>;
+  regionSpecies!:     Table<RegionSpeciesCache>;
+  blockedPhotos!:     Table<{ url: string }>;
+  adminBlockedMedia!: Table<AdminBlockedMediaEntry>;
 
   constructor() {
     super('BirdyGurdyDB');
@@ -47,6 +54,13 @@ class BirdyGurdyDB extends Dexie {
       progress: '[speciesCode+questionType], speciesCode, weight, lastAsked',
       regionSpecies: 'regionCode',
       blockedPhotos: 'url',
+    });
+    // v7: admin-blocked media (photos + audio blocked globally by admin via curation panel)
+    this.version(7).stores({
+      progress: '[speciesCode+questionType], speciesCode, weight, lastAsked',
+      regionSpecies: 'regionCode',
+      blockedPhotos: 'url',
+      adminBlockedMedia: 'url',
     });
   }
 }

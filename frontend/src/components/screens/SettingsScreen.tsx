@@ -11,6 +11,7 @@ interface Props {
   regionCode?: string;
   onRegionChange?: (code: string) => void;
   onClearBlockedPhotos?: () => void;
+  isAdmin?: boolean;
 }
 
 interface ToggleRowProps {
@@ -37,7 +38,7 @@ function ToggleRow({ label, description, checked, onChange }: ToggleRowProps) {
   );
 }
 
-export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, regionCode, onRegionChange, onClearBlockedPhotos }: Props) {
+export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, regionCode, onRegionChange, onClearBlockedPhotos, isAdmin }: Props) {
   const [settings, setSettings] = useState(initialSettings);
   const [regionDisplayName, setRegionDisplayName] = useState<string | undefined>(undefined);
   const [showMap, setShowMap] = useState(false);
@@ -163,6 +164,21 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
             Clear my blocked photos
           </button>
         </div>
+
+        {isAdmin && (
+          <div className="bg-amber-50 rounded-2xl shadow-sm border border-amber-200 divide-y divide-amber-100 mt-4">
+            <div className="px-5 py-3">
+              <p className="text-xs font-bold uppercase tracking-wider text-amber-700 mb-0.5">Admin</p>
+              <p className="text-xs text-amber-600">Only visible to you.</p>
+            </div>
+            <ToggleRow
+              label="Enable admin features"
+              description="Show the curation panel and report management tools in the right panel"
+              checked={settings.enableAdminFeatures ?? false}
+              onChange={v => update('enableAdminFeatures', v)}
+            />
+          </div>
+        )}
       </div>
       {showMap && onRegionChange && (
         <MapRegionPicker

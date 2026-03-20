@@ -4,7 +4,7 @@ import { categoriseRecentBirds, summariseCounts } from '../../lib/recentProgress
 import { DEV_SHOW_PALETTE_SPLIT } from '../../lib/devFlags';
 import { MASTERY_LABELS, MASTERY_BADGE_COLORS, MASTERED_BADGE_COLOR, masteryThreshold, isStruggling } from '../../lib/mastery';
 import { MasteryBadge } from '../ui/MasteryBadge';
-import type { QuestionType } from '../../types';
+import type { QuestionType, CachedSpecies, BirdProgress } from '../../types';
 import type { RecentBirdEntry, RecentProgressCategory } from '../../lib/recentProgress';
 
 interface Props {
@@ -13,6 +13,14 @@ interface Props {
   questionTypes: QuestionType[];
   onBack: () => void;
 }
+
+const TYPE_LABELS: Record<QuestionType, string> = {
+  song: 'Song', image: 'Photo', latin: 'Latin', family: 'Family', order: 'Order', sono: 'Sono',
+  'image-latin': 'PhotoL', 'song-latin': 'SongL', 'family-latin': 'FamilyL',
+  'image-song': 'PhotoS', 'sono-song': 'SpectroS', 'latin-song': 'LatinS',
+};
+
+type TypeFilter = 'all' | QuestionType;
 
 const SECTION_ORDER: RecentProgressCategory[] = ['notAsked', 'easy', 'medium', 'hard', 'mastered'];
 
@@ -33,15 +41,19 @@ const SECTION_COLORS: Record<RecentProgressCategory, string> = {
 };
 
 export function RecentProgressScreen({ regionCode, recentDays, questionTypes, onBack }: Props) {
-  const [entries, setEntries] = useState<RecentBirdEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [noCache, setNoCache] = useState(false);
+  const [cachedSpecies, setCachedSpecies]       = useState<CachedSpecies[]>([]);
+  const [progressRecords, setProgressRecords]   = useState<BirdProgress[]>([]);
+  const [loading, setLoading]                   = useState(true);
+  const [noCache, setNoCache]                   = useState(false);
+  const [typeFilter, setTypeFilter]             = useState<TypeFilter>(() =>
+    questionTypes.length === 1 ? questionTypes[0] : 'all',
+  );
 
   useEffect(() => {
     (async () => {
       setLoading(true);
       const cacheKey = `${regionCode}:${recentDays}`;
-      const [cached, progressRecords] = await Promise.all([
+      const [cached, records] = await Promise.all([
         db.regionSpecies.get(cacheKey),
         db.progress.toArray(),
       ]);
@@ -52,10 +64,24 @@ export function RecentProgressScreen({ regionCode, recentDays, questionTypes, on
         return;
       }
 
-      setEntries(categoriseRecentBirds(cached.species, progressRecords, questionTypes));
+      setCachedSpecies(cached.species);
+      setProgressRecords(records);
       setLoading(false);
     })().catch(() => setLoading(false));
   }, [regionCode, recentDays]);
+
+  // Types actually present in DB records for species in the recent window
+  const recentCodes = new Set(cachedSpecies.map(s => s.speciesCode));
+  const availableTypes: QuestionType[] = [...new Set(
+    progressRecords
+      .filter(r => recentCodes.has(r.speciesCode) && r.lastAsked > 0)
+      .map(r => r.questionType),
+  )].sort((a, b) => (TYPE_LABELS[a] ?? a).localeCompare(TYPE_LABELS[b] ?? b));
+
+  const activeTypes: QuestionType[] = typeFilter === 'all'
+    ? (availableTypes.length > 0 ? availableTypes : questionTypes)
+    : [typeFilter as QuestionType];
+  const entries = loading || noCache ? [] : categoriseRecentBirds(cachedSpecies, progressRecords, activeTypes);
 
   const counts = summariseCounts(entries);
   const windowLabel = recentDays === 1 ? '1 day' : `${recentDays} days`;
@@ -77,7 +103,7 @@ export function RecentProgressScreen({ regionCode, recentDays, questionTypes, on
 
           {/* Summary pills */}
           {!loading && !noCache && (
-            <div className="flex flex-wrap gap-2 mt-4 mb-4">
+            <div className="flex flex-wrap gap-2 mt-4 mb-3">
               {SECTION_ORDER.filter(cat => counts[cat] > 0).map(cat => (
                 <span
                   key={cat}
@@ -92,6 +118,23 @@ export function RecentProgressScreen({ regionCode, recentDays, questionTypes, on
                   {counts[cat]} {SECTION_LABELS[cat]}
                 </span>
               ))}
+            </div>
+          )}
+
+          {/* Type filter dropdown */}
+          {!loading && !noCache && availableTypes.length > 1 && (
+            <div className="flex items-center gap-2 mb-4">
+              <label className="text-xs text-slate-500 font-medium shrink-0">Question type:</label>
+              <select
+                value={typeFilter}
+                onChange={e => setTypeFilter(e.target.value as TypeFilter)}
+                className="text-xs border border-slate-300 rounded-lg px-2 py-1 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-forest-500"
+              >
+                <option value="all">All</option>
+                {availableTypes.map(t => (
+                  <option key={t} value={t}>{TYPE_LABELS[t] ?? t}</option>
+                ))}
+              </select>
             </div>
           )}
         </div>
@@ -130,7 +173,7 @@ export function RecentProgressScreen({ regionCode, recentDays, questionTypes, on
 
                 <div className="space-y-2">
                   {section.map(bird => (
-                    <BirdCard key={bird.speciesCode} bird={bird} questionTypes={questionTypes} />
+                    <BirdCard key={bird.speciesCode} bird={bird} questionTypes={activeTypes} />
                   ))}
                 </div>
               </Fragment>

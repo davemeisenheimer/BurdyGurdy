@@ -6,6 +6,8 @@ import { AnswerOption } from '../ui/AnswerOption';
 import { ProgressBar } from '../ui/ProgressBar';
 import { masteryBadgeClass, masteryLabel, masteryThreshold, MASTERY_LABELS, isStruggling } from '../../lib/mastery';
 import { MasteryBadge } from '../ui/MasteryBadge';
+import { ReportErrorModal } from '../ui/ReportErrorModal';
+import type { ReportErrorData } from '../ui/ReportErrorModal';
 
 interface Props {
   question: QuizQuestion;
@@ -30,6 +32,7 @@ interface Props {
   onToggleFavourite: () => void;
   onToggleExcluded: () => void;
   onNext: () => void;
+  onReportError?: (data: ReportErrorData & { mediaUrl: string; mediaType: 'photo' | 'audio' }) => void;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -94,12 +97,24 @@ export function QuizScreen({
   onToggleFavourite,
   onToggleExcluded,
   onNext,
+  onReportError,
 }: Props) {
   const answered = selectedAnswer !== null;
   const stimType = getStimulusType(question.type);
   const isSongAnswer = (question.type as string).endsWith('-song');
 
   const [failedPhotoUrls, setFailedPhotoUrls] = useState<Set<string>>(new Set());
+  const [showReportModal, setShowReportModal] = useState(false);
+
+  // Derive the URL and type of the media that was shown as the question stimulus
+  const reportMediaType: 'photo' | 'audio' = stimType === 'image' ? 'photo' : 'audio';
+  const reportMediaUrl = stimType === 'image'
+    ? (questionPhoto?.url ?? question.imageUrl ?? null)
+    : stimType === 'sono'
+    ? (question.sonoUrl ?? null)
+    : (question.audioUrl ?? null);
+  const canReport = !!onReportError && !!reportMediaUrl
+    && (stimType === 'image' || stimType === 'song' || stimType === 'sono');
 
   // Flat list for reveal carousel: primary first, then optional (dismissable), then range map, then spectrogram last
   // Photos that failed to load are excluded so a broken image never hides the carousel.
@@ -255,17 +270,17 @@ export function QuizScreen({
           ) : (
             /* Text/audio stimulus */
             <div className="relative h-full flex flex-col px-5 pt-5 pb-4">
-              {isFirstEncounter && (
-                <span className="absolute bottom-10 right-3 z-10 bg-slate-700 border-2 border-amber-400 text-white text-xs font-bold px-2.5 py-1.5 rounded-full shadow-md leading-none">
-                  ✨ New bird!
-                </span>
-              )}
               <p className="shrink-0 text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">
                 {TYPE_LABELS[question.type]}
               </p>
               <h2 className="shrink-0 text-xl font-semibold text-slate-800 mb-4">
                 {PROMPTS[question.type]}
               </h2>
+              {isFirstEncounter && (
+                <span className="absolute top-3 right-3 z-10 bg-slate-700 border-2 border-amber-400 text-white text-xs font-bold px-2.5 py-1.5 rounded-full shadow-md leading-none">
+                  ✨ New bird!
+                </span>
+              )}
               <div className="flex-1 min-h-0 flex items-center justify-center px-5 pb-4">
                 {stimType === 'song' && question.audioUrl && (
                   <AudioPlayer url={question.audioUrl} tracks={question.audioTracks} sonoUrl={question.sonoUrl} />
@@ -497,6 +512,7 @@ export function QuizScreen({
               isPlaying={!!audioUrl && playingOptionUrl === audioUrl}
               onPlayToggle={audioUrl ? () => handleOptionPlayToggle(audioUrl) : undefined}
               hideLabel={isSongAnswer && !answered}
+              onReport={answered && canReport && opt === question.correctAnswer ? () => setShowReportModal(true) : undefined}
             />
           );
         })}
@@ -511,6 +527,20 @@ export function QuizScreen({
       >
         {currentIndex + 1 >= totalQuestions ? 'See Results' : 'Next Question'}
       </button>
+
+      {/* Report error modal */}
+      {showReportModal && reportMediaUrl && (
+        <ReportErrorModal
+          mediaType={reportMediaType}
+          mediaUrl={reportMediaUrl}
+          comName={question.comName}
+          onClose={() => setShowReportModal(false)}
+          onSubmit={data => {
+            onReportError?.({ ...data, mediaUrl: reportMediaUrl, mediaType: reportMediaType });
+            setShowReportModal(false);
+          }}
+        />
+      )}
 
       {/* Lightbox — fullscreen photo viewer (mobile only) */}
       {lightboxOpen && currentRevealPhoto && (

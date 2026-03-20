@@ -93,8 +93,8 @@ export function AudioPlayer({ url, tracks, sonoUrl }: Props) {
     />
   );
 
-  // ── Spectrogram layout ──────────────────────────────────────────────────
-  if (activeSonoUrl) {
+  // ── Spectrogram layout — only shown once the image has loaded ───────────
+  if (activeSonoUrl && sonoLoaded) {
     return (
       <div
         className="relative w-full min-h-[80px] rounded-xl overflow-hidden bg-slate-900 cursor-pointer select-none"
@@ -104,9 +104,8 @@ export function AudioPlayer({ url, tracks, sonoUrl }: Props) {
         <img
           src={activeSonoUrl}
           alt="Song spectrogram"
-          className={`w-full block transition-opacity duration-300 ${sonoLoaded ? 'opacity-100' : 'opacity-0'}`}
+          className="w-full block"
           draggable={false}
-          onLoad={() => setSonoLoaded(true)}
           onError={() => {
             if (DEV_LOG_AUDIO_ERRORS) console.warn(`[AudioPlayer] spectrogram failed to load: ${activeSonoUrl}`);
             setActiveSonoUrl(undefined);
@@ -144,7 +143,7 @@ export function AudioPlayer({ url, tracks, sonoUrl }: Props) {
     );
   }
 
-  // ── Fallback: no spectrogram ────────────────────────────────────────────
+  // ── Fallback: no spectrogram (or still loading) ─────────────────────────
   if (audioError) {
     return <p className="text-red-500 text-sm">Audio unavailable</p>;
   }
@@ -152,6 +151,19 @@ export function AudioPlayer({ url, tracks, sonoUrl }: Props) {
   return (
     <div className="flex flex-col items-center gap-3">
       {audioEl}
+      {/* Preload spectrogram silently; switches layout to spectrogram once loaded */}
+      {activeSonoUrl && (
+        <img
+          src={activeSonoUrl}
+          alt=""
+          className="hidden"
+          onLoad={() => setSonoLoaded(true)}
+          onError={() => {
+            if (DEV_LOG_AUDIO_ERRORS) console.warn(`[AudioPlayer] spectrogram failed to load: ${activeSonoUrl}`);
+            setActiveSonoUrl(undefined);
+          }}
+        />
+      )}
       <button
         onClick={toggle}
         className="w-20 h-20 rounded-full bg-forest-600 hover:bg-forest-700 text-white flex items-center justify-center text-3xl shadow-lg transition-colors"

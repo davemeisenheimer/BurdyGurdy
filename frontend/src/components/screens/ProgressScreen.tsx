@@ -27,34 +27,57 @@ interface BirdSummary {
   excluded: boolean;
   maxMastery: number;
   isInHistory: boolean;
-  isInProgress: boolean; // Are there any unmastered question types
+  isInProgress: boolean;
 }
 
 type Filter = 'learning' | 'favourites' | 'struggling' | 'mastered' | 'excluded';
+type TypeFilter = 'all' | QuestionType;
 
+function getViewRecord(bird: BirdSummary, typeFilter: TypeFilter): BirdProgress | null {
+  if (typeFilter === 'all') {
+    return bird.records
+      .filter(r => !(r.inHistory ?? false))
+      .reduce<BirdProgress | null>((best, r) =>
+        (r.masteryLevel ?? 0) >= (best?.masteryLevel ?? -1) ? r : best, null);
+  }
+  return bird.records.find(r => r.questionType === typeFilter) ?? null;
+}
+
+function getGroupLabel(bird: BirdSummary, viewRecord: BirdProgress | null, typeFilter: TypeFilter): string {
+  if (typeFilter !== 'all') {
+    if (!viewRecord || viewRecord.inHistory) return 'Mastered';
+    return MASTERY_LABELS[viewRecord.masteryLevel ?? 0] ?? 'Hard';
+  }
+  if (bird.records.filter(r => r.inHistory).length > 0) return 'Partially Mastered';
+  const maxMastery = Math.max(0, ...bird.records.filter(r => !r.inHistory).map(r => r.masteryLevel || 0));
+  return MASTERY_LABELS[maxMastery] ?? 'Hard';
+}
 
 export function ProgressScreen({ onBack, userId }: Props) {
   const [birds, setBirds]               = useState<BirdSummary[]>([]);
   const [filter, setFilter]             = useState<Filter>('learning');
+  const [typeFilter, setTypeFilter]     = useState<TypeFilter>('all');
   const [loading, setLoading]           = useState(true);
   const [confirmClear, setConfirmClear] = useState(false);
 
   const sortForMasteredTab = (summaries: BirdSummary[]): BirdSummary[] =>
     [...summaries].sort((a, b) => a.comName.localeCompare(b.comName));
 
-  const sortForOtherTab = (summaries: BirdSummary[]): BirdSummary[] =>
+  const sortForOtherTab = (summaries: BirdSummary[], tf: TypeFilter): BirdSummary[] =>
     [...summaries].sort((a, b) => {
-      // Primary: fewest mastered types first (unmastered birds surface at top)
-      const aMasteryGroup = a.records.filter(r => r.inHistory).length;
-      const bMasteryGroup = b.records.filter(r => r.inHistory).length;
-      if (aMasteryGroup !== bMasteryGroup) return aMasteryGroup - bMasteryGroup;
+      const aView = getViewRecord(a, tf);
+      const bView = getViewRecord(b, tf);
 
-      // Secondary: lowest max mastery level among active (unmastered) types
-      const aMaxMastery = Math.max(0, ...a.records.filter(r => !r.inHistory).map(r => r.masteryLevel || 0));
-      const bMaxMastery = Math.max(0, ...b.records.filter(r => !r.inHistory).map(r => r.masteryLevel || 0));
-      if (aMaxMastery !== bMaxMastery) return aMaxMastery - bMaxMastery;
+      if (tf === 'all') {
+        const aMasteryGroup = a.records.filter(r => r.inHistory).length;
+        const bMasteryGroup = b.records.filter(r => r.inHistory).length;
+        if (aMasteryGroup !== bMasteryGroup) return aMasteryGroup - bMasteryGroup;
+      }
 
-      // Tertiary: alphabetical by common name
+      const aLvl = aView && !aView.inHistory ? (aView.masteryLevel ?? 0) : 999;
+      const bLvl = bView && !bView.inHistory ? (bView.masteryLevel ?? 0) : 999;
+      if (aLvl !== bLvl) return aLvl - bLvl;
+
       return a.comName.localeCompare(b.comName);
     });
 
@@ -70,7 +93,6 @@ export function ProgressScreen({ onBack, userId }: Props) {
 
       const summaries: BirdSummary[] = [];
       for (const [speciesCode, recs] of bySpecies) {
-        // Skip species that have only been seeded (never actually asked)
         const askedRecs = recs.filter(r => r.lastAsked > 0);
         if (askedRecs.length === 0) continue;
 
@@ -99,7 +121,6 @@ export function ProgressScreen({ onBack, userId }: Props) {
 
   const handleClearHistory = async (clearCloud: boolean) => {
     await db.progress.clear();
-    // Reset promotion queue so the next adaptive session starts from the beginning
     await db.regionSpecies.toCollection().modify({ promotionIndex: 0 });
     if (clearCloud && userId) await deleteCloudProgress(userId);
     setBirds([]);
@@ -111,30 +132,54 @@ export function ProgressScreen({ onBack, userId }: Props) {
     load();
   };
 
+  // Available question types present in the data
+  const availableTypes: QuestionType[] = [...new Set(
+    birds.flatMap(b => b.records.map(r => r.questionType))
+  )].sort((a, b) => (TYPE_LABELS[a] ?? a).localeCompare(TYPE_LABELS[b] ?? b));
+
   const nonExcluded   = birds.filter(b => !b.excluded);
   const excludedCount = birds.filter(b => b.excluded).length;
+  const masteredCount = birds.filter(b => !b.excluded && b.isInHistory).length;
+  const strugglingCount = nonExcluded.filter(b =>
+    b.totalAttempts >= 3 && b.overallAccuracy < STRUGGLING_THRESHOLD
+  ).length;
 
-  const masteredCount   = birds.filter(b => !b.excluded && b.isInHistory).length;
-  const strugglingCount = nonExcluded.filter(b => b.totalAttempts >= 3 && b.overallAccuracy < STRUGGLING_THRESHOLD).length;
+  // Apply type filter first, then status filter
+  const typeFiltered = typeFilter === 'all'
+    ? birds
+    : birds.filter(b => b.records.some(r => r.questionType === typeFilter));
 
-  const filteredUnsorted = birds.filter(b => {
-    if (filter === 'learning')        return b.isInProgress;
-    if (filter === 'favourites') return b.favourited && !b.excluded;
-    if (filter === 'struggling') return !b.excluded && b.totalAttempts >= 3 && b.overallAccuracy < STRUGGLING_THRESHOLD;
-    if (filter === 'mastered')   return !b.excluded && b.isInHistory;
-    if (filter === 'excluded')   return b.excluded;
-    return !b.excluded;
+  const filteredUnsorted = typeFiltered.filter(b => {
+    if (b.excluded && filter !== 'excluded') return false;
+    if (filter === 'excluded') return b.excluded;
+    if (filter === 'favourites') return b.favourited;
+
+    const vr = getViewRecord(b, typeFilter);
+    if (filter === 'learning')   return vr ? !(vr.inHistory ?? false) : b.isInProgress;
+    if (filter === 'mastered')   return vr ? (vr.inHistory ?? false) : b.isInHistory;
+    if (filter === 'struggling') {
+      if (typeFilter !== 'all' && vr) {
+        const total = vr.correct + vr.incorrect;
+        return total >= 3 && (total > 0 ? vr.correct / total : 0) < STRUGGLING_THRESHOLD;
+      }
+      return b.totalAttempts >= 3 && b.overallAccuracy < STRUGGLING_THRESHOLD;
+    }
+    return true;
   });
 
   const filtered = filter === 'mastered'
     ? sortForMasteredTab(filteredUnsorted)
-    : sortForOtherTab(filteredUnsorted);
+    : sortForOtherTab(filteredUnsorted, typeFilter);
 
-  const getGroupLabel = (bird: BirdSummary): string => {
-    if (bird.records.filter(r => r.inHistory).length > 0) return 'Partially Mastered';
-    const maxMastery = Math.max(0, ...bird.records.filter(r => !r.inHistory).map(r => r.masteryLevel || 0));
-    return MASTERY_LABELS[maxMastery] ?? 'Hard';
-  };
+  // Pre-compute group label counts for headers
+  const groupCounts = new Map<string, number>();
+  if (filter === 'learning') {
+    for (const bird of filtered) {
+      const vr = getViewRecord(bird, typeFilter);
+      const label = getGroupLabel(bird, vr, typeFilter);
+      groupCounts.set(label, (groupCounts.get(label) ?? 0) + 1);
+    }
+  }
 
   const masteryColor = (accuracy: number) => {
     if (accuracy >= 0.85) return 'bg-green-500';
@@ -142,30 +187,28 @@ export function ProgressScreen({ onBack, userId }: Props) {
     return 'bg-red-400';
   };
 
-
   const progressBadge = (r: BirdProgress) => {
-      const total = r.correct + r.incorrect;
-      const pct   = total > 0 ? Math.round((r.correct / total) * 100) : null;
-      const isStruggling = (r.correct / total) < STRUGGLING_THRESHOLD;
-
-      return (
-        <span
-          key={r.questionType}
-          className={`relative text-xs px-2 py-0.5 rounded-full ${r.favourited ? 'ring-1 ring-amber-400' : ''} ${
-            pct === null ? 'bg-slate-100 text-slate-400'
-            : pct >= 85  ? 'bg-green-100 text-green-700'
-            : pct >= 60  ? 'bg-amber-100 text-amber-700'
-            : 'bg-red-100 text-red-700'
-          }`}
-        >
-          {TYPE_LABELS[r.questionType]}: {pct !== null ? `${pct}%` : '—'}
-          {isStruggling && (
-            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 text-white text-[9px] leading-none rounded-full flex items-center justify-center font-bold pointer-events-none select-none">
-              !
-            </span>
-          )}
-        </span>
-      );
+    const total = r.correct + r.incorrect;
+    const pct   = total > 0 ? Math.round((r.correct / total) * 100) : null;
+    const struggling = total > 0 && (r.correct / total) < STRUGGLING_THRESHOLD;
+    return (
+      <span
+        key={r.questionType}
+        className={`relative text-xs px-2 py-0.5 rounded-full ${r.favourited ? 'ring-1 ring-amber-400' : ''} ${
+          pct === null ? 'bg-slate-100 text-slate-400'
+          : pct >= 85  ? 'bg-green-100 text-green-700'
+          : pct >= 60  ? 'bg-amber-100 text-amber-700'
+          : 'bg-red-100 text-red-700'
+        }`}
+      >
+        {TYPE_LABELS[r.questionType]}: {pct !== null ? `${pct}%` : '—'}
+        {struggling && (
+          <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 text-white text-[9px] leading-none rounded-full flex items-center justify-center font-bold pointer-events-none select-none">
+            !
+          </span>
+        )}
+      </span>
+    );
   };
 
   return (
@@ -249,17 +292,30 @@ export function ProgressScreen({ onBack, userId }: Props) {
               <div className="text-xs text-slate-500 mt-0.5">Favourited</div>
             </div>
             <div className="bg-white rounded-xl p-3 text-center border border-slate-200">
-              <div className="text-2xl font-bold text-red-500">
-                {strugglingCount}
-              </div>
+              <div className="text-2xl font-bold text-red-500">{strugglingCount}</div>
               <div className="text-xs text-slate-500 mt-0.5">Struggling</div>
             </div>
             <div className="bg-white rounded-xl p-3 text-center border border-slate-200">
-              <div className="text-2xl font-bold text-green-600">
-                {masteredCount}
-              </div>
+              <div className="text-2xl font-bold text-green-600">{masteredCount}</div>
               <div className="text-xs text-slate-500 mt-0.5">Mastered</div>
             </div>
+          </div>
+        )}
+
+        {/* Type filter dropdown */}
+        {availableTypes.length > 1 && (
+          <div className="flex items-center gap-2 mb-3">
+            <label className="text-xs text-slate-500 font-medium shrink-0">Question type:</label>
+            <select
+              value={typeFilter}
+              onChange={e => setTypeFilter(e.target.value as TypeFilter)}
+              className="text-xs border border-slate-300 rounded-lg px-2 py-1 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-forest-500"
+            >
+              <option value="all">All</option>
+              {availableTypes.map(t => (
+                <option key={t} value={t}>{TYPE_LABELS[t] ?? t}</option>
+              ))}
+            </select>
           </div>
         )}
 
@@ -325,26 +381,36 @@ export function ProgressScreen({ onBack, userId }: Props) {
         {/* Bird list */}
         <div className="space-y-3">
           {filtered.map((bird, i) => {
-            const groupHeader = filter === 'learning' && (i === 0 || getGroupLabel(bird) !== getGroupLabel(filtered[i - 1]))
-              ? <h3 key={`hdr-${i}`} className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-slate-800 pt-2"><span className="flex-1 h-px bg-slate-200" />{getGroupLabel(bird)}<span className="flex-1 h-px bg-slate-200" /></h3>
+            const viewRecord = getViewRecord(bird, typeFilter);
+            const groupLabel = getGroupLabel(bird, viewRecord, typeFilter);
+            const prevGroupLabel = i > 0 ? getGroupLabel(filtered[i - 1], getViewRecord(filtered[i - 1], typeFilter), typeFilter) : null;
+            const groupHeader = filter === 'learning' && (i === 0 || groupLabel !== prevGroupLabel)
+              ? <h3 key={`hdr-${i}`} className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-slate-800 pt-2">
+                  <span className="flex-1 h-px bg-slate-200" />
+                  {groupLabel} ({groupCounts.get(groupLabel) ?? 0})
+                  <span className="flex-1 h-px bg-slate-200" />
+                </h3>
               : null;
+
+            // Display accuracy: per-type record when filtered, overall when All
+            const displayAccuracy = typeFilter !== 'all' && viewRecord
+              ? (viewRecord.correct + viewRecord.incorrect > 0
+                  ? viewRecord.correct / (viewRecord.correct + viewRecord.incorrect)
+                  : 0)
+              : bird.overallAccuracy;
+
             return (<Fragment key={bird.speciesCode}>
               {groupHeader}
               <div className={`bg-white rounded-xl border p-4 ${
                 bird.excluded ? 'border-red-200 opacity-75' : 'border-slate-200'
-              }`}
-            >
+              }`}>
               <div className="flex items-start justify-between mb-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-semibold text-slate-800">{bird.comName}</span>
                   {bird.favourited && <span className="text-amber-500 text-sm">★</span>}
                   {!bird.excluded && (() => {
-                    // Find the highest-mastery record not yet in history
-                    const leading = bird.records
-                      .filter(r => !(r.inHistory ?? false))
-                      .reduce<BirdProgress | null>((best, r) =>
-                        (r.masteryLevel ?? 0) >= (best?.masteryLevel ?? -1) ? r : best, null);
-                    if (!leading || (filter === "mastered" && bird.records.some(r => r.inHistory ?? false))) {
+                    const leading = viewRecord && !(viewRecord.inHistory ?? false) ? viewRecord : null;
+                    if (!leading || (filter === 'mastered' && (viewRecord?.inHistory ?? bird.isInHistory))) {
                       return (
                         <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-700">
                           Mastered
@@ -374,9 +440,11 @@ export function ProgressScreen({ onBack, userId }: Props) {
                 ) : (
                   <div className="text-right shrink-0">
                     <span className="text-sm font-semibold text-slate-700">
-                      {Math.round(bird.overallAccuracy * 100)}%
+                      {Math.round(displayAccuracy * 100)}%
                     </span>
-                    <span className="text-xs text-slate-400 ml-1">overall</span>
+                    <span className="text-xs text-slate-400 ml-1">
+                      {typeFilter !== 'all' ? TYPE_LABELS[typeFilter] ?? typeFilter : 'overall'}
+                    </span>
                   </div>
                 )}
               </div>
@@ -385,18 +453,16 @@ export function ProgressScreen({ onBack, userId }: Props) {
                 <>
                   <div className="w-full bg-slate-100 rounded-full h-1.5 mb-3">
                     <div
-                      className={`h-1.5 rounded-full transition-all ${masteryColor(bird.overallAccuracy)}`}
-                      style={{ width: `${Math.round(bird.overallAccuracy * 100)}%` }}
+                      className={`h-1.5 rounded-full transition-all ${masteryColor(displayAccuracy)}`}
+                      style={{ width: `${Math.round(displayAccuracy * 100)}%` }}
                     />
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {bird.records.filter(r => (filter !== "mastered" && !r.inHistory) || (filter === "mastered" && r.inHistory)).map(r => {
-                      return progressBadge(r);
-                    })}
+                    {bird.records.filter(r => (filter !== 'mastered' && !r.inHistory) || (filter === 'mastered' && r.inHistory)).map(r => progressBadge(r))}
                     {filter !== 'mastered' && bird.records.some(r => r.inHistory) && (
                       <span className="text-xs px-1.5 py-0.5 rounded-full font-medium">Mastered:</span>
                     )}
-                    {bird.records.filter(r => r.inHistory && filter !== "mastered").map(r => progressBadge(r))}
+                    {bird.records.filter(r => r.inHistory && filter !== 'mastered').map(r => progressBadge(r))}
                   </div>
                 </>
               )}

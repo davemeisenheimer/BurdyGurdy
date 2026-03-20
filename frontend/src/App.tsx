@@ -7,7 +7,7 @@ import { ProgressScreen } from './components/screens/ProgressScreen';
 import { RecentProgressScreen } from './components/screens/RecentProgressScreen';
 import { SettingsScreen } from './components/screens/SettingsScreen';
 import { VictoryScreen } from './components/screens/VictoryScreen';
-// import { PhotoCurationPanel } from './components/panels/PhotoCurationPanel';
+import { CurationPanel } from './components/panels/CurationPanel';
 import { BirdInfoPanel } from './components/panels/BirdInfoPanel';
 import { AuthPanel } from './components/panels/AuthPanel';
 import { useQuiz } from './hooks/useQuiz';
@@ -19,7 +19,8 @@ import type { LocateResult } from './lib/api';
 import { db } from './lib/db';
 import { supabase } from './lib/supabase';
 import type { SupabaseUser } from './lib/supabase';
-import { uploadProgress, downloadAndMerge, uploadSettings, downloadSettings, downloadUserBlockedPhotos, deleteAllUserBlockedPhotos, uploadUserBlockedPhoto } from './lib/sync';
+import { uploadProgress, downloadAndMerge, uploadSettings, downloadSettings, downloadUserBlockedPhotos, deleteAllUserBlockedPhotos, uploadUserBlockedPhoto, submitMediaReport, fetchAdminBlockedMedia } from './lib/sync';
+import type { ReportErrorData } from './components/ui/ReportErrorModal';
 
 const RECENT_DAYS: Record<'day' | 'week' | 'month', number> = { day: 1, week: 7, month: 30 };
 
@@ -133,6 +134,7 @@ export default function App() {
           mergeVictorySeen(remote.victorySeen);
         }).catch(() => {});
         downloadUserBlockedPhotos(userId).catch(() => {});
+        if (session.user.user_metadata?.is_admin) fetchAdminBlockedMedia().catch(() => {});
       }
     });
     return () => subscription.unsubscribe();
@@ -157,7 +159,8 @@ export default function App() {
   }, []);
 
   const [screen, setScreen] = useState<'home' | 'quiz' | 'result' | 'progress' | 'settings' | 'victory' | 'recentprogress'>('home');
-  // const [rightPanel, setRightPanel] = useState<'curation' | 'info'>('info');
+  const [rightPanelTab, setRightPanelTab] = useState<'info' | 'curation'>('info');
+  const isAdmin = user?.user_metadata?.is_admin === true;
   const { state, currentQuestion, isCorrect, currentFavourited, currentExcluded, revealPhotos, revealRangeMapUrl, revealSightings, questionPhoto, roundLevelUps, isFirstEncounter, currentMastery, startQuiz, submitAnswer, toggleFavourite, toggleExcluded, nextQuestion, removeOptionalPhoto } = useQuiz(config, settings.randomizeQuestionPhotos, user?.id);
 
   // After each completed round, upload progress to cloud if signed in
@@ -203,6 +206,28 @@ export default function App() {
     if (user) uploadSettings(user.id, s, loadQuizPrefs(), getVictorySeen()).catch(() => {});
   };
 
+  function detectService(url: string): string {
+    if (url.includes('inaturalist.org'))  return 'iNaturalist';
+    if (url.includes('macaulaylibrary.org')) return 'Macaulay Library';
+    if (url.includes('xeno-canto.org'))   return 'xeno-canto';
+    if (url.includes('wikimedia.org') || url.includes('wikipedia.org')) return 'Wikimedia Commons';
+    return 'Unknown';
+  }
+
+  const handleReportError = (data: ReportErrorData & { mediaUrl: string; mediaType: 'photo' | 'audio'; speciesCode: string; comName: string }) => {
+    if (!user) return;
+    submitMediaReport({
+      url: data.mediaUrl,
+      mediaType: data.mediaType,
+      service: detectService(data.mediaUrl),
+      speciesCode: data.speciesCode,
+      comName: data.comName,
+      issueType: data.issueType,
+      wrongBird: data.wrongBird || null,
+      description: data.description || null,
+    }).catch(() => {});
+  };
+
   // When a round completes, check for victory before showing result screen
   useEffect(() => {
     if (state.status !== 'complete' || screen !== 'quiz') return;
@@ -225,15 +250,27 @@ export default function App() {
     <div className="font-sans lg:flex lg:h-screen">
 
       {/* ── Right panel: desktop only ── */}
-      <div className="hidden lg:flex lg:order-2 flex-col flex-1 border-l-2 border-slate-200 overflow-hidden">
+      {isDesktop && <div className="lg:flex lg:order-2 flex-col flex-1 border-l-2 border-slate-200 overflow-hidden">
 
-        {/* Photo Curation tab disabled — uncomment to re-enable */}
-        {/* <div className="shrink-0 flex border-b border-slate-200 bg-white">
-          <button onClick={() => setRightPanel('curation')} ...>Photo Curation</button>
-          <button onClick={() => setRightPanel('info')} ...>Bird Info</button>
-        </div>
-        {rightPanel === 'curation' && <PhotoCurationPanel />} */}
-        {(
+        {isAdmin && settings.enableAdminFeatures && (
+          <div className="shrink-0 flex border-b border-slate-200 bg-white">
+            {(['info', 'curation'] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setRightPanelTab(tab)}
+                className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-wider border-b-2 transition-colors ${
+                  rightPanelTab === tab
+                    ? 'border-forest-600 text-forest-700 bg-forest-50'
+                    : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                {tab === 'info' ? 'Bird Info' : 'Curation'}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {(!isAdmin || !settings.enableAdminFeatures || rightPanelTab === 'info') && (
           <BirdInfoPanel
             question={screen === 'quiz' && (state.status === 'active' || state.status === 'answered') ? currentQuestion : null}
             isAnswered={state.status === 'answered'}
@@ -248,7 +285,13 @@ export default function App() {
             onSignOut={() => supabase.auth.signOut()}
           />
         )}
-      </div>
+
+        {isAdmin && settings.enableAdminFeatures && rightPanelTab === 'curation' && (
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <CurationPanel />
+          </div>
+        )}
+      </div>}
 
       {/* ── Left panel: game (full width on mobile, constrained on desktop) ── */}
       <div className="lg:order-1 lg:w-[500px] lg:shrink-0 lg:overflow-y-auto">
@@ -279,6 +322,7 @@ export default function App() {
           regionCode={config.regionCode}
           onRegionChange={handleRegionChange}
           onClearBlockedPhotos={handleClearBlockedPhotos}
+          isAdmin={isAdmin}
         />
       )}
 
@@ -329,6 +373,7 @@ export default function App() {
           onToggleFavourite={toggleFavourite}
           onToggleExcluded={toggleExcluded}
           onNext={handleNext}
+          onReportError={user ? (data) => handleReportError({ ...data, speciesCode: currentQuestion.speciesCode, comName: currentQuestion.comName }) : undefined}
         />
       )}
 
