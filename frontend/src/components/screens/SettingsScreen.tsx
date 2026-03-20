@@ -10,6 +10,7 @@ interface Props {
   isDesktop: boolean;
   regionCode?: string;
   onRegionChange?: (code: string) => void;
+  onClearBlockedPhotos?: () => void;
 }
 
 interface ToggleRowProps {
@@ -36,7 +37,7 @@ function ToggleRow({ label, description, checked, onChange }: ToggleRowProps) {
   );
 }
 
-export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, regionCode, onRegionChange }: Props) {
+export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, regionCode, onRegionChange, onClearBlockedPhotos }: Props) {
   const [settings, setSettings] = useState(initialSettings);
   const [regionDisplayName, setRegionDisplayName] = useState<string | undefined>(undefined);
   const [showMap, setShowMap] = useState(false);
@@ -151,6 +152,16 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
               />
             </label>
           )}
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mt-4">
+          <p className="font-medium text-slate-800 text-sm mb-1">Blocked photos</p>
+          <p className="text-xs text-slate-500 mb-3">Photos you've removed during quizzes won't appear again. Clear this list to allow them back.</p>
+          <button
+            onClick={onClearBlockedPhotos}
+            className="text-xs px-3 py-1.5 border border-red-300 text-red-500 rounded-lg hover:bg-red-50 transition-colors"
+          >
+            Clear my blocked photos
+          </button>
         </div>
       </div>
       {showMap && onRegionChange && (

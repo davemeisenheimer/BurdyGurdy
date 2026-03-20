@@ -9,13 +9,17 @@ import { SettingsScreen } from './components/screens/SettingsScreen';
 import { VictoryScreen } from './components/screens/VictoryScreen';
 // import { PhotoCurationPanel } from './components/panels/PhotoCurationPanel';
 import { BirdInfoPanel } from './components/panels/BirdInfoPanel';
+import { AuthPanel } from './components/panels/AuthPanel';
 import { useQuiz } from './hooks/useQuiz';
 import { loadSettings, saveSettings, loadQuizPrefs, saveQuizPrefs } from './lib/settings';
 import type { AppSettings } from './lib/settings';
-import { checkVictoryCondition, hasSeenVictory, markVictorySeen } from './lib/victory';
+import { checkVictoryCondition, hasSeenVictory, markVictorySeen, getVictorySeen, mergeVictorySeen } from './lib/victory';
 import { locateRegion, fetchBlockedPhotos } from './lib/api';
 import type { LocateResult } from './lib/api';
 import { db } from './lib/db';
+import { supabase } from './lib/supabase';
+import type { SupabaseUser } from './lib/supabase';
+import { uploadProgress, downloadAndMerge, uploadSettings, downloadSettings, downloadUserBlockedPhotos, deleteAllUserBlockedPhotos, uploadUserBlockedPhoto } from './lib/sync';
 
 const RECENT_DAYS: Record<'day' | 'week' | 'month', number> = { day: 1, week: 7, month: 30 };
 
@@ -52,10 +56,14 @@ export default function App() {
       ...(prefs.mode          ? { mode: prefs.mode as QuizConfig['mode'] }                          : {}),
       ...(prefs.questionsPerRound != null ? { questionsPerRound: prefs.questionsPerRound }           : {}),
       ...(prefs.regionCode    ? { regionCode: prefs.regionCode }                                     : {}),
+      ...(prefs.groupId       ? { groupId: prefs.groupId }                                           : {}),
     };
   });
   const [geoPrompt, setGeoPrompt] = useState<LocateResult | null>(null);
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
+  const [user, setUser]               = useState<SupabaseUser | null>(null);
+  const [showAuth, setShowAuth]       = useState(false);
+  const [showUploadPrompt, setShowUploadPrompt] = useState(false);
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 1024px)');
@@ -63,10 +71,18 @@ export default function App() {
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, []);
+  const handleQuizPrefsChange = (prefs: { questionTypes: QuizConfig['questionTypes']; mode: QuizConfig['mode']; questionsPerRound: number; groupId: string; regionCode: string }) => {
+    const newPrefs = { questionTypes: prefs.questionTypes, mode: prefs.mode, questionsPerRound: prefs.questionsPerRound, groupId: prefs.groupId, regionCode: prefs.regionCode };
+    saveQuizPrefs(newPrefs);
+    setConfig(c => ({ ...c, ...newPrefs }));
+    if (user) uploadSettings(user.id, settings, newPrefs, getVictorySeen()).catch(() => {});
+  };
+
   const handleRegionChange = (code: string) => {
     setConfig(c => ({ ...c, regionCode: code }));
-    const prefs = loadQuizPrefs();
-    saveQuizPrefs({ ...prefs, regionCode: code });
+    const prefs = { ...loadQuizPrefs(), regionCode: code };
+    saveQuizPrefs(prefs);
+    if (user) uploadSettings(user.id, settings, prefs, getVictorySeen()).catch(() => {});
   };
 
   // On load, fetch server-side blocked photos and merge into local IndexedDB
@@ -74,6 +90,46 @@ export default function App() {
     fetchBlockedPhotos()
       .then(urls => Promise.all(urls.map(url => db.blockedPhotos.put({ url }))))
       .catch(() => { /* non-fatal */ });
+  }, []);
+
+  // Auth: restore session on load and listen for changes
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user ?? null);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      // When a session appears (OAuth redirect back), merge cloud data
+      if (session?.user) {
+        const userId = session.user.id;
+        downloadAndMerge(userId).then(async remoteCount => {
+          if (remoteCount === 0) {
+            const localCount = await db.progress.count();
+            if (localCount > 0) setShowUploadPrompt(true);
+          }
+        }).catch(() => {});
+        downloadSettings(userId).then(remote => {
+          if (!remote) return;
+          const mergedSettings = { ...loadSettings(), ...remote.appSettings };
+          setSettings(mergedSettings);
+          saveSettings(mergedSettings);
+          const mergedPrefs = { ...loadQuizPrefs(), ...remote.quizPrefs };
+          saveQuizPrefs(mergedPrefs);
+          setConfig(c => ({
+            ...c,
+            ...(mergedPrefs.questionTypes     ? { questionTypes: mergedPrefs.questionTypes as QuizConfig['questionTypes'] } : {}),
+            ...(mergedPrefs.mode              ? { mode: mergedPrefs.mode as QuizConfig['mode'] }                           : {}),
+            ...(mergedPrefs.questionsPerRound != null ? { questionsPerRound: mergedPrefs.questionsPerRound }                : {}),
+            ...(mergedPrefs.regionCode        ? { regionCode: mergedPrefs.regionCode }                                     : {}),
+            ...(mergedPrefs.groupId           ? { groupId: mergedPrefs.groupId }                                           : {}),
+          }));
+          mergeVictorySeen(remote.victorySeen);
+        }).catch(() => {});
+        downloadUserBlockedPhotos(userId).catch(() => {});
+      }
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
   // On load, try to detect location and offer a region update if it differs from saved
@@ -96,15 +152,25 @@ export default function App() {
 
   const [screen, setScreen] = useState<'home' | 'quiz' | 'result' | 'progress' | 'settings' | 'victory' | 'recentprogress'>('home');
   // const [rightPanel, setRightPanel] = useState<'curation' | 'info'>('info');
-  const { state, currentQuestion, isCorrect, currentFavourited, currentExcluded, revealPhotos, revealRangeMapUrl, revealSightings, questionPhoto, roundLevelUps, isFirstEncounter, currentMastery, startQuiz, submitAnswer, toggleFavourite, toggleExcluded, nextQuestion, removeOptionalPhoto } = useQuiz(config, settings.randomizeQuestionPhotos);
+  const { state, currentQuestion, isCorrect, currentFavourited, currentExcluded, revealPhotos, revealRangeMapUrl, revealSightings, questionPhoto, roundLevelUps, isFirstEncounter, currentMastery, startQuiz, submitAnswer, toggleFavourite, toggleExcluded, nextQuestion, removeOptionalPhoto } = useQuiz(config, settings.randomizeQuestionPhotos, user?.id);
+
+  // After each completed round, upload progress to cloud if signed in
+  useEffect(() => {
+    if (state.status !== 'complete' || !user) return;
+    uploadProgress(user.id).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.status]);
 
   const handleStart = async (newConfig: QuizConfig) => {
-    saveQuizPrefs({
+    const newPrefs = {
       questionTypes: newConfig.questionTypes,
       mode: newConfig.mode,
       questionsPerRound: newConfig.questionsPerRound,
       regionCode: newConfig.regionCode,
-    });
+      groupId: newConfig.groupId,
+    };
+    saveQuizPrefs(newPrefs);
+    if (user) uploadSettings(user.id, settings, newPrefs, getVictorySeen()).catch(() => {});
     const recentDays = RECENT_DAYS[settings.recentWindow];
     const fullConfig = { ...newConfig, recentDays };
     setConfig(fullConfig);
@@ -120,9 +186,15 @@ export default function App() {
     if (state.status === 'complete') setScreen('result');
   };
 
+  const handleClearBlockedPhotos = async () => {
+    await db.blockedPhotos.clear();
+    if (user) await deleteAllUserBlockedPhotos(user.id).catch(() => {});
+  };
+
   const handleSaveSettings = (s: AppSettings) => {
     setSettings(s);
     saveSettings(s);
+    if (user) uploadSettings(user.id, s, loadQuizPrefs(), getVictorySeen()).catch(() => {});
   };
 
   // When a round completes, check for victory before showing result screen
@@ -133,6 +205,7 @@ export default function App() {
       .then(won => {
         if (won && !hasSeenVictory(settings.recentWindow, expandedTypes)) {
           markVictorySeen(settings.recentWindow, expandedTypes);
+          if (user) uploadSettings(user.id, settings, loadQuizPrefs(), getVictorySeen()).catch(() => {});
           setScreen('victory');
         } else {
           setScreen('result');
@@ -164,6 +237,9 @@ export default function App() {
             maxRecentSightings={settings.maxRecentSightings}
             autoScrollRelatedSpecies={settings.autoScrollRelatedSpecies}
             autoplayRevealAudio={settings.autoplayRevealAudio}
+            userEmail={user?.email}
+            onAuthClick={() => setShowAuth(true)}
+            onSignOut={() => supabase.auth.signOut()}
           />
         )}
       </div>
@@ -177,11 +253,15 @@ export default function App() {
           onStart={handleStart}
           onProgress={() => setScreen('progress')}
           onSettings={() => setScreen('settings')}
+          userEmail={user?.email}
+          onAuthClick={() => setShowAuth(true)}
+          onSignOut={() => supabase.auth.signOut()}
+          onQuizPrefsChange={handleQuizPrefsChange}
         />
       )}
 
       {screen === 'progress' && (
-        <ProgressScreen onBack={() => setScreen('home')} />
+        <ProgressScreen onBack={() => setScreen('home')} userId={user?.id} />
       )}
 
       {screen === 'settings' && (
@@ -192,6 +272,7 @@ export default function App() {
           isDesktop={isDesktop}
           regionCode={config.regionCode}
           onRegionChange={handleRegionChange}
+          onClearBlockedPhotos={handleClearBlockedPhotos}
         />
       )}
 
@@ -275,6 +356,52 @@ export default function App() {
         />
       )}
       </div>{/* end game column */}
+
+      {/* Auth panel */}
+      {showAuth && (
+        <AuthPanel
+          onClose={() => setShowAuth(false)}
+          onSignIn={() => {
+            supabase.auth.getUser().then(({ data }) => {
+              if (data.user) downloadAndMerge(data.user.id).catch(() => {});
+            });
+          }}
+          onSignUp={() => {}}
+        />
+      )}
+
+      {/* Upload local progress prompt — shown after a new registration */}
+      {showUploadPrompt && user && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center">
+            <p className="text-lg font-bold text-slate-800 mb-2">Upload your progress?</p>
+            <p className="text-sm text-slate-500 mb-5">
+              You have local progress saved on this device. Would you like to upload it to your new account so it's backed up and available on all your devices?
+            </p>
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={async () => {
+                  await uploadProgress(user.id);
+                  await uploadSettings(user.id, settings, loadQuizPrefs(), getVictorySeen());
+                  const blocked = await db.blockedPhotos.toArray();
+                  await Promise.all(blocked.map(p => uploadUserBlockedPhoto(user.id, p.url)));
+                  setShowUploadPrompt(false);
+                  setShowAuth(false);
+                }}
+                className="px-5 py-2 bg-forest-600 hover:bg-forest-700 text-white rounded-xl text-sm font-semibold"
+              >
+                Yes, upload
+              </button>
+              <button
+                onClick={() => { setShowUploadPrompt(false); setShowAuth(false); }}
+                className="px-5 py-2 border border-slate-300 text-slate-600 rounded-xl text-sm hover:bg-slate-50"
+              >
+                Start fresh
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Geolocation prompt */}
       {geoPrompt && (

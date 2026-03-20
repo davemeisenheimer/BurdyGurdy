@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import type { QuizQuestion, AttributedPhoto } from '../../types';
 import { fetchBirdInfo, fetchRecentSightings, fetchRegionSpecies, fetchBirdPhotos } from '../../lib/api';
 import type { BirdInfoData, RecentSighting } from '../../lib/api';
+import { AccountPill } from '../ui/AccountPill';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -23,6 +24,9 @@ interface Props {
   maxRecentSightings?:        number;
   autoScrollRelatedSpecies?:  boolean;
   autoplayRevealAudio?:       boolean;
+  userEmail?:                 string | null;
+  onAuthClick?:               () => void;
+  onSignOut?:                 () => void;
 }
 
 // ── IUCN conservation status ──────────────────────────────────────────────────
@@ -351,7 +355,7 @@ function formatSightingDate(obsDt: string): string {
 
 // ── Main panel ────────────────────────────────────────────────────────────────
 
-export function BirdInfoPanel({ question, isAnswered, isCorrect, selectedAnswer, regionCode, maxRecentSightings = 4, autoScrollRelatedSpecies = true, autoplayRevealAudio = false }: Props) {
+export function BirdInfoPanel({ question, isAnswered, isCorrect, selectedAnswer, regionCode, maxRecentSightings = 4, autoScrollRelatedSpecies = true, autoplayRevealAudio = false, userEmail, onAuthClick, onSignOut }: Props) {
   const [questionInfo, setQuestionInfo]       = useState<BirdInfoData | null>(null);
   const [loading, setLoading]                 = useState(false);
   const [questionSightings, setQuestionSightings] = useState<RecentSighting[]>([]);
@@ -423,10 +427,18 @@ export function BirdInfoPanel({ question, isAnswered, isCorrect, selectedAnswer,
                 { icon: '⚙️', text: 'Configurable — choose your region, bird families you care about, question types (song, photo...), observation window, and how many questions per round. Visit settings for more configurability options.' },
               ].map(({ icon, text }) => (
                 <li key={icon} className="flex items-start gap-3">
-                  <span className="shrink-0 text-xl leading-snug">{icon}</span>
+                  <div className="shrink-0 w-20 flex justify-end">
+                    <span className="text-xl leading-snug">{icon}</span>
+                  </div>
                   <p className="text-sm text-slate-600 leading-relaxed">{text}</p>
                 </li>
               ))}
+              <li className="flex items-start gap-3">
+                <div className="shrink-0 w-20 flex justify-end">
+                  <AccountPill userEmail={userEmail} onAuthClick={onAuthClick ?? (() => {})} onSignOut={onSignOut ?? (() => {})} dropdownAlign="right" />
+                </div>
+                <p className="text-sm text-slate-600 leading-relaxed">Sign in to back up your progress and sync it across all your devices. Your learning history, favourites, and settings follow you everywhere.</p>
+              </li>
             </ul>
 
             {/* Credits */}
