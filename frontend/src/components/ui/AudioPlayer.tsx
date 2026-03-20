@@ -12,18 +12,26 @@ interface Props {
   sonoUrl?: string;
 }
 
+const toHttps = (u?: string) => u?.startsWith('//') ? `https:${u}` : u;
+
 export function AudioPlayer({ url, tracks, sonoUrl }: Props) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [audioError, setAudioError] = useState(false);
-  const [activeSonoUrl, setActiveSonoUrl] = useState<string | undefined>(sonoUrl);
+  const [activeSonoUrl, setActiveSonoUrl] = useState<string | undefined>(toHttps(sonoUrl));
+  const [sonoLoaded, setSonoLoaded] = useState(false);
 
   // Normalise: if tracks provided use them, otherwise wrap the single url/sonoUrl
-  const allTracks: Track[] = tracks && tracks.length > 0
+  const allTracks: Track[] = (tracks && tracks.length > 0
     ? tracks
-    : [{ audioUrl: url, sonoUrl }];
+    : [{ audioUrl: url, sonoUrl }]
+  ).map(t => ({ ...t, sonoUrl: toHttps(t.sonoUrl) }));
 
   const trackIndexRef = useRef(0);
+
+  useEffect(() => {
+    setSonoLoaded(false);
+  }, [activeSonoUrl]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -31,6 +39,7 @@ export function AudioPlayer({ url, tracks, sonoUrl }: Props) {
     trackIndexRef.current = 0;
     audio.src = allTracks[0].audioUrl;
     setActiveSonoUrl(allTracks[0].sonoUrl);
+    setSonoLoaded(false);
     setAudioError(false);
     audio.play().catch(() => { /* autoplay blocked — user can tap to start */ });
     return () => {
@@ -88,15 +97,16 @@ export function AudioPlayer({ url, tracks, sonoUrl }: Props) {
   if (activeSonoUrl) {
     return (
       <div
-        className="relative w-full rounded-xl overflow-hidden bg-slate-900 cursor-pointer select-none"
+        className="relative w-full min-h-[80px] rounded-xl overflow-hidden bg-slate-900 cursor-pointer select-none"
         onClick={toggle}
       >
         {audioEl}
         <img
           src={activeSonoUrl}
           alt="Song spectrogram"
-          className="w-full block"
+          className={`w-full block transition-opacity duration-300 ${sonoLoaded ? 'opacity-100' : 'opacity-0'}`}
           draggable={false}
+          onLoad={() => setSonoLoaded(true)}
           onError={() => {
             if (DEV_LOG_AUDIO_ERRORS) console.warn(`[AudioPlayer] spectrogram failed to load: ${activeSonoUrl}`);
             setActiveSonoUrl(undefined);

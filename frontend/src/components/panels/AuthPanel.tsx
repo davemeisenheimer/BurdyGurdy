@@ -13,6 +13,7 @@ export function AuthPanel({ onClose, onSignIn, onSignUp }: Props) {
   const [mode, setMode]         = useState<Mode>('signin');
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
+  const [newsOptIn, setNewsOptIn] = useState(false);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
   const [sent, setSent]         = useState(false);   // email confirmation sent
@@ -27,10 +28,14 @@ export function AuthPanel({ onClose, onSignIn, onSignUp }: Props) {
     if (mode === 'signin') {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) { setError(error.message); setLoading(false); return; }
+      if (newsOptIn) await supabase.auth.updateUser({ data: { news_opt_in: true } });
       onSignIn();
       onClose();
     } else {
-      const { error } = await supabase.auth.signUp({ email, password });
+      const { error } = await supabase.auth.signUp({
+        email, password,
+        options: { data: { news_opt_in: newsOptIn } },
+      });
       if (error) { setError(error.message); setLoading(false); return; }
       // Supabase sends a confirmation email by default
       setSent(true);
@@ -42,6 +47,7 @@ export function AuthPanel({ onClose, onSignIn, onSignUp }: Props) {
   const handleOAuth = async (provider: 'google' | 'github') => {
     setLoading(true);
     setError(null);
+    if (newsOptIn) localStorage.setItem('burdygurdy_news_opt_in', '1');
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: { redirectTo: window.location.origin },
@@ -76,6 +82,19 @@ export function AuthPanel({ onClose, onSignIn, onSignUp }: Props) {
           </div>
         ) : (
           <>
+            {/* News opt-in */}
+            <label className="flex items-start gap-2.5 mb-4 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={newsOptIn}
+                onChange={e => setNewsOptIn(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-slate-300 text-forest-600 focus:ring-forest-500"
+              />
+              <span className="text-xs text-slate-600 leading-snug">
+                Receive occasional BurdyGurdy news and updates
+              </span>
+            </label>
+
             {/* OAuth buttons */}
             <div className="flex flex-col gap-2 mb-4">
               <button

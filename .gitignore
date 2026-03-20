@@ -1,4 +1,5 @@
 REQUIREMENTS.md
+README_Admin.txt
 node_modules/
 dist/
 .env

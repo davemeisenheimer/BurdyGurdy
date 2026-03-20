@@ -103,6 +103,12 @@ export default function App() {
       // When a session appears (OAuth redirect back), merge cloud data
       if (session?.user) {
         const userId = session.user.id;
+        // Persist news opt-in set before an OAuth redirect
+        const pendingNewsOptIn = localStorage.getItem('burdygurdy_news_opt_in');
+        if (pendingNewsOptIn) {
+          localStorage.removeItem('burdygurdy_news_opt_in');
+          supabase.auth.updateUser({ data: { news_opt_in: true } }).catch(() => {});
+        }
         downloadAndMerge(userId).then(async remoteCount => {
           if (remoteCount === 0) {
             const localCount = await db.progress.count();

@@ -136,6 +136,31 @@ export async function fetchRecentSightings(speciesCode: string, regionCode: stri
   }
 }
 
+export interface CarouselRecording {
+  file:    string;
+  sonoUrl: string | null;
+  type:    string | null;
+  country: string | null;
+}
+
+export async function fetchBirdAudio(sciName: string): Promise<CarouselRecording[]> {
+  try {
+    const encoded = encodeURIComponent(sciName.replace(/ /g, '_'));
+    const res = await api.get<Array<{ file: string; sono: { small: string; med: string }; type: string; cnt: string }>>(
+      `/birds/audio/${encoded}`,
+    );
+    const toHttps = (u?: string) => u?.startsWith('//') ? `https:${u}` : u ?? '';
+    return res.data.map(r => ({
+      file:    toHttps(r.file),
+      sonoUrl: r.sono?.med ? toHttps(r.sono.med) : null,
+      type:    r.type  || null,
+      country: r.cnt   || null,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchBirdPhotos(speciesCode: string, comName?: string, sciName?: string, forQuestion = false): Promise<{ primary: AttributedPhoto | null; optional: AttributedPhoto[] }> {
   const params: Record<string, string> = {};
   if (comName) params.comName = comName;

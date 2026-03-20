@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import type { QuizQuestion, AttributedPhoto } from '../../types';
-import { fetchBirdInfo, fetchRecentSightings, fetchRegionSpecies, fetchBirdPhotos } from '../../lib/api';
-import type { BirdInfoData, RecentSighting } from '../../lib/api';
+import { fetchBirdInfo, fetchRecentSightings, fetchRegionSpecies, fetchBirdPhotos, fetchBirdAudio } from '../../lib/api';
+import type { BirdInfoData, RecentSighting, CarouselRecording } from '../../lib/api';
 import { AccountPill } from '../ui/AccountPill';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -46,13 +46,23 @@ const IUCN_COLOR: Record<string, string> = {
 
 // ── RecordingPanel ────────────────────────────────────────────────────────────
 
-function RecordingPanel({ recordings, autoplay = false }: { recordings: BirdInfoData['recordings']; autoplay?: boolean }) {
+function RecordingPanel({ recordings, autoplay = false, pauseRef }: {
+  recordings: BirdInfoData['recordings'];
+  autoplay?:  boolean;
+  pauseRef?:  React.MutableRefObject<(() => void) | null>;
+}) {
   const [idx, setIdx]         = useState(0);
   const [playing, setPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const rec = recordings[idx];
 
   useEffect(() => { setIdx(0); setPlaying(autoplay); }, [recordings]);
+
+  useEffect(() => {
+    if (!pauseRef) return;
+    pauseRef.current = () => { setPlaying(false); audioRef.current?.pause(); };
+    return () => { pauseRef.current = null; };
+  }, [pauseRef]);
 
   useEffect(() => {
     if (!audioRef.current) return;
@@ -108,11 +118,13 @@ function RelatedSpeciesCarousel({
   regionCode,
   autoScrollEnabled = true,
   onViewSpecies,
+  onWillPlay,
 }: {
   referenceSpecies:   SlideSpecies;
   regionCode?:        string;
   autoScrollEnabled?: boolean;
   onViewSpecies:      (species: SlideSpecies) => void;
+  onWillPlay?:        () => void;
 }) {
   const [slides, setSlides]           = useState<CarouselSlide[]>([{ kind: 'title', ...referenceSpecies }]);
   const [photos, setPhotos]           = useState<Map<string, AttributedPhoto | null>>(new Map());
@@ -126,6 +138,12 @@ function RelatedSpeciesCarousel({
   const [animated, setAnimated]           = useState(true);
   const [autoScrolling, setAutoScrolling] = useState(false);
   const hasTriggeredRef = useRef(false);
+
+  // Audio state
+  const [recordings, setRecordings] = useState<Map<string, CarouselRecording[] | null>>(new Map());
+  const fetchingAudioRef = useRef<Set<string>>(new Set());
+  const [playingCode, setPlayingCode] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   // Navigate to a slide; wrapping is always instant (no reverse-direction animation)
   const navigateTo = (newIdx: number) => {
@@ -182,6 +200,10 @@ function RelatedSpeciesCarousel({
     setFetchedCodes(new Set([referenceSpecies.speciesCode]));
     setImgLoadedUrls(new Set());
     fetchingRef.current = new Set([referenceSpecies.speciesCode]);
+    setRecordings(new Map());
+    fetchingAudioRef.current = new Set();
+    setPlayingCode(null);
+    audioRef.current?.pause();
     setIdx(0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [referenceSpecies.speciesCode]);
@@ -249,6 +271,52 @@ function RelatedSpeciesCarousel({
     }
   }, [idx, slides]);
 
+  // Lazy-fetch audio for current slide + 2 ahead
+  useEffect(() => {
+    const n   = slides.length;
+    const gen = genRef.current;
+    const toFetch = [...new Set([idx, (idx + 1) % n, (idx + 2) % n])];
+
+    for (const i of toFetch) {
+      const sp = slides[i];
+      if (!sp || sp.kind === 'title' || fetchingAudioRef.current.has(sp.speciesCode)) continue;
+      fetchingAudioRef.current.add(sp.speciesCode);
+      fetchBirdAudio(sp.sciName)
+        .then(recs => {
+          if (genRef.current !== gen) return;
+          setRecordings(prev => new Map(prev).set(sp.speciesCode, recs.length > 0 ? recs : null));
+        })
+        .catch(() => {
+          if (genRef.current !== gen) return;
+          setRecordings(prev => new Map(prev).set(sp.speciesCode, null));
+        });
+    }
+  }, [idx, slides]);
+
+  // Stop audio when navigating away from the playing slide
+  useEffect(() => {
+    if (!playingCode) return;
+    if (slides[idx]?.speciesCode !== playingCode) {
+      audioRef.current?.pause();
+      setPlayingCode(null);
+    }
+  }, [idx, slides, playingCode]);
+
+  // Drive playback when playingCode changes
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (!playingCode) { audio.pause(); return; }
+    const recs = recordings.get(playingCode);
+    if (!recs || recs.length === 0) { setPlayingCode(null); return; }
+    const rec = recs[0];
+    if (audio.src !== rec.file) audio.src = rec.file;
+    audio.play().catch(() => setPlayingCode(null));
+  }, [playingCode, recordings]);
+
+  // Pause on unmount
+  useEffect(() => () => { audioRef.current?.pause(); }, []);
+
   const n         = slides.length;
   const prevCode  = slides[(idx - 1 + n) % n]?.speciesCode ?? '';
   const nextCode  = slides[(idx + 1) % n]?.speciesCode ?? '';
@@ -305,8 +373,23 @@ function RelatedSpeciesCarousel({
                       View info →
                     </button>
                   </div>
+                  {(() => {
+                    const recs = recordings.get(slide.speciesCode);
+                    const isPlaying = playingCode === slide.speciesCode;
+                    if (recs === undefined) return null; // not fetched yet
+                    if (recs === null) return null;       // no recordings
+                    return (
+                      <button
+                        onClick={e => { e.stopPropagation(); stopAutoScroll(); if (!isPlaying) onWillPlay?.(); setPlayingCode(isPlaying ? null : slide.speciesCode); }}
+                        className="absolute bottom-1 left-1 flex items-center gap-1 bg-black/60 hover:bg-black/80 rounded-full px-2 py-0.5 text-white text-xs"
+                        aria-label={isPlaying ? 'Pause song' : 'Play song'}
+                      >
+                        {isPlaying ? '⏸' : '♪'} {isPlaying ? 'pause' : recs[0].type ?? 'song'}
+                      </button>
+                    );
+                  })()}
                   {photo?.credit && (
-                    <span className="absolute bottom-1 left-1 bg-black/50 text-white/50 text-[10px] px-1.5 py-0.5 rounded max-w-[70%] truncate">
+                    <span className="absolute bottom-1 right-1 bg-black/50 text-white/50 text-[10px] px-1.5 py-0.5 rounded max-w-[60%] truncate">
                       {photo.credit}
                     </span>
                   )}
@@ -328,11 +411,12 @@ function RelatedSpeciesCarousel({
             onClick={() => { stopAutoScroll(); navigateTo((idx + 1) % n); }}
             className={`absolute right-1 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm transition-opacity duration-[2000ms] ${nextReady ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
           >›</button>
-          <span className="absolute bottom-1 right-1 bg-black/50 text-white text-xs px-1 py-0.5 rounded-full">
+          <span className="absolute top-8 right-1 bg-black/50 text-white text-xs px-1 py-0.5 rounded-full">
             {idx + 1}/{n}
           </span>
         </>
       )}
+      <audio ref={audioRef} onEnded={() => setPlayingCode(null)} />
     </div>
   );
 }
@@ -356,6 +440,8 @@ function formatSightingDate(obsDt: string): string {
 // ── Main panel ────────────────────────────────────────────────────────────────
 
 export function BirdInfoPanel({ question, isAnswered, isCorrect, selectedAnswer, regionCode, maxRecentSightings = 4, autoScrollRelatedSpecies = true, autoplayRevealAudio = false, userEmail, onAuthClick, onSignOut }: Props) {
+  const mainAudioPauseRef = useRef<(() => void) | null>(null);
+
   const [questionInfo, setQuestionInfo]       = useState<BirdInfoData | null>(null);
   const [loading, setLoading]                 = useState(false);
   const [questionSightings, setQuestionSightings] = useState<RecentSighting[]>([]);
@@ -552,7 +638,7 @@ export function BirdInfoPanel({ question, isAnswered, isCorrect, selectedAnswer,
         {/* Sonogram + audio */}
         {(info?.recordings?.length ?? 0) > 0 && (
           <div className="overflow-hidden rounded-lg border border-stone-300" style={{ width: 'calc((100% - 16px) / 3)' }}>
-            <RecordingPanel recordings={info!.recordings} autoplay={autoplayRevealAudio} />
+            <RecordingPanel recordings={info!.recordings} autoplay={autoplayRevealAudio} pauseRef={mainAudioPauseRef} />
           </div>
         )}
 
@@ -568,6 +654,7 @@ export function BirdInfoPanel({ question, isAnswered, isCorrect, selectedAnswer,
             regionCode={regionCode}
             autoScrollEnabled={autoScrollRelatedSpecies}
             onViewSpecies={setViewingSpecies}
+            onWillPlay={() => mainAudioPauseRef.current?.()}
           />
         </div>
       </div>
