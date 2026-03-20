@@ -435,7 +435,7 @@ export function BirdInfoPanel({ question, isAnswered, isCorrect, selectedAnswer,
               ))}
               <li className="flex items-start gap-3">
                 <div className="shrink-0 w-20 flex justify-end">
-                  <AccountPill userEmail={userEmail} onAuthClick={onAuthClick ?? (() => {})} onSignOut={onSignOut ?? (() => {})} dropdownAlign="right" />
+                  <AccountPill userEmail={userEmail} onAuthClick={onAuthClick ?? (() => {})} onSignOut={onSignOut ?? (() => {})} dropdownAlign="right" compact />
                 </div>
                 <p className="text-sm text-slate-600 leading-relaxed">Sign in to back up your progress and sync it across all your devices. Your learning history, favourites, and settings follow you everywhere.</p>
               </li>
@@ -444,7 +444,7 @@ export function BirdInfoPanel({ question, isAnswered, isCorrect, selectedAnswer,
             {/* Credits */}
             <div className="mt-8 pt-6 border-t border-slate-200">
               <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Powered by</h2>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 text-center justify-center">
                 {[
                   { label: 'eBird / Cornell Lab', desc: 'Species lists & sightings' },
                   { label: 'iNaturalist',          desc: 'Bird photos' },
@@ -533,8 +533,8 @@ export function BirdInfoPanel({ question, isAnswered, isCorrect, selectedAnswer,
                   Range legend:
                 </p>
                 <div className="flex-1 flex flex-col gap-0.5">
-                  {info.rangeMapLegend.map(({ color, label }) => (
-                    <div key={label} className="flex items-start gap-1">
+                  {info.rangeMapLegend.map(({ color, label }, i) => (
+                    <div key={`${i}-${label}`} className="flex items-start gap-1">
                       <span className="shrink-0 mt-0.5 w-3 h-3 rounded-sm border border-stone-300" style={{ backgroundColor: color }} />
                       <span className="text-stone-600 leading-tight" style={{ fontSize: '0.62rem' }}>{label}</span>
                     </div>

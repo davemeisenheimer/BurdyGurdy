@@ -25,25 +25,21 @@ interface MasteryStats {
   total: number;
 }
 
-function LevelUpSummary({ levelUps }: { levelUps: LevelUpEvent[] }) {
-  const [expanded, setExpanded] = useState(false);
-
-  // Group events by species
+function groupBySpecies(events: LevelUpEvent[]) {
   const bySpecies = new Map<string, { comName: string; events: LevelUpEvent[] }>();
-  for (const ev of levelUps) {
+  for (const ev of events) {
     const entry = bySpecies.get(ev.speciesCode) ?? { comName: ev.comName, events: [] };
     entry.events.push(ev);
     bySpecies.set(ev.speciesCode, entry);
   }
-  const birds = [...bySpecies.values()];
-  const CUTOFF = 4;
-  const visible = expanded ? birds : birds.slice(0, CUTOFF);
+  return [...bySpecies.values()];
+}
 
+function BirdList({ birds, cutoff }: { birds: { comName: string; events: LevelUpEvent[] }[]; cutoff: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? birds : birds.slice(0, cutoff);
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 mb-6 text-left">
-      <p className="text-sm font-semibold text-slate-700 mb-3">
-        ↑ {birds.length} {birds.length === 1 ? 'bird' : 'birds'} will get harder next time
-      </p>
+    <>
       <div className="space-y-2">
         {visible.map(({ comName, events }) => (
           <div key={comName} className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -63,13 +59,40 @@ function LevelUpSummary({ levelUps }: { levelUps: LevelUpEvent[] }) {
           </div>
         ))}
       </div>
-      {birds.length > CUTOFF && (
+      {birds.length > cutoff && (
         <button
           onClick={() => setExpanded(e => !e)}
           className="mt-2 text-xs text-sky-600 hover:underline"
         >
-          {expanded ? 'Show less' : `and ${birds.length - CUTOFF} more…`}
+          {expanded ? 'Show less' : `and ${birds.length - cutoff} more…`}
         </button>
+      )}
+    </>
+  );
+}
+
+function LevelUpSummary({ levelUps }: { levelUps: LevelUpEvent[] }) {
+  const CUTOFF = 4;
+  const harder    = groupBySpecies(levelUps.filter(ev => !ev.graduated));
+  const graduated = groupBySpecies(levelUps.filter(ev => ev.graduated));
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 mb-6 text-left space-y-4">
+      {harder.length > 0 && (
+        <div>
+          <p className="text-sm font-semibold text-slate-700 mb-3">
+            ↑ {harder.length} {harder.length === 1 ? 'bird' : 'birds'} will get harder next time
+          </p>
+          <BirdList birds={harder} cutoff={CUTOFF} />
+        </div>
+      )}
+      {graduated.length > 0 && (
+        <div className={harder.length > 0 ? 'border-t border-slate-100 pt-4' : ''}>
+          <p className="text-sm font-semibold text-green-700 mb-3">
+            🎓 {graduated.length} {graduated.length === 1 ? 'bird' : 'birds'} graduated to Mastered
+          </p>
+          <BirdList birds={graduated} cutoff={CUTOFF} />
+        </div>
       )}
     </div>
   );

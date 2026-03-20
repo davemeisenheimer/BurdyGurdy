@@ -5,9 +5,10 @@ interface Props {
   onAuthClick: () => void;
   onSignOut: () => void;
   dropdownAlign?: 'left' | 'right';
+  compact?: boolean;
 }
 
-export function AccountPill({ userEmail, onAuthClick, onSignOut, dropdownAlign = 'left' }: Props) {
+export function AccountPill({ userEmail, onAuthClick, onSignOut, dropdownAlign = 'left', compact = false }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -35,7 +36,10 @@ export function AccountPill({ userEmail, onAuthClick, onSignOut, dropdownAlign =
     <div ref={ref} className="relative">
       <button onClick={() => setOpen(o => !o)} className={pillClass}>
         <span>👤</span>
-        <span className="max-w-[100px] truncate">{userEmail.split('@')[0]}</span>
+        {compact
+          ? <span style={{ fontSize: '10px' }}>Sign out</span>
+          : <span className="max-w-[100px] truncate">{userEmail.split('@')[0]}</span>
+        }
       </button>
       {open && (
         <div className={`absolute top-full mt-1 z-50 bg-white rounded-xl shadow-lg border border-slate-200 py-2 min-w-[180px] ${dropdownAlign === 'right' ? 'right-0' : 'left-0'}`}>

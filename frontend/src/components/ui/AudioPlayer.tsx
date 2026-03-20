@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { DEV_LOG_AUDIO_ERRORS } from '../../lib/devFlags';
 
 interface Track {
   audioUrl: string;
@@ -42,6 +43,10 @@ export function AudioPlayer({ url, tracks, sonoUrl }: Props) {
   const handleError = () => {
     const audio = audioRef.current;
     if (!audio) return;
+    const failedUrl = allTracks[trackIndexRef.current]?.audioUrl;
+    if (DEV_LOG_AUDIO_ERRORS) {
+      console.warn(`[AudioPlayer] track failed: ${failedUrl}`);
+    }
     const nextIndex = trackIndexRef.current + 1;
     if (nextIndex < allTracks.length) {
       trackIndexRef.current = nextIndex;
@@ -50,6 +55,9 @@ export function AudioPlayer({ url, tracks, sonoUrl }: Props) {
       setActiveSonoUrl(next.sonoUrl);
       audio.play().catch(() => {});
     } else {
+      if (DEV_LOG_AUDIO_ERRORS) {
+        console.warn(`[AudioPlayer] all ${allTracks.length} track(s) failed for question — showing "Audio unavailable"`, allTracks.map(t => t.audioUrl));
+      }
       setAudioError(true);
     }
   };
@@ -89,6 +97,10 @@ export function AudioPlayer({ url, tracks, sonoUrl }: Props) {
           alt="Song spectrogram"
           className="w-full block"
           draggable={false}
+          onError={() => {
+            if (DEV_LOG_AUDIO_ERRORS) console.warn(`[AudioPlayer] spectrogram failed to load: ${activeSonoUrl}`);
+            setActiveSonoUrl(undefined);
+          }}
         />
 
         {/* Overlay shown when not playing */}
