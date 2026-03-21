@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { PhotoCurationPanel } from './PhotoCurationPanel';
 import {
   fetchPendingReports, fetchBlockedReports,
@@ -36,34 +37,79 @@ function IssueBadge({ type }: { type: string }) {
   );
 }
 
+const toHttps = (url: string) => url.startsWith('//') ? `https:${url}` : url;
+
 function MediaThumb({ report, size = 'sm' }: { report: MediaReport; size?: 'sm' | 'lg' }) {
-  const [playing, setPlaying] = useState(false);
+  const [playing, setPlaying]     = useState(false);
+  const [audioError, setAudioError] = useState(false);
+  const [enlarged, setEnlarged]   = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
-  const h = size === 'lg' ? 'h-36' : 'h-14 w-14';
+  const audioUrl = toHttps(report.url);
 
   if (report.mediaType === 'photo') {
+    if (size === 'lg') {
+      return (
+        <>
+          <div
+            className="w-full rounded-lg bg-slate-800 cursor-zoom-in flex items-center justify-center"
+            onClick={() => setEnlarged(true)}
+            title="Click to enlarge"
+          >
+            <img
+              src={report.url}
+              alt={report.comName}
+              className="h-auto max-h-48 w-full object-contain"
+            />
+          </div>
+          {enlarged && createPortal(
+            <div
+              className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center cursor-zoom-out p-4"
+              onClick={() => setEnlarged(false)}
+            >
+              <img
+                src={report.url}
+                alt={report.comName}
+                className="max-h-full max-w-full object-contain rounded-lg shadow-2xl"
+              />
+            </div>,
+            document.body,
+          )}
+        </>
+      );
+    }
     return (
-      <div className={`${h} shrink-0 rounded-lg overflow-hidden bg-slate-800`}>
+      <div className="h-14 w-14 shrink-0 rounded-lg overflow-hidden bg-slate-800">
         <img src={report.url} alt={report.comName} className="w-full h-full object-cover" />
       </div>
     );
   }
   return (
-    <div className={`${size === 'lg' ? 'h-20 w-full' : 'h-14 w-14'} shrink-0 rounded-lg bg-slate-800 flex items-center justify-center`}>
-      <button
-        onClick={e => {
-          e.stopPropagation();
-          const a = audioRef.current;
-          if (!a) return;
-          if (playing) { a.pause(); setPlaying(false); }
-          else { a.play().catch(() => {}); setPlaying(true); }
-        }}
-        className="w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white text-lg"
-        aria-label={playing ? 'Pause' : 'Play'}
-      >
-        {playing ? '⏸' : '♪'}
-      </button>
-      <audio ref={audioRef} src={report.url} onEnded={() => setPlaying(false)} />
+    <div className={`${size === 'lg' ? 'h-20 w-full' : 'h-14 w-14 shrink-0'} rounded-lg bg-slate-800 flex items-center justify-center`}>
+      {audioError ? (
+        <span className="text-white/60 text-xs px-2 text-center">Audio unavailable</span>
+      ) : (
+        <button
+          onClick={e => {
+            e.stopPropagation();
+            const a = audioRef.current;
+            if (!a) return;
+            if (playing) { a.pause(); }
+            else { a.play().catch(() => setAudioError(true)); }
+          }}
+          className="w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white text-lg"
+          aria-label={playing ? 'Pause' : 'Play'}
+        >
+          {playing ? '⏸' : '▶'}
+        </button>
+      )}
+      <audio
+        ref={audioRef}
+        src={audioUrl}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => setPlaying(false)}
+        onError={() => setAudioError(true)}
+      />
     </div>
   );
 }

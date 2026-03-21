@@ -15,6 +15,7 @@ export async function fetchQuizQuestions(
   back = 30,
   level0SpeciesCodes: string[] = [],
   historyKeys: string[] = [],
+  bannedAudioUrls: string[] = [],
 ): Promise<QuizQuestion[]> {
   const res = await api.post<QuizQuestion[]>('/quiz/questions', {
     regionCode,
@@ -28,6 +29,7 @@ export async function fetchQuizQuestions(
     back,
     level0SpeciesCodes,
     historyKeys,
+    bannedAudioUrls,
   });
   return res.data;
 }

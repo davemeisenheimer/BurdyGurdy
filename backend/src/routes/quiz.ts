@@ -4,6 +4,7 @@ import { getRecordings } from '../services/xenocanto';
 import { getSpeciesPhotoUrl } from '../services/macaulay';
 import { BACKYARD_FAMILIES, GROUP_ORDERS } from '../constants';
 import { buildCandidates, applyRecentUnmasteredGuarantee } from '../lib/candidateLogic';
+import { filterRecordings } from '../lib/recordingFilter';
 import type { PoolSpecies, Candidate } from '../lib/candidateLogic';
 
 const router = Router();
@@ -297,7 +298,10 @@ router.post('/questions', async (req, res) => {
       back                 = 30,
       level0SpeciesCodes   = [],
       historyKeys          = [],
+      bannedAudioUrls      = [],
     } = req.body;
+
+    const bannedAudioSet = new Set<string>(bannedAudioUrls as string[]);
 
     const paletteCodes = new Set<string>(paletteSpeciesCodes as string[]);
 
@@ -349,7 +353,7 @@ router.post('/questions', async (req, res) => {
     // In adaptive mode they are skipped entirely (no weight entry means no candidate).
     const recentCodes = new Set(questionPool.map(s => s.speciesCode));
     const historicalExtras: PoolSpecies[] = (historicalCodes as string[])
-      .filter(code => !recentCodes.has(code) && taxMap.has(code))
+      .filter(code => !recentCodes.has(code) && !excludeSet.has(code) && taxMap.has(code))
       .map(code => {
         const tax = taxMap.get(code)!;
         return {
@@ -454,10 +458,11 @@ router.post('/questions', async (req, res) => {
           needsPhoto ? getSpeciesPhotoUrl(species.speciesCode, species.comName, species.sciName, masteryLevels[`${species.speciesCode}:${type}`]) : Promise.resolve(null),
         ]);
 
-        if (recordings.length > 0) {
+        const availableRecordings = filterRecordings(recordings, bannedAudioSet);
+        if (availableRecordings.length > 0) {
           // Shuffle and take up to 3 paired tracks so the frontend can fall back if a URL fails.
           // Each track keeps its audio and spectrogram together to avoid a mismatch on fallback.
-          const shuffledRecs = [...recordings].sort(() => Math.random() - 0.5).slice(0, 3);
+          const shuffledRecs = [...availableRecordings].sort(() => Math.random() - 0.5).slice(0, 3);
           const toHttps = (u?: string) => u?.startsWith('//') ? `https:${u}` : u;
           q.audioUrl    = shuffledRecs[0].file;
           q.sonoUrl     = toHttps(shuffledRecs[0].sono?.med ?? shuffledRecs[0].sono?.small);
@@ -475,7 +480,7 @@ router.post('/questions', async (req, res) => {
           );
           const distractorAudioMap = new Map(
             distractorSpecies.map((d, j) => {
-              const recs = distractorRecs[j];
+              const recs = filterRecordings(distractorRecs[j], bannedAudioSet);
               return [d.speciesCode, recs.length > 0 ? recs[Math.floor(Math.random() * recs.length)].file : ''];
             })
           );

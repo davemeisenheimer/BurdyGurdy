@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 
 function weightedPick<T>(candidates: Array<{ item: T; weight: number }>): T | null {
   if (candidates.length === 0) return null;
@@ -46,6 +46,9 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
   const [revealRangeMapUrl, setRevealRangeMapUrl] = useState<string | null>(null);
   const [revealSightings, setRevealSightings] = useState<RecentSighting[]>([]);
   const [questionPhoto, setQuestionPhoto] = useState<{ questionId: string; photo: AttributedPhoto } | null>(null);
+  // Pre-fetched photo for the *next* question stored as a ref so it doesn't
+  // overwrite the current question's photo state (which would corrupt the report URL).
+  const prefetchedPhotoRef = useRef<{ questionId: string; photo: AttributedPhoto } | null>(null);
   const [roundLevelUps, setRoundLevelUps] = useState<LevelUpEvent[]>([]);
   const [isFirstEncounter, setIsFirstEncounter] = useState(false);
   const [currentMastery, setCurrentMastery] = useState<{ masteryLevel: number; consecutiveCorrect: number; inHistory: boolean; correct: number; incorrect: number } | null>(null);
@@ -87,16 +90,28 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
   }, [state.status, nextQuestion_?.imageUrl]);
 
   // Pre-fetch and lock in the question photo before the question becomes active.
-  // During 'answered': pre-fetch for the NEXT question so the pick is ready when it transitions to 'active'.
-  // During 'active': fallback fetch for the CURRENT question (covers the first question of each round).
+  // During 'answered': pre-fetch for the NEXT question into a ref so the current
+  //   question's photo state is NOT overwritten (preserving the correct URL for reports).
+  // During 'active': promote the pre-fetched photo if it matches, otherwise fetch.
   useEffect(() => {
     if (!randomizeQuestionPhotos) return;
 
-    let targetQuestion = null;
+    let isPrefetch = false;
+    let targetQuestion: typeof currentQuestion | null = null;
+
     if (state.status === 'answered' && nextQuestion_) {
       targetQuestion = nextQuestion_;
-    } else if (state.status === 'active' && currentQuestion && questionPhoto?.questionId !== currentQuestion.id) {
-      targetQuestion = currentQuestion;
+      isPrefetch = true;
+    } else if (state.status === 'active' && currentQuestion) {
+      // Apply pre-fetched photo immediately if it matches the current question.
+      if (prefetchedPhotoRef.current?.questionId === currentQuestion.id) {
+        setQuestionPhoto(prefetchedPhotoRef.current);
+        prefetchedPhotoRef.current = null;
+        return;
+      }
+      if (questionPhoto?.questionId !== currentQuestion.id) {
+        targetQuestion = currentQuestion;
+      }
     }
     if (!targetQuestion) return;
 
@@ -106,12 +121,13 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
       try {
         const { primary, optional } = await fetchBirdPhotos(q.speciesCode, q.comName, q.sciName, true);
         if (cancelled) return;
-        const [blocked, progressRecord] = await Promise.all([
+        const [blocked, adminBlocked, progressRecord] = await Promise.all([
           db.blockedPhotos.toArray(),
+          db.adminBlockedMedia.toArray(),
           db.progress.get([q.speciesCode, q.type]),
         ]);
         if (cancelled) return;
-        const blockedSet = new Set(blocked.map(b => b.url));
+        const blockedSet = new Set([...blocked.map(b => b.url), ...adminBlocked.map(b => b.url)]);
 
         const inatPhoto     = primary                                                           && !blockedSet.has(primary.url)  ? primary     : null;
         const macaulayPhoto = optional.find(p => p.source === 'macaulay' && !blockedSet.has(p.url)) ?? null;
@@ -142,7 +158,11 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
         }
 
         if (selected && !cancelled) {
-          setQuestionPhoto({ questionId: q.id, photo: selected });
+          if (isPrefetch) {
+            prefetchedPhotoRef.current = { questionId: q.id, photo: selected };
+          } else {
+            setQuestionPhoto({ questionId: q.id, photo: selected });
+          }
         }
       } catch { /* non-fatal */ }
     })();
@@ -164,10 +184,13 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
       config.regionCode ? fetchRecentSightings(currentQuestion.speciesCode, config.regionCode, 1) : Promise.resolve([]),
     ]).then(async ([{ primary, optional }, info, sightings]) => {
       if (cancelled) return;
-      const blocked = await db.blockedPhotos.toArray();
-      const blockedSet = new Set(blocked.map(b => b.url));
+      const [blocked, adminBlocked] = await Promise.all([
+        db.blockedPhotos.toArray(),
+        db.adminBlockedMedia.toArray(),
+      ]);
+      const blockedSet = new Set([...blocked.map(b => b.url), ...adminBlocked.map(b => b.url)]);
       setRevealPhotos({
-        primary,
+        primary: primary && !blockedSet.has(primary.url) ? primary : null,
         optional: optional.filter(p => !blockedSet.has(p.url)),
       });
       setRevealRangeMapUrl(info?.rangeMapUrl ?? null);
@@ -214,6 +237,10 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
         getRegionSpecies(cfg.regionCode, back).catch(() => {/* non-fatal */});
       }
 
+      const bannedAudioUrls = (await db.adminBlockedMedia.toArray())
+        .filter(m => m.mediaType === 'audio')
+        .map(m => m.url);
+
       const questions = await fetchQuizQuestions(
         cfg.regionCode,
         cfg.questionsPerRound,
@@ -226,6 +253,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
         cfg.recentDays ?? 30,
         level0SpeciesCodes,
         historyKeys,
+        bannedAudioUrls,
       );
 
       if (questions.length === 0) {

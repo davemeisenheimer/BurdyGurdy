@@ -199,7 +199,7 @@ export async function maintainLevel0Palette(regionCode: string, types: QuestionT
   const records = await db.progress.toArray();
   const recordSet = new Set(
     records
-      .filter(r => (r.masteryLevel ?? 0) === 0 && !(r.inHistory ?? false) && types.includes(r.questionType))
+      .filter(r => (r.masteryLevel ?? 0) === 0 && !(r.inHistory ?? false) && !(r.excluded ?? false) && types.includes(r.questionType))
       .map(r => r.speciesCode),
   );
 
@@ -319,7 +319,7 @@ export async function getAdaptiveParams(): Promise<AdaptiveParams> {
     const hasActivePaletteType = speciesRecords.some(r => !(r.inHistory ?? false));
     if (hasActivePaletteType) paletteSpeciesCodes.push(speciesCode);
 
-    const isLevel0 = speciesRecords.some(r => (r.masteryLevel ?? 0) === 0 && !(r.inHistory ?? false));
+    const isLevel0 = !bannedSet.has(speciesCode) && speciesRecords.some(r => (r.masteryLevel ?? 0) === 0 && !(r.inHistory ?? false));
     if (isLevel0) level0SpeciesCodes.push(speciesCode);
 
     for (const record of speciesRecords) {

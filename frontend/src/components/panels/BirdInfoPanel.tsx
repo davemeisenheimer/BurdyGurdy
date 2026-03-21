@@ -770,12 +770,12 @@ export function BirdInfoPanel({ question, isAnswered, isCorrect, selectedAnswer,
                   { label: 'iNaturalist',     href: inatUrl },
                   { label: 'Audubon',         href: audubonUrl },
                   { label: 'Xeno-canto',      href: xenoUrl },
-                ].map(({ label, href }) => href ? (
-                  <a key={label} href={href} target="_blank" rel="noopener noreferrer"
+                ].filter(({ href }) => !!href).map(({ label, href }) => (
+                  <a key={label} href={href!} target="_blank" rel="noopener noreferrer"
                     className="text-xs px-3 py-1.5 rounded-full border border-slate-300 text-slate-600 hover:bg-slate-50 hover:border-slate-400 transition-colors">
                     {label} ↗
                   </a>
-                ) : null)}
+                ))}
               </div>
             </div>
           </>

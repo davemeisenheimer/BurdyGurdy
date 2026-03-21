@@ -9,6 +9,7 @@ import type { BirdProgress, QuestionType } from '../../types';
 interface Props {
   onBack: () => void;
   userId?: string | null;
+  questionTypes?: QuestionType[];
 }
 
 const TYPE_LABELS: Record<QuestionType, string> = {
@@ -53,10 +54,12 @@ function getGroupLabel(bird: BirdSummary, viewRecord: BirdProgress | null, typeF
   return MASTERY_LABELS[maxMastery] ?? 'Hard';
 }
 
-export function ProgressScreen({ onBack, userId }: Props) {
+export function ProgressScreen({ onBack, userId, questionTypes }: Props) {
   const [birds, setBirds]               = useState<BirdSummary[]>([]);
   const [filter, setFilter]             = useState<Filter>('learning');
-  const [typeFilter, setTypeFilter]     = useState<TypeFilter>('all');
+  const [typeFilter, setTypeFilter]     = useState<TypeFilter>(() =>
+    questionTypes?.length === 1 ? questionTypes[0] : 'all',
+  );
   const [loading, setLoading]           = useState(true);
   const [confirmClear, setConfirmClear] = useState(false);
 

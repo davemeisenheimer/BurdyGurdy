@@ -72,6 +72,30 @@ export default function App() {
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, []);
+
+  // Auto sign-out after 12 hours of inactivity
+  const INACTIVITY_MS = 12 * 60 * 60 * 1000;
+  const ACTIVITY_KEY  = 'lastActivity';
+  useEffect(() => {
+    const touch = () => localStorage.setItem(ACTIVITY_KEY, String(Date.now()));
+    const check = () => {
+      const last = Number(localStorage.getItem(ACTIVITY_KEY) ?? Date.now());
+      if (Date.now() - last > INACTIVITY_MS) supabase.auth.signOut();
+    };
+    let throttle: ReturnType<typeof setTimeout> | null = null;
+    const onActivity = () => { if (!throttle) throttle = setTimeout(() => { touch(); throttle = null; }, 60_000); };
+    touch();
+    document.addEventListener('click',      onActivity);
+    document.addEventListener('keydown',    onActivity);
+    document.addEventListener('touchstart', onActivity);
+    document.addEventListener('visibilitychange', check);
+    return () => {
+      document.removeEventListener('click',      onActivity);
+      document.removeEventListener('keydown',    onActivity);
+      document.removeEventListener('touchstart', onActivity);
+      document.removeEventListener('visibilitychange', check);
+    };
+  }, []);
   const handleQuizPrefsChange = (prefs: { questionTypes: QuizConfig['questionTypes']; mode: QuizConfig['mode']; questionsPerRound: number; groupId: string; regionCode: string }) => {
     const newPrefs = { questionTypes: prefs.questionTypes, mode: prefs.mode, questionsPerRound: prefs.questionsPerRound, groupId: prefs.groupId, regionCode: prefs.regionCode };
     saveQuizPrefs(newPrefs);
@@ -134,7 +158,7 @@ export default function App() {
           mergeVictorySeen(remote.victorySeen);
         }).catch(() => {});
         downloadUserBlockedPhotos(userId).catch(() => {});
-        if (session.user.user_metadata?.is_admin) fetchAdminBlockedMedia().catch(() => {});
+        fetchAdminBlockedMedia().catch(() => {});
       }
     });
     return () => subscription.unsubscribe();
@@ -310,7 +334,7 @@ export default function App() {
       )}
 
       {screen === 'progress' && (
-        <ProgressScreen onBack={() => setScreen('home')} userId={user?.id} />
+        <ProgressScreen onBack={() => setScreen('home')} userId={user?.id} questionTypes={expandQuestionTypes(config.questionTypes, settings)} />
       )}
 
       {screen === 'settings' && (

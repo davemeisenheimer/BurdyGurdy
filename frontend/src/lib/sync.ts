@@ -10,9 +10,12 @@ import type { AppSettings, QuizConfigPrefs } from './settings';
 
 // ── Upload ────────────────────────────────────────────────────────────────────
 
-/** Upserts all local progress records to the cloud for the given user. */
+/** Upserts all local progress records to the cloud for the given user.
+ *  Skips seeded-but-never-played records (lastAsked === 0) — these are
+ *  palette placeholders and uploading them would corrupt cloud progress
+ *  from other devices. */
 export async function uploadProgress(userId: string): Promise<void> {
-  const records = await db.progress.toArray();
+  const records = (await db.progress.toArray()).filter(r => r.lastAsked > 0);
   if (records.length === 0) return;
 
   const rows = records.map(r => ({
@@ -61,7 +64,17 @@ export async function downloadAndMerge(userId: string): Promise<number> {
   await Promise.all(
     data.map(async remote => {
       const local = await db.progress.get([remote.species_code, remote.question_type] as [string, string]);
-      if (!local || remote.last_asked > local.lastAsked) {
+      const localHistory  = local?.inHistory    ?? false;
+      const remoteHistory = remote.in_history   ?? false;
+      const localLevel    = local?.masteryLevel  ?? 0;
+      const remoteLevel   = remote.mastery_level ?? 0;
+      const shouldTakeRemote =
+        !local
+        || (local.lastAsked === 0 && remote.last_asked > 0)
+        || (remoteHistory && !localHistory)
+        || (!remoteHistory && !localHistory && remoteLevel > localLevel)
+        || (remoteHistory === localHistory && remoteLevel === localLevel && remote.last_asked > local.lastAsked);
+      if (shouldTakeRemote) {
         const record: BirdProgress = {
           speciesCode:        remote.species_code,
           questionType:       remote.question_type,
