@@ -23,12 +23,14 @@ export async function getRegionSpecies(regionCode: string, back = 30): Promise<C
   }
 
   const full = await fetchRegionSpecies(regionCode, back);
-  const species: CachedSpecies[] = full.map(s => ({
-    speciesCode: s.speciesCode,
-    comName: s.comName,
-    sciName: s.sciName,
-    isHistorical: s.isHistorical,
-  }));
+  const species: CachedSpecies[] = full
+    .filter(s => !s.isHistorical || s.isCommon)
+    .map(s => ({
+      speciesCode: s.speciesCode,
+      comName: s.comName,
+      sciName: s.sciName,
+      isHistorical: s.isHistorical,
+    }));
 
   // Preserve promotionIndex across cache refreshes so we don't restart the promotion queue
   const existing = await db.regionSpecies.get(cacheKey);

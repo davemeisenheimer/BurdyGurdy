@@ -2,9 +2,10 @@ import Dexie, { type Table } from 'dexie';
 import type { BirdProgress, RegionSpeciesCache } from '../types';
 
 export interface AdminBlockedMediaEntry {
-  url:        string;
-  mediaType:  'photo' | 'audio';
-  blockScope: 'full' | 'question';
+  url:         string;
+  speciesCode: string;
+  mediaType:   'photo' | 'audio';
+  blockScope:  'full' | 'question';
 }
 
 class BirdyGurdyDB extends Dexie {
@@ -62,7 +63,23 @@ class BirdyGurdyDB extends Dexie {
       blockedPhotos: 'url',
       adminBlockedMedia: 'url',
     });
+    // v8: adminBlockedMedia keyed on [url+speciesCode] for per-species blocking
+    this.version(8).stores({
+      progress: '[speciesCode+questionType], speciesCode, weight, lastAsked',
+      regionSpecies: 'regionCode',
+      blockedPhotos: 'url',
+      adminBlockedMedia: '[url+speciesCode]',
+    }).upgrade(tx => tx.table('adminBlockedMedia').clear());
   }
 }
 
 export const db = new BirdyGurdyDB();
+
+// If a schema migration leaves the database in an unrecoverable state, Dexie will
+// reject the open promise.  Delete and reload — onAuthStateChange fires on the next
+// load for already-signed-in users, which triggers the full cloud sync automatically.
+db.open().catch(async err => {
+  console.error('BirdyGurdyDB: failed to open, resetting database:', err);
+  try { await db.delete(); } catch { /* best-effort */ }
+  window.location.reload();
+});

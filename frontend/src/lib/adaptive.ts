@@ -291,7 +291,7 @@ export interface AdaptiveParams {
   masteryLevels: Record<string, number>;
   banned: string[];
   paletteSpeciesCodes: string[];
-  level0SpeciesCodes: string[];
+  level0Keys: string[];  // "speciesCode:questionType" keys where masteryLevel===0 and !inHistory
   historyKeys: string[];  // "speciesCode:questionType" keys where inHistory=true
 }
 
@@ -312,24 +312,24 @@ export async function getAdaptiveParams(): Promise<AdaptiveParams> {
 
   const weights: Record<string, number> = {};
   const paletteSpeciesCodes: string[] = [];
-  const level0SpeciesCodes: string[] = [];
+  const level0Keys: string[] = [];
   const historyKeys: string[] = [];
 
   for (const [speciesCode, speciesRecords] of bySpecies) {
     const hasActivePaletteType = speciesRecords.some(r => !(r.inHistory ?? false));
     if (hasActivePaletteType) paletteSpeciesCodes.push(speciesCode);
 
-    const isLevel0 = !bannedSet.has(speciesCode) && speciesRecords.some(r => (r.masteryLevel ?? 0) === 0 && !(r.inHistory ?? false));
-    if (isLevel0) level0SpeciesCodes.push(speciesCode);
-
     for (const record of speciesRecords) {
       const key    = `${speciesCode}:${record.questionType}`;
       weights[key] = calcWeight(record.inHistory ?? false, record.favourited ?? false, record.correct ?? 0, record.incorrect ?? 0);
       if (record.inHistory) historyKeys.push(key);
+      if (!bannedSet.has(speciesCode) && (record.masteryLevel ?? 0) === 0 && !(record.inHistory ?? false)) {
+        level0Keys.push(key);
+      }
     }
   }
 
-  return { weights, masteryLevels, banned: [...bannedSet], paletteSpeciesCodes, level0SpeciesCodes, historyKeys };
+  return { weights, masteryLevels, banned: [...bannedSet], paletteSpeciesCodes, level0Keys, historyKeys };
 }
 
 // ── Legacy ───────────────────────────────────────────────────────────────────

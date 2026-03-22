@@ -192,16 +192,19 @@ export async function submitMediaReport(p: SubmitReportParams): Promise<void> {
 export async function fetchAdminBlockedMedia(): Promise<void> {
   const { data, error } = await supabase
     .from('media_reports')
-    .select('url, media_type, block_scope')
+    .select('url, species_code, media_type, block_scope')
     .eq('status', 'blocked');
   if (error || !data) return;
   await db.adminBlockedMedia.clear();
   await db.adminBlockedMedia.bulkPut(
-    data.map(r => ({
-      url:        r.url as string,
-      mediaType:  r.media_type as 'photo' | 'audio',
-      blockScope: (r.block_scope ?? 'full') as 'full' | 'question',
-    })),
+    data
+      .filter(r => r.url && r.species_code)
+      .map(r => ({
+        url:         r.url          as string,
+        speciesCode: r.species_code as string,
+        mediaType:   r.media_type   as 'photo' | 'audio',
+        blockScope:  (r.block_scope ?? 'full') as 'full' | 'question',
+      })),
   );
 }
 

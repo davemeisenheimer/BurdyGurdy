@@ -44,7 +44,7 @@ export function buildCandidates(
   weightsMap: Record<string, number>,
   types: QuestionType[],
   adaptiveMode: boolean,
-  level0Codes: Set<string> = new Set(),
+  level0Keys: Set<string> = new Set(),
 ): Candidate[] {
   const candidates: Candidate[] = [];
 
@@ -66,8 +66,8 @@ export function buildCandidates(
   }
 
   // Pass 2: Non-recent palette birds (long-term retention, rarely asked)
-  // Exception: level 0 birds keep their full learning weight even outside the
-  // recent window — active learning trumps the observation window.
+  // Exception: level-0 question-type keys keep their full learning weight even
+  // outside the recent window — active learning trumps the observation window.
   if (adaptiveMode) {
     for (const species of filteredPool) {
       if (recentCodes.has(species.speciesCode)) continue;
@@ -75,8 +75,8 @@ export function buildCandidates(
         const key = `${species.speciesCode}:${t}`;
         const w = weightsMap[key];
         if (w === undefined) continue;
-        const weight = level0Codes.has(species.speciesCode)
-          ? Math.max(w, NEW_ENCOUNTER_WEIGHT)          // level 0: keep full palette weight
+        const weight = level0Keys.has(key)
+          ? Math.max(w, NEW_ENCOUNTER_WEIGHT)          // level 0 for this type: keep full palette weight
           : Math.max(w * NON_RECENT_MULTIPLIER, 0.001); // others: heavy discount
         candidates.push({ species, type: t, weight });
       }
@@ -104,14 +104,14 @@ export function applyRecentUnmasteredGuarantee<T extends { speciesCode: string; 
   weightsMap: Record<string, number>,
   count: number,
   recentUnmasteredMin: number,
-  level0Codes: Set<string> = new Set(),
+  level0Keys: Set<string> = new Set(),
   historyKeySet: Set<string> = new Set(),
 ): T[] {
   const key = (q: T) => `${q.speciesCode}:${q.type}`;
   const w   = (q: T) => weightsMap[key(q)] ?? NEW_ENCOUNTER_WEIGHT;
 
   const needsPractice = (q: T) =>
-    (recentCodes.has(q.speciesCode) && w(q) >= 5) || level0Codes.has(q.speciesCode);
+    (recentCodes.has(q.speciesCode) && w(q) >= 5) || level0Keys.has(key(q));
 
   // Unmastered: needs practice AND not yet graduated
   const isUnmastered = (q: T) => needsPractice(q) && !historyKeySet.has(key(q));

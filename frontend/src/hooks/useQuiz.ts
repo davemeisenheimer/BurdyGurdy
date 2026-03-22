@@ -127,11 +127,13 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
           db.progress.get([q.speciesCode, q.type]),
         ]);
         if (cancelled) return;
-        const blockedSet = new Set([...blocked.map(b => b.url), ...adminBlocked.map(b => b.url)]);
+        const blockedUserUrls  = new Set(blocked.map(b => b.url));
+        const adminBlockedUrls = new Set(adminBlocked.filter(b => b.speciesCode === q.speciesCode).map(b => b.url));
+        const isPhotoBlocked   = (url: string) => blockedUserUrls.has(url) || adminBlockedUrls.has(url);
 
-        const inatPhoto     = primary                                                           && !blockedSet.has(primary.url)  ? primary     : null;
-        const macaulayPhoto = optional.find(p => p.source === 'macaulay' && !blockedSet.has(p.url)) ?? null;
-        const wikiPhotos    = optional.filter(p => p.source === 'wiki'   && !blockedSet.has(p.url));
+        const inatPhoto     = primary                                                              && !isPhotoBlocked(primary.url)  ? primary     : null;
+        const macaulayPhoto = optional.find(p => p.source === 'macaulay' && !isPhotoBlocked(p.url)) ?? null;
+        const wikiPhotos    = optional.filter(p => p.source === 'wiki'   && !isPhotoBlocked(p.url));
 
         const mastery = progressRecord?.masteryLevel ?? 0;
 
@@ -188,10 +190,12 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
         db.blockedPhotos.toArray(),
         db.adminBlockedMedia.toArray(),
       ]);
-      const blockedSet = new Set([...blocked.map(b => b.url), ...adminBlocked.map(b => b.url)]);
+      const blockedUserUrls  = new Set(blocked.map(b => b.url));
+      const adminBlockedUrls = new Set(adminBlocked.filter(b => b.speciesCode === currentQuestion.speciesCode).map(b => b.url));
+      const isPhotoBlocked   = (url: string) => blockedUserUrls.has(url) || adminBlockedUrls.has(url);
       setRevealPhotos({
-        primary: primary && !blockedSet.has(primary.url) ? primary : null,
-        optional: optional.filter(p => !blockedSet.has(p.url)),
+        primary: primary && !isPhotoBlocked(primary.url) ? primary : null,
+        optional: optional.filter(p => !isPhotoBlocked(p.url)),
       });
       setRevealRangeMapUrl(info?.rangeMapUrl ?? null);
       setRevealSightings(sightings);
@@ -218,7 +222,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
       let masteryLevels = {};
       let banned: string[] = [];
       let paletteSpeciesCodes: string[] = [];
-      let level0SpeciesCodes: string[] = [];
+      let level0Keys: string[] = [];
       let historyKeys: string[] = [];
 
       const back = cfg.recentDays ?? 30;
@@ -230,7 +234,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
         masteryLevels       = params.masteryLevels;
         banned              = params.banned;
         paletteSpeciesCodes = params.paletteSpeciesCodes;
-        level0SpeciesCodes  = params.level0SpeciesCodes;
+        level0Keys          = params.level0Keys;
         historyKeys         = params.historyKeys;
       } else {
         // Warm the region species cache in the background for non-adaptive modes
@@ -251,7 +255,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
         banned,
         paletteSpeciesCodes,
         cfg.recentDays ?? 30,
-        level0SpeciesCodes,
+        level0Keys,
         historyKeys,
         bannedAudioUrls,
       );

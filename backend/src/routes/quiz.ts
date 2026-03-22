@@ -296,7 +296,7 @@ router.post('/questions', async (req, res) => {
       banned               = [],
       paletteSpeciesCodes  = [],
       back                 = 30,
-      level0SpeciesCodes   = [],
+      level0Keys           = [],
       historyKeys          = [],
       bannedAudioUrls      = [],
     } = req.body;
@@ -372,11 +372,11 @@ router.post('/questions', async (req, res) => {
     const adaptiveMode = Object.keys(weights as object).length > 0;
     const weightsMap = weights as Record<string, number>;
 
-    const level0Codes   = new Set<string>(level0SpeciesCodes as string[]);
+    const level0KeySet  = new Set<string>(level0Keys as string[]);
     const historyKeySet = new Set<string>(historyKeys as string[]);
 
     const candidates: Candidate[] = buildCandidates(
-      questionPool, filteredPool, recentCodes, weightsMap, types as QuestionType[], adaptiveMode, level0Codes,
+      questionPool, filteredPool, recentCodes, weightsMap, types as QuestionType[], adaptiveMode, level0KeySet,
     );
 
     const recentUnmasteredMin = adaptiveMode ? Math.ceil(count * 0.67) : 0;
@@ -509,7 +509,7 @@ router.post('/questions', async (req, res) => {
       const ruValidCount = allValid.filter(q => {
         const k = `${q.speciesCode}:${q.type}`;
         const wt = (weightsMap[k] ?? 20);
-        const np = (recentCodes.has(q.speciesCode) && wt >= 5) || level0Codes.has(q.speciesCode);
+        const np = (recentCodes.has(q.speciesCode) && wt >= 5) || level0KeySet.has(k);
         return np && !historyKeySet.has(k);
       }).length;
       const smValidCount = allValid.filter(q => {
@@ -520,7 +520,7 @@ router.post('/questions', async (req, res) => {
       }).length;
       console.log(`[quiz] allValid: ${allValid.length}, ruValid: ${ruValidCount}, smValid: ${smValidCount}, target: ${recentUnmasteredMin}/${count}`);
       finalQuestions = applyRecentUnmasteredGuarantee(
-        allValid, recentCodes, weightsMap, count, recentUnmasteredMin, level0Codes, historyKeySet,
+        allValid, recentCodes, weightsMap, count, recentUnmasteredMin, level0KeySet, historyKeySet,
       );
     } else {
       finalQuestions = allValid.slice(0, count);

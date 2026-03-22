@@ -108,8 +108,8 @@ describe('buildCandidates — level 0 birds', () => {
     const recentPool  = [];
     const allPool     = [makeSpecies('lv0bird')];
     const recentCodes = new Set<string>();
-    const level0Codes = new Set(['lv0bird']);
-    const candidates  = buildCandidates(recentPool, allPool, recentCodes, { 'lv0bird:image': 20 }, TYPES, true, level0Codes);
+    const level0Keys  = new Set(['lv0bird:image']);
+    const candidates  = buildCandidates(recentPool, allPool, recentCodes, { 'lv0bird:image': 20 }, TYPES, true, level0Keys);
     const c = candidates.find(c => c.species.speciesCode === 'lv0bird');
     expect(c).toBeDefined();
     expect(c!.weight).toBe(20); // not discounted
@@ -119,8 +119,8 @@ describe('buildCandidates — level 0 birds', () => {
     const recentPool  = [];
     const allPool     = [makeSpecies('oldbird')];
     const recentCodes = new Set<string>();
-    const level0Codes = new Set<string>(); // oldbird is NOT level 0
-    const candidates  = buildCandidates(recentPool, allPool, recentCodes, { 'oldbird:image': 20 }, TYPES, true, level0Codes);
+    const level0Keys  = new Set<string>(); // oldbird is NOT level 0
+    const candidates  = buildCandidates(recentPool, allPool, recentCodes, { 'oldbird:image': 20 }, TYPES, true, level0Keys);
     const c = candidates.find(c => c.species.speciesCode === 'oldbird');
     expect(c!.weight).toBeCloseTo(20 * 0.05);
   });
@@ -175,21 +175,21 @@ describe('applyRecentUnmasteredGuarantee', () => {
 
   it('level 0 bird outside recent window is included in the guaranteed bucket', () => {
     const recentCodes = new Set<string>(); // bird is NOT in recent window
-    const level0Codes = new Set(['lv0bird']);
+    const level0Keys  = new Set(['lv0bird:image']);
     const weightsMap  = { 'lv0bird:image': 20 };
     const allValid    = [makeQ('lv0bird'), makeQ('other1'), makeQ('other2')];
-    const result = applyRecentUnmasteredGuarantee(allValid, recentCodes, weightsMap, 3, 1, level0Codes);
+    const result = applyRecentUnmasteredGuarantee(allValid, recentCodes, weightsMap, 3, 1, level0Keys);
     expect(result.some(q => q.speciesCode === 'lv0bird')).toBe(true);
   });
 
   it('level 0 bird guarantee fires even when recent-window is empty', () => {
     const recentCodes = new Set<string>();
-    const level0Codes = new Set(['a', 'b', 'c', 'd', 'e']);
+    const level0Keys  = new Set(['a:image', 'b:image', 'c:image', 'd:image', 'e:image']);
     const weightsMap: Record<string, number> = {};
     // 5 level 0 birds, no other birds
     const allValid = ['a','b','c','d','e'].map(c => makeQ(c));
-    const result = applyRecentUnmasteredGuarantee(allValid, recentCodes, weightsMap, 5, 3, level0Codes);
-    const lv0Count = result.filter(q => level0Codes.has(q.speciesCode)).length;
+    const result = applyRecentUnmasteredGuarantee(allValid, recentCodes, weightsMap, 5, 3, level0Keys);
+    const lv0Count = result.filter(q => level0Keys.has(`${q.speciesCode}:${q.type}`)).length;
     expect(lv0Count).toBeGreaterThanOrEqual(3);
   });
 

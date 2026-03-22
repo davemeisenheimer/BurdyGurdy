@@ -59,6 +59,28 @@ A very small fraction of questions (about 1 in 100) may feature a bird you've ne
 
 Birds you've thoroughly mastered still appear occasionally so you don't forget them. The better your track record with a species, the less frequently it appears — it makes way for birds you still need to learn. A species you can identify correctly almost every time will appear rarely; one you got right 95% of the time or less stays at normal frequency.
 
+### Question probabilities
+It's a bit more complicated than this with edge cases and such, but these are the basic probabilities for picking question for a round:2
+  ┌────────────────────────────────────────────────┬───────────────┐
+  │                   Bird state                   │    Weight     │
+  ├────────────────────────────────────────────────┼───────────────┤
+  │ Active palette (levels 0–2), not struggling    │ 20            │
+  ├────────────────────────────────────────────────┼───────────────┤
+  │ Active palette, struggling (<85% accuracy)     │ 30            │
+  ├────────────────────────────────────────────────┼───────────────┤
+  │ Graduated/mastered, not struggling             │ 1             │
+  ├────────────────────────────────────────────────┼───────────────┤
+  │ Graduated/mastered, struggling (<85% accuracy) │ 20            │
+  ├────────────────────────────────────────────────┼───────────────┤
+  │ New bird never seen                            │ 20            │
+  ├────────────────────────────────────────────────┼───────────────┤
+  │ Non-recent bird (outside observation window)   │ weight × 0.05 │
+  ├────────────────────────────────────────────────┼───────────────┤
+  │ Non-recent, level-0 bird (exception)           │ full weight   │
+  ├────────────────────────────────────────────────┼───────────────┤
+  │ Floor for any recent bird                      │ 3 (minimum)   │
+  └────────────────────────────────────────────────┴───────────────┘
+
 ### Progress screen
 
 The **My Progress** screen shows every bird you've been quizzed on, with accuracy stats per question type, current distractor difficulty level, and progress toward the next difficulty level. Birds you've fully mastered appear on a separate **Mastered** tab. You can also mark birds as favourites (to see them more often) or hide birds you never want to see again.

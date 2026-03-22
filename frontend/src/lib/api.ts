@@ -13,7 +13,7 @@ export async function fetchQuizQuestions(
   banned: string[] = [],
   paletteSpeciesCodes: string[] = [],
   back = 30,
-  level0SpeciesCodes: string[] = [],
+  level0Keys: string[] = [],
   historyKeys: string[] = [],
   bannedAudioUrls: string[] = [],
 ): Promise<QuizQuestion[]> {
@@ -27,7 +27,7 @@ export async function fetchQuizQuestions(
     banned,
     paletteSpeciesCodes,
     back,
-    level0SpeciesCodes,
+    level0Keys,
     historyKeys,
     bannedAudioUrls,
   });

@@ -146,6 +146,8 @@ export function ProgressScreen({ onBack, userId, questionTypes }: Props) {
   const strugglingCount = nonExcluded.filter(b =>
     b.totalAttempts >= 3 && b.overallAccuracy < STRUGGLING_THRESHOLD
   ).length;
+  const learningCount   = nonExcluded.filter(b => b.isInProgress).length;
+  const favouritedCount = nonExcluded.filter(b => b.favourited).length;
 
   // Apply type filter first, then status filter
   const typeFiltered = typeFilter === 'all'
@@ -183,6 +185,14 @@ export function ProgressScreen({ onBack, userId, questionTypes }: Props) {
       groupCounts.set(label, (groupCounts.get(label) ?? 0) + 1);
     }
   }
+
+  const filterTabs: { key: Filter; count: number; label: string; color: string; border: string }[] = [
+    { key: 'learning',   count: learningCount,   label: 'Learning',   color: 'text-forest-700', border: 'border-forest-700' },
+    { key: 'favourites', count: favouritedCount, label: 'Fav',        color: 'text-amber-500',  border: 'border-amber-500'  },
+    { key: 'struggling', count: strugglingCount, label: 'Struggling', color: 'text-red-500',    border: 'border-red-500'    },
+    { key: 'mastered',   count: masteredCount,   label: 'Mastered',   color: 'text-green-600',  border: 'border-green-600'  },
+  ];
+  if (excludedCount > 0) filterTabs.push({ key: 'excluded', count: excludedCount, label: 'Hidden', color: 'text-slate-500', border: 'border-slate-400' });
 
   const masteryColor = (accuracy: number) => {
     if (accuracy >= 0.85) return 'bg-green-500';
@@ -225,7 +235,12 @@ export function ProgressScreen({ onBack, userId, questionTypes }: Props) {
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
             <button onClick={onBack} className="text-slate-500 hover:text-slate-700 text-5xl">←</button>
-            <h1 className="text-2xl font-bold text-slate-800 text-nowrap">Life List</h1>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-800 text-nowrap">Life List</h1>
+              {nonExcluded.length > 0 && (
+                <p className="text-xs text-slate-400">{nonExcluded.length} birds seen</p>
+              )}
+            </div>
           </div>
           {!confirmClear ? (
             <button
@@ -281,29 +296,6 @@ export function ProgressScreen({ onBack, userId, questionTypes }: Props) {
           )}
         </div>
 
-        {/* Stats */}
-        {nonExcluded.length > 0 && (
-          <div className="grid grid-cols-4 gap-2 mb-6">
-            <div className="bg-white rounded-xl p-3 text-center border border-slate-200">
-              <div className="text-2xl font-bold text-forest-700">{nonExcluded.length}</div>
-              <div className="text-xs text-slate-500 mt-0.5">Seen</div>
-            </div>
-            <div className="bg-white rounded-xl p-3 text-center border border-slate-200">
-              <div className="text-2xl font-bold text-amber-500">
-                {nonExcluded.filter(b => b.favourited).length}
-              </div>
-              <div className="text-xs text-slate-500 mt-0.5">Favourited</div>
-            </div>
-            <div className="bg-white rounded-xl p-3 text-center border border-slate-200">
-              <div className="text-2xl font-bold text-red-500">{strugglingCount}</div>
-              <div className="text-xs text-slate-500 mt-0.5">Struggling</div>
-            </div>
-            <div className="bg-white rounded-xl p-3 text-center border border-slate-200">
-              <div className="text-2xl font-bold text-green-600">{masteredCount}</div>
-              <div className="text-xs text-slate-500 mt-0.5">Mastered</div>
-            </div>
-          </div>
-        )}
 
         {/* Type filter dropdown */}
         {availableTypes.length > 1 && (
@@ -321,47 +313,26 @@ export function ProgressScreen({ onBack, userId, questionTypes }: Props) {
             </select>
           </div>
         )}
-
-        {/* Filter tabs */}
-        <div className="flex justify-between mb-4">
-          {(['learning', 'favourites', 'struggling'] as Filter[]).map(f => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors capitalize ${
-                filter === f
-                  ? 'bg-forest-600 border-forest-600 text-white'
-                  : 'bg-white border-slate-300 text-slate-600'
-              }`}
-            >
-              {f}
-            </button>
-          ))}
-          {masteredCount > 0 && (
-            <button
-              onClick={() => setFilter('mastered')}
-              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                filter === 'mastered'
-                  ? 'bg-emerald-600 border-emerald-600 text-white'
-                  : 'bg-white border-slate-300 text-slate-600'
-              }`}
-            >
-              Mastered ({masteredCount})
-            </button>
-          )}
-          {excludedCount > 0 && (
-            <button
-              onClick={() => setFilter('excluded')}
-              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                filter === 'excluded'
-                  ? 'bg-red-500 border-red-500 text-white'
-                  : 'bg-white border-slate-300 text-slate-600'
-              }`}
-            >
-              Hidden ({excludedCount})
-            </button>
-          )}
-        </div>
+        
+        {/* Tab strip — combines stats summary and filter selection */}
+        {birds.length > 0 && (
+          <div className="flex border-b border-slate-200 mb-4">
+            {filterTabs.map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setFilter(tab.key)}
+                className={`flex-1 flex flex-col items-center pt-1 pb-2 border-b-2 transition-colors ${
+                  filter === tab.key ? tab.border : 'border-transparent'
+                }`}
+              >
+                <span className={`text-xl font-bold leading-tight ${tab.color}`}>{tab.count}</span>
+                <span className={`text-[11px] leading-tight mt-0.5 ${filter === tab.key ? 'text-slate-700' : 'text-slate-400'}`}>
+                  {tab.label}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
 
         </div>{/* end fixed section */}
 
@@ -433,15 +404,8 @@ export function ProgressScreen({ onBack, userId, questionTypes }: Props) {
                     );
                   })()}
                 </div>
-                {bird.excluded ? (
-                  <button
-                    onClick={() => handleUnexclude(bird.speciesCode)}
-                    className="text-xs px-2 py-1 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors shrink-0"
-                  >
-                    Show again
-                  </button>
-                ) : (
-                  <div className="text-right shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="text-right">
                     <span className="text-sm font-semibold text-slate-700">
                       {Math.round(displayAccuracy * 100)}%
                     </span>
@@ -449,26 +413,30 @@ export function ProgressScreen({ onBack, userId, questionTypes }: Props) {
                       {typeFilter !== 'all' ? TYPE_LABELS[typeFilter] ?? typeFilter : 'overall'}
                     </span>
                   </div>
-                )}
+                  {bird.excluded && (
+                    <button
+                      onClick={() => handleUnexclude(bird.speciesCode)}
+                      className="text-xs px-2 py-1 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors shrink-0"
+                    >
+                      Show again
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {!bird.excluded && (
-                <>
-                  <div className="w-full bg-slate-100 rounded-full h-1.5 mb-3">
-                    <div
-                      className={`h-1.5 rounded-full transition-all ${masteryColor(displayAccuracy)}`}
-                      style={{ width: `${Math.round(displayAccuracy * 100)}%` }}
-                    />
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {bird.records.filter(r => (filter !== 'mastered' && !r.inHistory) || (filter === 'mastered' && r.inHistory)).map(r => progressBadge(r))}
-                    {filter !== 'mastered' && bird.records.some(r => r.inHistory) && (
-                      <span className="text-xs px-1.5 py-0.5 rounded-full font-medium">Mastered:</span>
-                    )}
-                    {bird.records.filter(r => r.inHistory && filter !== 'mastered').map(r => progressBadge(r))}
-                  </div>
-                </>
-              )}
+              <div className="w-full bg-slate-100 rounded-full h-1.5 mb-3">
+                <div
+                  className={`h-1.5 rounded-full transition-all ${masteryColor(displayAccuracy)}`}
+                  style={{ width: `${Math.round(displayAccuracy * 100)}%` }}
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {bird.records.filter(r => (filter !== 'mastered' && !r.inHistory) || (filter === 'mastered' && r.inHistory)).map(r => progressBadge(r))}
+                {filter !== 'mastered' && bird.records.some(r => r.inHistory) && (
+                  <span className="text-xs px-1.5 py-0.5 rounded-full font-medium">Mastered:</span>
+                )}
+                {bird.records.filter(r => r.inHistory && filter !== 'mastered').map(r => progressBadge(r))}
+              </div>
             </div>
             </Fragment>);
           })}
