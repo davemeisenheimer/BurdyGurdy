@@ -184,8 +184,9 @@ export default function App() {
 
   const [screen, setScreen] = useState<'home' | 'quiz' | 'result' | 'progress' | 'settings' | 'victory' | 'recentprogress'>('home');
   const [rightPanelTab, setRightPanelTab] = useState<'info' | 'curation'>('info');
+  const [progressSelectedSpecies, setProgressSelectedSpecies] = useState<{ speciesCode: string; comName: string } | null>(null);
   const isAdmin = user?.user_metadata?.is_admin === true;
-  const { state, currentQuestion, isCorrect, currentFavourited, currentExcluded, revealPhotos, revealRangeMapUrl, revealSightings, questionPhoto, roundLevelUps, isFirstEncounter, currentMastery, startQuiz, submitAnswer, toggleFavourite, toggleExcluded, nextQuestion, removeOptionalPhoto } = useQuiz(config, settings.randomizeQuestionPhotos, user?.id);
+  const { state, currentQuestion, isCorrect, currentFavourited, currentExcluded, revealPhotos, revealRangeMapUrl, revealSightings, questionPhoto, questionPhotoFetching, roundLevelUps, isFirstEncounter, currentMastery, startQuiz, submitAnswer, toggleFavourite, toggleExcluded, nextQuestion, removeOptionalPhoto } = useQuiz(config, settings.randomizeQuestionPhotos, user?.id);
 
   // After each completed round, upload progress to cloud if signed in
   useEffect(() => {
@@ -301,6 +302,7 @@ export default function App() {
             isCorrect={isCorrect}
             selectedAnswer={state.selectedAnswer}
             regionCode={config.regionCode}
+            browseSpecies={['progress', 'recentprogress'].includes(screen) ? progressSelectedSpecies : null}
             maxRecentSightings={settings.maxRecentSightings}
             autoScrollRelatedSpecies={settings.autoScrollRelatedSpecies}
             autoplayRevealAudio={settings.autoplayRevealAudio}
@@ -334,7 +336,7 @@ export default function App() {
       )}
 
       {screen === 'progress' && (
-        <ProgressScreen onBack={() => setScreen('home')} userId={user?.id} questionTypes={expandQuestionTypes(config.questionTypes, settings)} />
+        <ProgressScreen onBack={() => setScreen('home')} userId={user?.id} questionTypes={expandQuestionTypes(config.questionTypes, settings)} onSelectBird={isDesktop ? setProgressSelectedSpecies : undefined} />
       )}
 
       {screen === 'settings' && (
@@ -388,6 +390,7 @@ export default function App() {
           revealRangeMapUrl={revealRangeMapUrl}
           revealSightings={revealSightings}
           questionPhoto={questionPhoto}
+          questionPhotoFetching={questionPhotoFetching}
           isFirstEncounter={isFirstEncounter}
           currentMastery={currentMastery}
           showMediaInCarousel={!isDesktop}
@@ -419,6 +422,7 @@ export default function App() {
           recentDays={config.recentDays ?? 30}
           questionTypes={expandQuestionTypes(config.questionTypes, settings)}
           onBack={() => setScreen('result')}
+          onSelectBird={isDesktop ? setProgressSelectedSpecies : undefined}
         />
       )}
 

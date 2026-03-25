@@ -132,7 +132,8 @@ async function addToPalette(
   speciesCode: string,
   comName: string,
   types: QuestionType[],
-): Promise<void> {
+): Promise<boolean> {
+  let didAdd = false;
   for (const type of types) {
     const existing = await db.progress.get([speciesCode, type]);
     if (!existing) {
@@ -146,8 +147,10 @@ async function addToPalette(
         favourited: false, excluded: false,
         masteryLevel: 0, consecutiveCorrect: 0, inHistory: false,
       });
+      didAdd = true;
     }
   }
+  return didAdd;
 }
 
 /**
@@ -166,9 +169,9 @@ async function promoteNext(regionCode: string, types: QuestionType[], count: num
   let   added = 0;
 
   while (added < count && index < list.length) {
-    await addToPalette(list[index].speciesCode, list[index].comName, types);
+    const wasNew = await addToPalette(list[index].speciesCode, list[index].comName, types);
     index++;
-    added++;
+    if (wasNew) added++;
   }
 
   await db.regionSpecies.put({ ...cache, promotionIndex: index });

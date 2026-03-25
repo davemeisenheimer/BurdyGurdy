@@ -10,6 +10,7 @@ interface Props {
   onBack: () => void;
   userId?: string | null;
   questionTypes?: QuestionType[];
+  onSelectBird?: (species: { speciesCode: string; comName: string }) => void;
 }
 
 const TYPE_LABELS: Record<QuestionType, string> = {
@@ -54,7 +55,7 @@ function getGroupLabel(bird: BirdSummary, viewRecord: BirdProgress | null, typeF
   return MASTERY_LABELS[maxMastery] ?? 'Hard';
 }
 
-export function ProgressScreen({ onBack, userId, questionTypes }: Props) {
+export function ProgressScreen({ onBack, userId, questionTypes, onSelectBird }: Props) {
   const [birds, setBirds]               = useState<BirdSummary[]>([]);
   const [filter, setFilter]             = useState<Filter>('learning');
   const [typeFilter, setTypeFilter]     = useState<TypeFilter>(() =>
@@ -375,9 +376,12 @@ export function ProgressScreen({ onBack, userId, questionTypes }: Props) {
 
             return (<Fragment key={bird.speciesCode}>
               {groupHeader}
-              <div className={`bg-white rounded-xl border p-4 ${
-                bird.excluded ? 'border-red-200 opacity-75' : 'border-slate-200'
-              }`}>
+              <div
+                className={`bg-white rounded-xl border p-4 ${
+                  bird.excluded ? 'border-red-200 opacity-75' : 'border-slate-200'
+                } ${onSelectBird ? 'cursor-pointer hover:border-sky-300 hover:shadow-sm transition-shadow' : ''}`}
+                onClick={onSelectBird ? () => onSelectBird({ speciesCode: bird.speciesCode, comName: bird.comName }) : undefined}
+              >
               <div className="flex items-start justify-between mb-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-semibold text-slate-800">{bird.comName}</span>

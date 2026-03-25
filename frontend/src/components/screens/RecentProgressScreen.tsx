@@ -12,6 +12,7 @@ interface Props {
   recentDays: number;
   questionTypes: QuestionType[];
   onBack: () => void;
+  onSelectBird?: (species: { speciesCode: string; comName: string }) => void;
 }
 
 const TYPE_LABELS: Record<QuestionType, string> = {
@@ -40,7 +41,7 @@ const SECTION_COLORS: Record<RecentProgressCategory, string> = {
   mastered: 'text-emerald-700',
 };
 
-export function RecentProgressScreen({ regionCode, recentDays, questionTypes, onBack }: Props) {
+export function RecentProgressScreen({ regionCode, recentDays, questionTypes, onBack, onSelectBird }: Props) {
   const [cachedSpecies, setCachedSpecies]       = useState<CachedSpecies[]>([]);
   const [progressRecords, setProgressRecords]   = useState<BirdProgress[]>([]);
   const [loading, setLoading]                   = useState(true);
@@ -173,7 +174,7 @@ export function RecentProgressScreen({ regionCode, recentDays, questionTypes, on
 
                 <div className="space-y-2">
                   {section.map(bird => (
-                    <BirdCard key={bird.speciesCode} bird={bird} questionTypes={activeTypes} />
+                    <BirdCard key={bird.speciesCode} bird={bird} questionTypes={activeTypes} onSelectBird={onSelectBird} />
                   ))}
                 </div>
               </Fragment>
@@ -187,10 +188,15 @@ export function RecentProgressScreen({ regionCode, recentDays, questionTypes, on
 
 // ── BirdCard ──────────────────────────────────────────────────────────────────
 
-function BirdCard({ bird, questionTypes }: { bird: RecentBirdEntry; questionTypes: QuestionType[] }) {
+function BirdCard({ bird, questionTypes, onSelectBird }: { bird: RecentBirdEntry; questionTypes: QuestionType[]; onSelectBird?: (species: { speciesCode: string; comName: string }) => void }) {
+  const clickProps = onSelectBird ? {
+    onClick: () => onSelectBird({ speciesCode: bird.speciesCode, comName: bird.comName }),
+    className: 'cursor-pointer hover:border-sky-300 hover:shadow-sm transition-shadow',
+  } : { className: '' };
+
   if (bird.category === 'notAsked') {
     return (
-      <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center justify-between">
+      <div className={`bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center justify-between ${clickProps.className}`} onClick={clickProps.onClick}>
         <div>
           <span className="font-medium text-slate-700">{bird.comName}</span>
           <span className="text-xs text-slate-400 ml-2 italic">{bird.sciName}</span>
@@ -213,7 +219,7 @@ function BirdCard({ bird, questionTypes }: { bird: RecentBirdEntry; questionType
     const totalAttempts = bird.records.reduce((s, r) => s + r.correct + r.incorrect, 0);
     const pct = totalAttempts > 0 ? Math.round((totalCorrect / totalAttempts) * 100) : null;
     return (
-      <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center justify-between">
+      <div className={`bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center justify-between ${clickProps.className}`} onClick={clickProps.onClick}>
         <div className="flex items-center gap-2">
           <span className="font-medium text-slate-700">{bird.comName}</span>
           <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${MASTERED_BADGE_COLOR}`}>
@@ -242,7 +248,7 @@ function BirdCard({ bird, questionTypes }: { bird: RecentBirdEntry; questionType
   const typeCount = questionTypes.length;
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 px-4 py-3">
+    <div className={`bg-white rounded-xl border border-slate-200 px-4 py-3 ${clickProps.className}`} onClick={clickProps.onClick}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-medium text-slate-700">{bird.comName}</span>

@@ -23,6 +23,7 @@ interface Props {
   currentMastery?: { masteryLevel: number; consecutiveCorrect: number; inHistory: boolean; correct: number; incorrect: number } | null;
   revealPhotos: { primary: AttributedPhoto | null; optional: AttributedPhoto[] };
   questionPhoto: AttributedPhoto | null;
+  questionPhotoFetching?: boolean;
   revealRangeMapUrl?: string | null;
   revealSightings?: RecentSighting[];
   showMediaInCarousel?: boolean;
@@ -90,6 +91,7 @@ export function QuizScreen({
   revealRangeMapUrl = null,
   revealSightings = [],
   questionPhoto,
+  questionPhotoFetching = false,
   showMediaInCarousel = true,
   autoplayRevealAudio = true,
   onRemoveOptionalPhoto,
@@ -126,9 +128,10 @@ export function QuizScreen({
   ].filter(p => !failedPhotoUrls.has(p.url));
 
   // The question photo — pre-selected in useQuiz (with pre-fetch) to avoid mid-render switches.
-  // Falls back to the base photo from question data if no pre-selected photo is ready yet.
+  // While the fetch is in-flight (questionPhotoFetching), show nothing rather than falling back
+  // to the base photo, which would cause a visible swap when the selected photo arrives.
   const basePhoto: AttributedPhoto | null = question.imageUrl ? { url: question.imageUrl, credit: question.imageCredit ?? '' } : null;
-  const questionDisplayPhoto = questionPhoto ?? basePhoto;
+  const questionDisplayPhoto = questionPhoto ?? (questionPhotoFetching ? null : basePhoto);
 
   const [photoIdx, setPhotoIdx] = useState(0);
   useEffect(() => { setPhotoIdx(0); }, [question.id]);

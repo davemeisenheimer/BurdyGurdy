@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import type { QuizQuestion, AttributedPhoto } from '../../types';
 import { fetchBirdInfo, fetchRecentSightings, fetchRegionSpecies, fetchBirdPhotos, fetchBirdAudio } from '../../lib/api';
+import { db } from '../../lib/db';
 import type { BirdInfoData, RecentSighting, CarouselRecording } from '../../lib/api';
 import { AccountPill } from '../ui/AccountPill';
 
@@ -27,6 +28,8 @@ interface Props {
   userEmail?:                 string | null;
   onAuthClick?:               () => void;
   onSignOut?:                 () => void;
+  /** When set, the panel shows info for this species regardless of quiz state (browse mode). */
+  browseSpecies?:      { speciesCode: string; comName: string } | null;
 }
 
 // ── IUCN conservation status ──────────────────────────────────────────────────
@@ -217,25 +220,30 @@ function RelatedSpeciesCarousel({
       const refCode  = referenceSpecies.speciesCode;
       const refGenus = referenceSpecies.sciName.split(' ')[0];
 
-      // Candidates: recent species always included; historical only if regionally common
-      const candidates = allSpecies.filter(s => !s.isHistorical || s.isCommon);
-
-      let related = candidates.filter(s =>
+      // For genus matches, include all historically recorded species regardless of
+      // commonality — congeners are always relevant in a taxonomy context.
+      // The isCommon guard is only applied for the family-level fallback to avoid
+      // flooding the carousel with obscure rarities when there are no genus matches.
+      let related = allSpecies.filter(s =>
         s.speciesCode !== refCode && s.sciName.split(' ')[0] === refGenus,
       );
 
-      // Fallback to same family if fewer than 2 genus matches
-      if (related.length < 2) {
+      // If fewer than 9 genus matches, fill remaining slots with same-family species
+      // so the carousel has context. All genus matches are always shown (no cap).
+      if (related.length < 9) {
         const refFam = allSpecies.find(s => s.speciesCode === refCode)?.familyComName
           ?? referenceSpecies.familyComName;
-        related = candidates.filter(s =>
-          s.speciesCode !== refCode && s.familyComName === refFam,
-        );
+        const familyFill = allSpecies.filter(s =>
+          s.speciesCode !== refCode &&
+          s.familyComName === refFam &&
+          s.sciName.split(' ')[0] !== refGenus
+        ).slice(0, 9 - related.length);
+        related = [...related, ...familyFill];
       }
 
       setSlides([
         { kind: 'title' as const, ...referenceSpecies },
-        ...related.slice(0, 9).map(s => ({
+        ...related.map(s => ({
           kind:          'photo' as const,
           speciesCode:   s.speciesCode,
           comName:       s.comName,
@@ -258,10 +266,18 @@ function RelatedSpeciesCarousel({
       if (!sp || sp.kind === 'title' || fetchingRef.current.has(sp.speciesCode)) continue;
       fetchingRef.current.add(sp.speciesCode);
       const { speciesCode, comName, sciName } = sp;
-      fetchBirdPhotos(speciesCode, comName, sciName)
-        .then(({ primary }) => {
+      Promise.all([
+        fetchBirdPhotos(speciesCode, comName, sciName),
+        db.blockedPhotos.toArray(),
+        db.adminBlockedMedia.where('speciesCode').equals(speciesCode).toArray(),
+      ]).then(([{ primary }, blocked, adminBlocked]) => {
           if (genRef.current !== gen) return;
-          setPhotos(prev => new Map(prev).set(speciesCode, primary));
+          const blockedUrls = new Set([
+            ...blocked.map(b => b.url),
+            ...adminBlocked.map(b => b.url),
+          ]);
+          const photo = primary && !blockedUrls.has(primary.url) ? primary : null;
+          setPhotos(prev => new Map(prev).set(speciesCode, photo));
           setFetchedCodes(prev => new Set(prev).add(speciesCode));
         })
         .catch(() => {
@@ -439,7 +455,7 @@ function formatSightingDate(obsDt: string): string {
 
 // ── Main panel ────────────────────────────────────────────────────────────────
 
-export function BirdInfoPanel({ question, isAnswered, isCorrect, selectedAnswer, regionCode, maxRecentSightings = 4, autoScrollRelatedSpecies = true, autoplayRevealAudio = false, userEmail, onAuthClick, onSignOut }: Props) {
+export function BirdInfoPanel({ question, isAnswered, isCorrect, selectedAnswer, regionCode, maxRecentSightings = 4, autoScrollRelatedSpecies = true, autoplayRevealAudio = false, userEmail, onAuthClick, onSignOut, browseSpecies }: Props) {
   const mainAudioPauseRef = useRef<(() => void) | null>(null);
 
   const [questionInfo, setQuestionInfo]       = useState<BirdInfoData | null>(null);
@@ -450,18 +466,61 @@ export function BirdInfoPanel({ question, isAnswered, isCorrect, selectedAnswer,
   const [viewedInfo, setViewedInfo]           = useState<BirdInfoData | null>(null);
   const [viewedSightings, setViewedSightings] = useState<RecentSighting[]>([]);
 
+  // Browse mode: resolved species (sciName + familyComName looked up from region cache)
+  const [browseResolved, setBrowseResolved] = useState<SlideSpecies | null>(null);
+
+  // Resolve sciName/familyComName for browse mode via the region species list (already cached)
+  useEffect(() => {
+    if (!browseSpecies) { setBrowseResolved(null); return; }
+    setViewingSpecies(null);
+    setViewedInfo(null);
+    setViewedSightings([]);
+    if (!regionCode) {
+      setBrowseResolved({ speciesCode: browseSpecies.speciesCode, comName: browseSpecies.comName, sciName: '', familyComName: '' });
+      return;
+    }
+    fetchRegionSpecies(regionCode).then(allSpecies => {
+      const found = allSpecies.find(s => s.speciesCode === browseSpecies.speciesCode);
+      setBrowseResolved({
+        speciesCode:   browseSpecies.speciesCode,
+        comName:       browseSpecies.comName,
+        sciName:       found?.sciName       ?? '',
+        familyComName: found?.familyComName ?? '',
+      });
+    }).catch(() => setBrowseResolved({ speciesCode: browseSpecies.speciesCode, comName: browseSpecies.comName, sciName: '', familyComName: '' }));
+  }, [browseSpecies?.speciesCode, regionCode]);
+
+  // Fetch info when browse species resolves
+  useEffect(() => {
+    if (!browseResolved) return;
+    setLoading(true);
+    setQuestionInfo(null);
+    setQuestionSightings([]);
+    fetchBirdInfo(browseResolved.speciesCode, browseResolved.comName, browseResolved.sciName)
+      .then(data => { setQuestionInfo(data); setLoading(false); })
+      .catch(() => setLoading(false));
+    if (regionCode && maxRecentSightings > 0) {
+      fetchRecentSightings(browseResolved.speciesCode, regionCode, maxRecentSightings)
+        .then(setQuestionSightings);
+    }
+  }, [browseResolved?.speciesCode]);
+
   // Derived: which species' data to show in the panel body
   const info      = viewingSpecies ? viewedInfo      : questionInfo;
   const sightings = viewingSpecies ? viewedSightings : questionSightings;
-  const sp: SlideSpecies | null = viewingSpecies ?? (question ? {
+  // The primary species (carousel reference): browse species takes priority over quiz question
+  const primarySpecies: SlideSpecies | null = browseResolved ?? (question ? {
     speciesCode:   question.speciesCode,
     comName:       question.comName,
     sciName:       question.sciName,
     familyComName: question.familyComName,
   } : null);
+  // The currently displayed species: related species view overrides the primary
+  const sp: SlideSpecies | null = viewingSpecies ?? primarySpecies;
 
-  // Fetch info for the question species (runs on each new question)
+  // Fetch info for the question species (runs on each new question, skipped in browse mode)
   useEffect(() => {
+    if (browseResolved) return;
     if (!isAnswered || !question) {
       setQuestionInfo(null);
       setQuestionSightings([]);
@@ -478,7 +537,7 @@ export function BirdInfoPanel({ question, isAnswered, isCorrect, selectedAnswer,
       fetchRecentSightings(question.speciesCode, regionCode, maxRecentSightings)
         .then(setQuestionSightings);
     }
-  }, [question?.speciesCode, isAnswered]);
+  }, [question?.speciesCode, isAnswered, !!browseResolved]);
 
   // Fetch info for a related species (when user clicks "View info →")
   useEffect(() => {
@@ -494,7 +553,7 @@ export function BirdInfoPanel({ question, isAnswered, isCorrect, selectedAnswer,
   }, [viewingSpecies?.speciesCode]);
 
   // ── Idle state ────────────────────────────────────────────────────────────
-  if (!isAnswered || !question) {
+  if (!browseResolved && (!isAnswered || !question)) {
     if (!question) {
       return (
         <div className="flex flex-col h-full bg-slate-50 overflow-y-auto">
@@ -580,22 +639,36 @@ export function BirdInfoPanel({ question, isAnswered, isCorrect, selectedAnswer,
   return (
     <div className="flex flex-col h-full bg-white overflow-hidden">
 
-      {/* Answer result banner — always for the question species */}
-      <div className={`shrink-0 flex items-center px-4 py-2.5 border-b ${isCorrect ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}>
-        <p className={`flex-1 text-sm font-semibold ${isCorrect ? 'text-green-700' : 'text-red-700'}`}>
-          {isCorrect
-            ? `✓ Correct — ${question.comName}`
-            : `✗ You answered "${selectedAnswer}" — correct: ${question.comName}`}
-        </p>
-        {viewingSpecies && (
-          <button
-            onClick={() => setViewingSpecies(null)}
-            className="shrink-0 ml-3 text-xs text-sky-600 hover:text-sky-800 whitespace-nowrap"
-          >
-            ← Back to {question.comName}
-          </button>
-        )}
-      </div>
+      {/* Answer result banner (quiz) or species name header (browse mode) */}
+      {browseResolved ? (
+        <div className="shrink-0 flex items-center px-4 py-2.5 border-b bg-slate-50 border-slate-200">
+          <p className="flex-1 text-sm font-semibold text-slate-700">{browseResolved.comName}</p>
+          {viewingSpecies && (
+            <button
+              onClick={() => setViewingSpecies(null)}
+              className="shrink-0 ml-3 text-xs text-sky-600 hover:text-sky-800 whitespace-nowrap"
+            >
+              ← Back to {browseResolved.comName}
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className={`shrink-0 flex items-center px-4 py-2.5 border-b ${isCorrect ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}>
+          <p className={`flex-1 text-sm font-semibold ${isCorrect ? 'text-green-700' : 'text-red-700'}`}>
+            {isCorrect
+              ? `✓ Correct — ${question!.comName}`
+              : `✗ You answered "${selectedAnswer}" — correct: ${question!.comName}`}
+          </p>
+          {viewingSpecies && (
+            <button
+              onClick={() => setViewingSpecies(null)}
+              className="shrink-0 ml-3 text-xs text-sky-600 hover:text-sky-800 whitespace-nowrap"
+            >
+              ← Back to {question!.comName}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ── Triptych ── */}
       <div className="shrink-0 relative flex justify-center gap-2 px-3 py-2 bg-white" style={{ height: '224px' }}>
@@ -645,12 +718,7 @@ export function BirdInfoPanel({ question, isAnswered, isCorrect, selectedAnswer,
         {/* Related species carousel — always visible once answered */}
         <div className="overflow-hidden rounded-lg border border-stone-300" style={{ width: 'calc((100% - 16px) / 3)' }}>
           <RelatedSpeciesCarousel
-            referenceSpecies={{
-              speciesCode:   question.speciesCode,
-              comName:       question.comName,
-              sciName:       question.sciName,
-              familyComName: question.familyComName,
-            }}
+            referenceSpecies={primarySpecies!}
             regionCode={regionCode}
             autoScrollEnabled={autoScrollRelatedSpecies}
             onViewSpecies={setViewingSpecies}

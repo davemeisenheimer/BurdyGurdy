@@ -46,6 +46,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
   const [revealRangeMapUrl, setRevealRangeMapUrl] = useState<string | null>(null);
   const [revealSightings, setRevealSightings] = useState<RecentSighting[]>([]);
   const [questionPhoto, setQuestionPhoto] = useState<{ questionId: string; photo: AttributedPhoto } | null>(null);
+  const [questionPhotoFetching, setQuestionPhotoFetching] = useState(false);
   // Pre-fetched photo for the *next* question stored as a ref so it doesn't
   // overwrite the current question's photo state (which would corrupt the report URL).
   const prefetchedPhotoRef = useRef<{ questionId: string; photo: AttributedPhoto } | null>(null);
@@ -117,6 +118,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
 
     const q = targetQuestion;
     let cancelled = false;
+    if (!isPrefetch) setQuestionPhotoFetching(true);
     (async () => {
       try {
         const { primary, optional } = await fetchBirdPhotos(q.speciesCode, q.comName, q.sciName, true);
@@ -159,14 +161,17 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
           ]) ?? inatPhoto ?? macaulayPhoto ?? wikiPhotos[0] ?? null;
         }
 
-        if (selected && !cancelled) {
+        if (!cancelled) {
           if (isPrefetch) {
-            prefetchedPhotoRef.current = { questionId: q.id, photo: selected };
+            if (selected) prefetchedPhotoRef.current = { questionId: q.id, photo: selected };
           } else {
-            setQuestionPhoto({ questionId: q.id, photo: selected });
+            if (selected) setQuestionPhoto({ questionId: q.id, photo: selected });
+            setQuestionPhotoFetching(false);
           }
         }
-      } catch { /* non-fatal */ }
+      } catch {
+        if (!isPrefetch && !cancelled) setQuestionPhotoFetching(false);
+      }
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -356,6 +361,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
     revealRangeMapUrl,
     revealSightings,
     questionPhoto: questionPhoto !== null && questionPhoto.questionId === currentQuestion?.id ? questionPhoto.photo : null,
+    questionPhotoFetching: questionPhoto?.questionId !== currentQuestion?.id && questionPhotoFetching,
     roundLevelUps,
     isFirstEncounter,
     currentMastery,
