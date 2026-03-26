@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import type { AppSettings } from '../../lib/settings';
+import type { QuestionType } from '../../types';
 import { RegionSearch } from '../ui/RegionSearch';
 import { MapRegionPicker } from '../ui/MapRegionPicker';
+import { TrimProgressDialog } from '../ui/TrimProgressDialog';
 
 interface Props {
   initialSettings: AppSettings;
@@ -12,6 +14,9 @@ interface Props {
   onRegionChange?: (code: string) => void;
   onClearBlockedPhotos?: () => void;
   isAdmin?: boolean;
+  recentDays?: number;
+  questionTypes?: QuestionType[];
+  onProgressTrimmed?: (deleted: Array<{ speciesCode: string; questionType: string }>) => void;
 }
 
 interface ToggleRowProps {
@@ -38,10 +43,11 @@ function ToggleRow({ label, description, checked, onChange }: ToggleRowProps) {
   );
 }
 
-export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, regionCode, onRegionChange, onClearBlockedPhotos, isAdmin }: Props) {
+export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, regionCode, onRegionChange, onClearBlockedPhotos, isAdmin, recentDays, questionTypes, onProgressTrimmed }: Props) {
   const [settings, setSettings] = useState(initialSettings);
   const [regionDisplayName, setRegionDisplayName] = useState<string | undefined>(undefined);
   const [showMap, setShowMap] = useState(false);
+  const [showTrimDialog, setShowTrimDialog] = useState(false);
 
   const update = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     const next = { ...settings, [key]: value };
@@ -165,6 +171,19 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
           </button>
         </div>
 
+        {regionCode && recentDays != null && questionTypes && (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mt-4">
+            <p className="font-medium text-slate-800 text-sm mb-1">Outdated progress</p>
+            <p className="text-xs text-slate-500 mb-3">Remove progress for birds that are no longer seen in your region within your current sightings window.</p>
+            <button
+              onClick={() => setShowTrimDialog(true)}
+              className="text-xs px-3 py-1.5 border border-red-300 text-red-500 rounded-lg hover:bg-red-50 transition-colors"
+            >
+              Trim outdated progress…
+            </button>
+          </div>
+        )}
+
         {isAdmin && (
           <div className="bg-amber-50 rounded-2xl shadow-sm border border-amber-200 divide-y divide-amber-100 mt-4">
             <div className="px-5 py-3">
@@ -184,6 +203,15 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
         <MapRegionPicker
           onSelect={(code, name) => { onRegionChange(code); setRegionDisplayName(name); setShowMap(false); }}
           onClose={() => setShowMap(false)}
+        />
+      )}
+      {showTrimDialog && regionCode && recentDays != null && questionTypes && (
+        <TrimProgressDialog
+          regionCode={regionCode}
+          recentDays={recentDays}
+          questionTypes={questionTypes}
+          onClose={() => setShowTrimDialog(false)}
+          onTrimmed={(deleted) => { onProgressTrimmed?.(deleted); }}
         />
       )}
     </div>

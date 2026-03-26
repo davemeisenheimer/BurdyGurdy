@@ -20,7 +20,7 @@ import type { LocateResult } from './lib/api';
 import { db } from './lib/db';
 import { supabase } from './lib/supabase';
 import type { SupabaseUser } from './lib/supabase';
-import { uploadProgress, downloadAndMerge, uploadSettings, downloadSettings, downloadUserBlockedPhotos, deleteAllUserBlockedPhotos, uploadUserBlockedPhoto, submitMediaReport, fetchAdminBlockedMedia } from './lib/sync';
+import { uploadProgress, downloadAndMerge, uploadSettings, downloadSettings, downloadUserBlockedPhotos, deleteAllUserBlockedPhotos, uploadUserBlockedPhoto, submitMediaReport, fetchAdminBlockedMedia, deleteCloudProgressRecords } from './lib/sync';
 import type { ReportErrorData } from './components/ui/ReportErrorModal';
 
 const RECENT_DAYS: Record<'day' | 'week' | 'month', number> = { day: 1, week: 7, month: 30 };
@@ -358,6 +358,14 @@ export default function App() {
           onRegionChange={handleRegionChange}
           onClearBlockedPhotos={handleClearBlockedPhotos}
           isAdmin={isAdmin}
+          recentDays={RECENT_DAYS[settings.recentWindow ?? 'month']}
+          questionTypes={expandQuestionTypes(config.questionTypes, settings)}
+          onProgressTrimmed={(deleted) => {
+            if (user) {
+              deleteCloudProgressRecords(user.id, deleted).catch(() => {});
+              uploadProgress(user.id).catch(() => {});
+            }
+          }}
         />
       )}
 

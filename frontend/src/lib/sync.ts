@@ -218,3 +218,22 @@ export async function deleteCloudProgress(userId: string): Promise<void> {
     .eq('user_id', userId);
   if (error) console.warn('sync: delete failed:', error.message);
 }
+
+/** Deletes specific species+questionType records from the cloud for the given user.
+ *  Used after a local trim so the cloud doesn't restore the deleted records on next merge. */
+export async function deleteCloudProgressRecords(
+  userId: string,
+  records: Array<{ speciesCode: string; questionType: string }>,
+): Promise<void> {
+  if (records.length === 0) return;
+  // Build a PostgREST OR filter: and(species_code.eq.X,question_type.eq.Y) per record
+  const filter = records
+    .map(r => `and(species_code.eq.${r.speciesCode},question_type.eq.${r.questionType})`)
+    .join(',');
+  const { error } = await supabase
+    .from('bird_progress')
+    .delete()
+    .eq('user_id', userId)
+    .or(filter);
+  if (error) console.warn('sync: targeted delete failed:', error.message);
+}

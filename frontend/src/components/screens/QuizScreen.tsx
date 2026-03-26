@@ -233,6 +233,7 @@ export function QuizScreen({
             <div className="relative h-full bg-slate-900 flex items-center justify-center">
               {questionDisplayPhoto && (
                 <img
+                  key={questionDisplayPhoto.url}
                   src={questionDisplayPhoto.url}
                   alt="Mystery bird"
                   className={`max-h-full max-w-full object-contain transition-opacity duration-500 ${questionPhotoLoaded ? 'opacity-100' : 'opacity-0'}`}

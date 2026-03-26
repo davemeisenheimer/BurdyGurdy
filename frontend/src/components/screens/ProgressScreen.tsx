@@ -141,19 +141,33 @@ export function ProgressScreen({ onBack, userId, questionTypes, onSelectBird }: 
     birds.flatMap(b => b.records.map(r => r.questionType))
   )].sort((a, b) => (TYPE_LABELS[a] ?? a).localeCompare(TYPE_LABELS[b] ?? b));
 
-  const nonExcluded   = birds.filter(b => !b.excluded);
-  const excludedCount = birds.filter(b => b.excluded).length;
-  const masteredCount = birds.filter(b => !b.excluded && b.isInHistory).length;
-  const strugglingCount = nonExcluded.filter(b =>
-    b.totalAttempts >= 3 && b.overallAccuracy < STRUGGLING_THRESHOLD
-  ).length;
-  const learningCount   = nonExcluded.filter(b => b.isInProgress).length;
-  const favouritedCount = nonExcluded.filter(b => b.favourited).length;
+  const nonExcluded = birds.filter(b => !b.excluded);
 
   // Apply type filter first, then status filter
   const typeFiltered = typeFilter === 'all'
     ? birds
     : birds.filter(b => b.records.some(r => r.questionType === typeFilter));
+
+  // Tab counts mirror the card filter logic so numbers always match visible cards
+  const typeFilteredNonExcluded = typeFiltered.filter(b => !b.excluded);
+  const excludedCount   = typeFiltered.filter(b => b.excluded).length;
+  const masteredCount   = typeFilteredNonExcluded.filter(b => {
+    const vr = getViewRecord(b, typeFilter);
+    return vr ? (vr.inHistory ?? false) : b.isInHistory;
+  }).length;
+  const strugglingCount = typeFilteredNonExcluded.filter(b => {
+    const vr = getViewRecord(b, typeFilter);
+    if (typeFilter !== 'all' && vr) {
+      const total = vr.correct + vr.incorrect;
+      return total >= 3 && (total > 0 ? vr.correct / total : 0) < STRUGGLING_THRESHOLD;
+    }
+    return b.totalAttempts >= 3 && b.overallAccuracy < STRUGGLING_THRESHOLD;
+  }).length;
+  const learningCount   = typeFilteredNonExcluded.filter(b => {
+    const vr = getViewRecord(b, typeFilter);
+    return vr ? !(vr.inHistory ?? false) : b.isInProgress;
+  }).length;
+  const favouritedCount = typeFilteredNonExcluded.filter(b => b.favourited).length;
 
   const filteredUnsorted = typeFiltered.filter(b => {
     if (b.excluded && filter !== 'excluded') return false;

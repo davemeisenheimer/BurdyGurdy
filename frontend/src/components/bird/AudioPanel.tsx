@@ -10,12 +10,14 @@ interface Props {
   fillHeight?:  boolean;
 }
 
+const toHttps = (u: string | null) => u?.startsWith('//') ? `https:${u}` : u ?? null;
+
 export function AudioPanel({ recordings, autoplay = false, pauseRef, fillHeight = false }: Props) {
   const [idx, setIdx]         = useState(0);
   const [playing, setPlaying] = useState(false);
   const [sonoError, setSonoError] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
-  const rec = recordings[idx];
+  const rec = { ...recordings[idx], sonoUrl: toHttps(recordings[idx].sonoUrl) };
 
   useEffect(() => { setIdx(0); setPlaying(autoplay); }, [recordings]);
   useEffect(() => { setSonoError(false); }, [idx]);
