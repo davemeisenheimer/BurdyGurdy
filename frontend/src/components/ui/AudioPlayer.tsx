@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { DEV_LOG_AUDIO_ERRORS } from '../../lib/devFlags';
 
 interface Track {
@@ -20,6 +20,7 @@ export function AudioPlayer({ url, tracks, sonoUrl }: Props) {
   const [audioError, setAudioError] = useState(false);
   const [activeSonoUrl, setActiveSonoUrl] = useState<string | undefined>(toHttps(sonoUrl));
   const [sonoLoaded, setSonoLoaded] = useState(false);
+  const preloadImgRef = useRef<HTMLImageElement>(null);
 
   // Normalise: if tracks provided use them, otherwise wrap the single url/sonoUrl
   const allTracks: Track[] = (tracks && tracks.length > 0
@@ -29,9 +30,17 @@ export function AudioPlayer({ url, tracks, sonoUrl }: Props) {
 
   const trackIndexRef = useRef(0);
 
-  useEffect(() => {
-    setSonoLoaded(false);
-  }, [activeSonoUrl]);
+  useEffect(() => { setSonoLoaded(false); }, [activeSonoUrl]);
+
+  // If the image was already in the browser cache when the preload img mounted,
+  // onLoad fires before React can attach the handler and sonoLoaded stays false.
+  // This layout effect catches that: it runs synchronously after every render and
+  // sets sonoLoaded=true whenever the img is already complete.
+  useLayoutEffect(() => {
+    if (!sonoLoaded && preloadImgRef.current?.complete && preloadImgRef.current.naturalWidth > 0) {
+      setSonoLoaded(true);
+    }
+  });
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -154,6 +163,7 @@ export function AudioPlayer({ url, tracks, sonoUrl }: Props) {
       {/* Preload spectrogram silently; switches layout to spectrogram once loaded */}
       {activeSonoUrl && (
         <img
+          ref={preloadImgRef}
           src={activeSonoUrl}
           alt=""
           className="hidden"
