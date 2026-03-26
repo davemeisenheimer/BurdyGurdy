@@ -5,6 +5,7 @@ import { QuizScreen } from './components/screens/QuizScreen';
 import { ResultScreen } from './components/screens/ResultScreen';
 import { ProgressScreen } from './components/screens/ProgressScreen';
 import { RecentProgressScreen } from './components/screens/RecentProgressScreen';
+import { BirdInfoScreen } from './components/screens/BirdInfoScreen';
 import { SettingsScreen } from './components/screens/SettingsScreen';
 import { VictoryScreen } from './components/screens/VictoryScreen';
 import { CurationPanel } from './components/panels/CurationPanel';
@@ -182,7 +183,8 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const [screen, setScreen] = useState<'home' | 'quiz' | 'result' | 'progress' | 'settings' | 'victory' | 'recentprogress'>('home');
+  const [screen, setScreen] = useState<'home' | 'quiz' | 'result' | 'progress' | 'settings' | 'victory' | 'recentprogress' | 'birdinfo'>('home');
+  const [prevScreen, setPrevScreen] = useState<'progress' | 'recentprogress'>('progress');
   const [rightPanelTab, setRightPanelTab] = useState<'info' | 'curation'>('info');
   const [progressSelectedSpecies, setProgressSelectedSpecies] = useState<{ speciesCode: string; comName: string } | null>(null);
   const isAdmin = user?.user_metadata?.is_admin === true;
@@ -302,7 +304,7 @@ export default function App() {
             isCorrect={isCorrect}
             selectedAnswer={state.selectedAnswer}
             regionCode={config.regionCode}
-            browseSpecies={['progress', 'recentprogress'].includes(screen) ? progressSelectedSpecies : null}
+            browseSpecies={isDesktop && ['progress', 'recentprogress'].includes(screen) ? progressSelectedSpecies : null}
             maxRecentSightings={settings.maxRecentSightings}
             autoScrollRelatedSpecies={settings.autoScrollRelatedSpecies}
             autoplayRevealAudio={settings.autoplayRevealAudio}
@@ -336,7 +338,14 @@ export default function App() {
       )}
 
       {screen === 'progress' && (
-        <ProgressScreen onBack={() => setScreen('home')} userId={user?.id} questionTypes={expandQuestionTypes(config.questionTypes, settings)} onSelectBird={isDesktop ? setProgressSelectedSpecies : undefined} />
+        <ProgressScreen
+          onBack={() => setScreen('home')}
+          userId={user?.id}
+          questionTypes={expandQuestionTypes(config.questionTypes, settings)}
+          onSelectBird={isDesktop
+            ? setProgressSelectedSpecies
+            : s => { setProgressSelectedSpecies(s); setPrevScreen('progress'); setScreen('birdinfo'); }}
+        />
       )}
 
       {screen === 'settings' && (
@@ -422,7 +431,20 @@ export default function App() {
           recentDays={config.recentDays ?? 30}
           questionTypes={expandQuestionTypes(config.questionTypes, settings)}
           onBack={() => setScreen('result')}
-          onSelectBird={isDesktop ? setProgressSelectedSpecies : undefined}
+          onSelectBird={isDesktop
+            ? setProgressSelectedSpecies
+            : s => { setProgressSelectedSpecies(s); setPrevScreen('recentprogress'); setScreen('birdinfo'); }}
+        />
+      )}
+
+      {screen === 'birdinfo' && progressSelectedSpecies && (
+        <BirdInfoScreen
+          speciesCode={progressSelectedSpecies.speciesCode}
+          comName={progressSelectedSpecies.comName}
+          regionCode={config.regionCode}
+          maxRecentSightings={settings.maxRecentSightings}
+          autoScrollRelatedSpecies={settings.autoScrollRelatedSpecies}
+          onBack={() => setScreen(prevScreen)}
         />
       )}
 
