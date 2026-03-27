@@ -3,6 +3,7 @@ import { db } from '../../lib/db';
 import { setExcluded, STRUGGLING_THRESHOLD } from '../../lib/adaptive';
 import { MASTERY_LABELS, masteryBadgeClass, isStruggling } from '../../lib/mastery';
 import { MasteryBadge } from '../ui/MasteryBadge';
+import { FocusModeToggle } from '../ui/FocusModeToggle';
 import { deleteCloudProgress } from '../../lib/sync';
 import type { BirdProgress, QuestionType } from '../../types';
 
@@ -10,6 +11,9 @@ interface Props {
   onBack: () => void;
   userId?: string | null;
   questionTypes?: QuestionType[];
+  focusStruggling?: boolean;
+  showFocusModeToggle?: boolean;
+  onToggleFocusStruggling?: () => void;
   onSelectBird?: (species: { speciesCode: string; comName: string }) => void;
 }
 
@@ -55,7 +59,7 @@ function getGroupLabel(bird: BirdSummary, viewRecord: BirdProgress | null, typeF
   return MASTERY_LABELS[maxMastery] ?? 'Hard';
 }
 
-export function ProgressScreen({ onBack, userId, questionTypes, onSelectBird }: Props) {
+export function ProgressScreen({ onBack, userId, questionTypes, focusStruggling, showFocusModeToggle, onToggleFocusStruggling, onSelectBird }: Props) {
   const [birds, setBirds]               = useState<BirdSummary[]>([]);
   const [filter, setFilter]             = useState<Filter>('learning');
   const [typeFilter, setTypeFilter]     = useState<TypeFilter>(() =>
@@ -365,6 +369,13 @@ export function ProgressScreen({ onBack, userId, questionTypes, onSelectBird }: 
 
         {!loading && filtered.length === 0 && birds.length > 0 && (
           <p className="text-slate-400 text-center py-8">No birds match this filter.</p>
+        )}
+
+        {/* Focus mode toggle — shown at top of struggling tab */}
+        {filter === 'struggling' && showFocusModeToggle && onToggleFocusStruggling && (
+          <div className="bg-white rounded-xl border border-slate-200 p-4 mb-3">
+            <FocusModeToggle enabled={focusStruggling ?? false} onToggle={onToggleFocusStruggling} strugglingCount={strugglingCount} />
+          </div>
         )}
 
         {/* Bird list */}

@@ -21,6 +21,7 @@ import { db } from './lib/db';
 import { supabase } from './lib/supabase';
 import type { SupabaseUser } from './lib/supabase';
 import { uploadProgress, downloadAndMerge, uploadSettings, downloadSettings, downloadUserBlockedPhotos, deleteAllUserBlockedPhotos, uploadUserBlockedPhoto, submitMediaReport, fetchAdminBlockedMedia, deleteCloudProgressRecords } from './lib/sync';
+import { STRUGGLING_THRESHOLD } from './lib/adaptive';
 import type { ReportErrorData } from './components/ui/ReportErrorModal';
 
 const RECENT_DAYS: Record<'day' | 'week' | 'month', number> = { day: 1, week: 7, month: 30 };
@@ -63,6 +64,8 @@ export default function App() {
   });
   const [geoPrompt, setGeoPrompt] = useState<LocateResult | null>(null);
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
+  const [focusStruggling, setFocusStruggling] = useState(() => localStorage.getItem('birdygurdy_focus_struggling') === 'true');
+  const [strugglingCount, setStrugglingCount] = useState(0);
   const [user, setUser]               = useState<SupabaseUser | null>(null);
   const [showAuth, setShowAuth]       = useState(false);
   const [showUploadPrompt, setShowUploadPrompt] = useState(false);
@@ -73,6 +76,21 @@ export default function App() {
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, []);
+
+  // Recompute struggling count whenever question types or settings change (also runs on mount)
+  useEffect(() => {
+    const expandedTypes = expandQuestionTypes(config.questionTypes, settings);
+    db.progress.toArray().then(records => {
+      const struggling = new Set<string>();
+      for (const r of records) {
+        if (!expandedTypes.includes(r.questionType) || r.excluded) continue;
+        const total = r.correct + r.incorrect;
+        if (total >= 3 && r.correct / total < STRUGGLING_THRESHOLD) struggling.add(r.speciesCode);
+      }
+      setStrugglingCount(struggling.size);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.questionTypes, settings]);
 
   // Auto sign-out after 12 hours of inactivity
   const INACTIVITY_MS = 12 * 60 * 60 * 1000;
@@ -190,10 +208,20 @@ export default function App() {
   const isAdmin = user?.user_metadata?.is_admin === true;
   const { state, currentQuestion, isCorrect, currentFavourited, currentExcluded, revealPhotos, revealRangeMapUrl, revealSightings, questionPhoto, questionPhotoFetching, roundLevelUps, isFirstEncounter, currentMastery, startQuiz, submitAnswer, toggleFavourite, toggleExcluded, nextQuestion, removeOptionalPhoto } = useQuiz(config, settings.randomizeQuestionPhotos, user?.id);
 
-  // After each completed round, upload progress to cloud if signed in
+  // After each completed round, upload progress and refresh struggling count
   useEffect(() => {
-    if (state.status !== 'complete' || !user) return;
-    uploadProgress(user.id).catch(() => {});
+    if (state.status !== 'complete') return;
+    const expandedTypes = expandQuestionTypes(config.questionTypes, settings);
+    db.progress.toArray().then(records => {
+      const struggling = new Set<string>();
+      for (const r of records) {
+        if (!expandedTypes.includes(r.questionType) || r.excluded) continue;
+        const total = r.correct + r.incorrect;
+        if (total >= 3 && r.correct / total < STRUGGLING_THRESHOLD) struggling.add(r.speciesCode);
+      }
+      setStrugglingCount(struggling.size);
+    });
+    if (user) uploadProgress(user.id).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.status]);
 
@@ -214,6 +242,7 @@ export default function App() {
     await startQuiz({
       ...fullConfig,
       questionTypes: expandQuestionTypes(fullConfig.questionTypes, settings),
+      onlyStruggling: focusStruggling,
     });
   };
 
@@ -272,6 +301,16 @@ export default function App() {
       .catch(() => setScreen('result'));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.status]);
+
+  const showFocusModeToggle = strugglingCount >= Math.round(config.questionsPerRound * 0.5);
+  // Persist focus mode to localStorage
+  useEffect(() => {
+    localStorage.setItem('birdygurdy_focus_struggling', String(focusStruggling));
+  }, [focusStruggling]);
+  // Auto-disable focus mode when there are no longer enough struggling birds
+  useEffect(() => {
+    if (focusStruggling && !showFocusModeToggle) setFocusStruggling(false);
+  }, [focusStruggling, showFocusModeToggle]);
 
   return (
     <div className="font-sans lg:flex lg:h-screen">
@@ -342,6 +381,9 @@ export default function App() {
           onBack={() => setScreen('home')}
           userId={user?.id}
           questionTypes={expandQuestionTypes(config.questionTypes, settings)}
+          focusStruggling={focusStruggling}
+          showFocusModeToggle={showFocusModeToggle}
+          onToggleFocusStruggling={() => setFocusStruggling(f => !f)}
           onSelectBird={isDesktop
             ? setProgressSelectedSpecies
             : s => { setProgressSelectedSpecies(s); setPrevScreen('progress'); setScreen('birdinfo'); }}
@@ -360,6 +402,10 @@ export default function App() {
           isAdmin={isAdmin}
           recentDays={RECENT_DAYS[settings.recentWindow ?? 'month']}
           questionTypes={expandQuestionTypes(config.questionTypes, settings)}
+          focusStruggling={focusStruggling}
+          showFocusModeToggle={showFocusModeToggle}
+          strugglingCount={strugglingCount}
+          onToggleFocusStruggling={() => setFocusStruggling(f => !f)}
           onProgressTrimmed={(deleted) => {
             if (user) {
               deleteCloudProgressRecords(user.id, deleted).catch(() => {});
@@ -427,6 +473,10 @@ export default function App() {
           config={config}
           questionTypes={expandQuestionTypes(config.questionTypes, settings)}
           levelUps={roundLevelUps}
+          focusStruggling={focusStruggling}
+          showFocusModeToggle={showFocusModeToggle}
+          strugglingCount={strugglingCount}
+          onToggleFocusStruggling={() => setFocusStruggling(f => !f)}
           onRestart={() => handleStart(config)}
           onHome={() => setScreen('home')}
           onRecentProgress={() => setScreen('recentprogress')}
