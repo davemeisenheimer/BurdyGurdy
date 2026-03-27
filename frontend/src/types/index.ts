@@ -68,6 +68,7 @@ export interface QuizConfig {
   questionsPerRound: number;
   groupId: string; // 'all' or a BirdGroup id
   recentDays?: number; // 1, 7, or 30 — observation window for recent species pool
+  onlyStruggling?: boolean; // when true, restrict quiz to species where the user is struggling
 }
 
 export interface LevelUpEvent {

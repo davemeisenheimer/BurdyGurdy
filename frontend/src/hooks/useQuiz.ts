@@ -15,7 +15,7 @@ import { db } from '../lib/db';
 import {
   recordAnswer, setFavourite, getFavourited,
   setExcluded, getExcluded, getAdaptiveParams,
-  maintainLevel0Palette, checkAndPromote,
+  maintainLevel0Palette, checkAndPromote, STRUGGLING_THRESHOLD,
 } from '../lib/adaptive';
 import { getRegionSpecies } from '../lib/regionCache';
 import { uploadUserBlockedPhoto } from '../lib/sync';
@@ -232,8 +232,13 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
 
       const back = cfg.recentDays ?? 30;
       if (cfg.mode === 'adaptive') {
-        // Seed initial palette and warm cache first; both use the same regionCode
-        await maintainLevel0Palette(cfg.regionCode, cfg.questionTypes, back);
+        if (cfg.onlyStruggling) {
+          // Warm the region cache without promoting new birds into the learning palette
+          await getRegionSpecies(cfg.regionCode, back);
+        } else {
+          // Seed initial palette and warm cache first; both use the same regionCode
+          await maintainLevel0Palette(cfg.regionCode, cfg.questionTypes, back);
+        }
         const params = await getAdaptiveParams();
         weights             = params.weights;
         masteryLevels       = params.masteryLevels;
@@ -241,6 +246,37 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
         paletteSpeciesCodes = params.paletteSpeciesCodes;
         level0Keys          = params.level0Keys;
         historyKeys         = params.historyKeys;
+
+        if (cfg.onlyStruggling) {
+          const allRecords = await db.progress.toArray();
+          const strugglingSpecies = new Set(
+            allRecords
+              .filter(r => {
+                const total = r.correct + r.incorrect;
+                return !r.excluded && total >= 3 && r.correct / total < STRUGGLING_THRESHOLD;
+              })
+              .map(r => r.speciesCode),
+          );
+          if (strugglingSpecies.size > 0) {
+            // Filter weights/palette to struggling species only
+            weights = Object.fromEntries(
+              Object.entries(weights as Record<string, number>).filter(([k]) => strugglingSpecies.has(k.split(':')[0])),
+            );
+            paletteSpeciesCodes = paletteSpeciesCodes.filter(c => strugglingSpecies.has(c));
+            level0Keys  = level0Keys.filter(k  => strugglingSpecies.has(k.split(':')[0]));
+            historyKeys = historyKeys.filter(k => strugglingSpecies.has(k.split(':')[0]));
+
+            // Also add every non-struggling species to banned so the backend cannot
+            // fall back to NEW_ENCOUNTER_WEIGHT for species missing from weightsMap.
+            const regionCache = await db.regionSpecies.get(`${cfg.regionCode}:${back}`);
+            const allKnown = new Set([
+              ...allRecords.map(r => r.speciesCode),
+              ...(regionCache?.species.map(s => s.speciesCode) ?? []),
+            ]);
+            const nonStruggling = [...allKnown].filter(c => !strugglingSpecies.has(c));
+            banned = [...new Set([...banned, ...nonStruggling])];
+          }
+        }
       } else {
         // Warm the region species cache in the background for non-adaptive modes
         getRegionSpecies(cfg.regionCode, back).catch(() => {/* non-fatal */});

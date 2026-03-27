@@ -4,6 +4,7 @@ import type { QuestionType } from '../../types';
 import { RegionSearch } from '../ui/RegionSearch';
 import { MapRegionPicker } from '../ui/MapRegionPicker';
 import { TrimProgressDialog } from '../ui/TrimProgressDialog';
+import { FocusModeToggle } from '../ui/FocusModeToggle';
 
 interface Props {
   initialSettings: AppSettings;
@@ -17,6 +18,10 @@ interface Props {
   recentDays?: number;
   questionTypes?: QuestionType[];
   onProgressTrimmed?: (deleted: Array<{ speciesCode: string; questionType: string }>) => void;
+  focusStruggling?: boolean;
+  showFocusModeToggle?: boolean;
+  strugglingCount?: number;
+  onToggleFocusStruggling?: () => void;
 }
 
 interface ToggleRowProps {
@@ -43,7 +48,7 @@ function ToggleRow({ label, description, checked, onChange }: ToggleRowProps) {
   );
 }
 
-export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, regionCode, onRegionChange, onClearBlockedPhotos, isAdmin, recentDays, questionTypes, onProgressTrimmed }: Props) {
+export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, regionCode, onRegionChange, onClearBlockedPhotos, isAdmin, recentDays, questionTypes, onProgressTrimmed, focusStruggling, showFocusModeToggle, strugglingCount, onToggleFocusStruggling }: Props) {
   const [settings, setSettings] = useState(initialSettings);
   const [regionDisplayName, setRegionDisplayName] = useState<string | undefined>(undefined);
   const [showMap, setShowMap] = useState(false);
@@ -56,12 +61,15 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
   };
 
   return (
-    <div className="min-h-dvh flex flex-col p-3 sm:p-6">
-      <div className="w-full max-w-md mx-auto">
-        <div className="flex items-center gap-4 mb-6">
+    <div className="min-h-dvh flex flex-col">
+      <div className="sticky top-0 z-10 bg-slate-50 px-3 sm:px-6 pt-3 sm:pt-6 pb-4 border-b border-slate-200">
+        <div className="w-full max-w-md mx-auto flex items-center gap-4">
           <button onClick={onBack} className="text-slate-500 hover:text-slate-700 text-5xl leading-none">←</button>
           <h1 className="text-2xl font-bold text-slate-800">Settings</h1>
         </div>
+      </div>
+      <div className="px-3 sm:px-6 pt-5 pb-6">
+      <div className="w-full max-w-md mx-auto">
 
         {/* Region — mobile only; desktop sets region on the home screen */}
         {!isDesktop && regionCode !== undefined && onRegionChange && (
@@ -184,6 +192,12 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
           </div>
         )}
 
+        {showFocusModeToggle && onToggleFocusStruggling && (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mt-4">
+            <FocusModeToggle enabled={focusStruggling ?? false} onToggle={onToggleFocusStruggling} strugglingCount={strugglingCount ?? 0} />
+          </div>
+        )}
+
         {isAdmin && (
           <div className="bg-amber-50 rounded-2xl shadow-sm border border-amber-200 divide-y divide-amber-100 mt-4">
             <div className="px-5 py-3">
@@ -198,6 +212,7 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
             />
           </div>
         )}
+      </div>
       </div>
       {showMap && onRegionChange && (
         <MapRegionPicker

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import type { QuizConfig, QuestionType, LevelUpEvent } from '../../types';
 import { db } from '../../lib/db';
 import { masteryBadgeClass, masteryLabel } from '../../lib/mastery';
+import { FocusModeToggle } from '../ui/FocusModeToggle';
 
 const SHORT_TYPE_LABELS: Record<string, string> = {
   image: 'photo', song: 'song', sono: 'spectrogram',
@@ -15,6 +16,10 @@ interface Props {
   config: QuizConfig;
   questionTypes: QuestionType[];
   levelUps: LevelUpEvent[];
+  focusStruggling?: boolean;
+  showFocusModeToggle?: boolean;
+  strugglingCount?: number;
+  onToggleFocusStruggling?: () => void;
   onRestart: () => void;
   onHome: () => void;
   onRecentProgress: () => void;
@@ -98,7 +103,7 @@ function LevelUpSummary({ levelUps }: { levelUps: LevelUpEvent[] }) {
   );
 }
 
-export function ResultScreen({ score, config, questionTypes, levelUps, onRestart, onHome, onRecentProgress }: Props) {
+export function ResultScreen({ score, config, questionTypes, levelUps, focusStruggling, showFocusModeToggle, strugglingCount, onToggleFocusStruggling, onRestart, onHome, onRecentProgress }: Props) {
   const pct = Math.round((score.correct / score.total) * 100);
   const emoji = pct >= 80 ? '🎉' : pct >= 60 ? '🙂' : '💪';
   const [masteryStats, setMasteryStats] = useState<MasteryStats | null>(null);
@@ -162,6 +167,12 @@ export function ResultScreen({ score, config, questionTypes, levelUps, onRestart
             </div>
           )}
         </div>
+
+        {showFocusModeToggle && onToggleFocusStruggling && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 mb-6">
+            <FocusModeToggle enabled={focusStruggling ?? false} onToggle={onToggleFocusStruggling} strugglingCount={strugglingCount ?? 0} />
+          </div>
+        )}
 
         {levelUps.length > 0 && <LevelUpSummary levelUps={levelUps} />}
 
