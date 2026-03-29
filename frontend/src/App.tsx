@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import type { QuizConfig, QuestionType } from './types';
+import type { QuizConfig } from './types';
 import { HomeScreen } from './components/screens/HomeScreen';
 import { QuizScreen } from './components/screens/QuizScreen';
 import { ResultScreen } from './components/screens/ResultScreen';
-import { ProgressScreen } from './components/screens/ProgressScreen';
-import { RecentProgressScreen } from './components/screens/RecentProgressScreen';
+import { ProgressScreenLife } from './components/screens/ProgressScreenLife';
+import { ProgressScreenRecent } from './components/screens/ProgressScreenRecent';
 import { BirdInfoScreen } from './components/screens/BirdInfoScreen';
 import { SettingsScreen } from './components/screens/SettingsScreen';
 import { VictoryScreen } from './components/screens/VictoryScreen';
@@ -15,13 +15,14 @@ import { useQuiz } from './hooks/useQuiz';
 import { loadSettings, saveSettings, loadQuizPrefs, saveQuizPrefs } from './lib/settings';
 import type { AppSettings } from './lib/settings';
 import { checkVictoryCondition, hasSeenVictory, markVictorySeen, getVictorySeen, mergeVictorySeen } from './lib/victory';
-import { locateRegion, fetchBlockedPhotos } from './lib/api';
-import type { LocateResult } from './lib/api';
-import { db } from './lib/db';
+import { locateRegion, fetchBlockedPhotos } from './services/remote/api';
+import type { LocateResult } from './services/remote/api';
+import { db, switchToUserDb } from './lib/db';
 import { supabase } from './lib/supabase';
 import type { SupabaseUser } from './lib/supabase';
-import { uploadProgress, downloadAndMerge, uploadSettings, downloadSettings, downloadUserBlockedPhotos, deleteAllUserBlockedPhotos, uploadUserBlockedPhoto, submitMediaReport, fetchAdminBlockedMedia, deleteCloudProgressRecords } from './lib/sync';
-import { STRUGGLING_THRESHOLD } from './lib/adaptive';
+import { uploadProgress, downloadAndMerge, uploadSettings, downloadSettings, downloadUserBlockedPhotos, deleteAllUserBlockedPhotos, uploadUserBlockedPhoto, submitMediaReport, fetchAdminBlockedMedia, deleteCloudProgressRecords } from './services/remote/sync';
+import { computeStrugglingCount } from './lib/struggling';
+import { expandQuestionTypes } from './lib/questionTypes';
 import type { ReportErrorData } from './components/ui/ReportErrorModal';
 
 const RECENT_DAYS: Record<'day' | 'week' | 'month', number> = { day: 1, week: 7, month: 30 };
@@ -35,20 +36,6 @@ const DEFAULT_CONFIG: QuizConfig = {
   recentDays: 30,
 };
 
-function expandQuestionTypes(types: QuestionType[], s: AppSettings): QuestionType[] {
-  const result = [...types];
-  if (s.includeLatinAnswerVariants) {
-    if (types.includes('image'))  result.push('image-latin');
-    if (types.includes('song'))   result.push('song-latin');
-    if (types.includes('family')) result.push('family-latin');
-  }
-  if (s.includeSongAnswerVariants) {
-    if (types.includes('image')) result.push('image-song');
-    if (types.includes('sono'))  result.push('sono-song');
-    if (types.includes('latin')) result.push('latin-song');
-  }
-  return result;
-}
 
 export default function App() {
   const [config, setConfig] = useState<QuizConfig>(() => {
@@ -81,13 +68,7 @@ export default function App() {
   useEffect(() => {
     const expandedTypes = expandQuestionTypes(config.questionTypes, settings);
     db.progress.toArray().then(records => {
-      const struggling = new Set<string>();
-      for (const r of records) {
-        if (!expandedTypes.includes(r.questionType) || r.excluded) continue;
-        const total = r.correct + r.incorrect;
-        if (total >= 3 && r.correct / total < STRUGGLING_THRESHOLD) struggling.add(r.speciesCode);
-      }
-      setStrugglingCount(struggling.size);
+      setStrugglingCount(computeStrugglingCount(records, expandedTypes));
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.questionTypes, settings]);
@@ -139,10 +120,14 @@ export default function App() {
   // Auth: restore session on load and listen for changes
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
+      // Switch to the user's own DB before the component renders with their session.
+      switchToUserDb(data.session?.user?.id ?? null);
       setUser(data.session?.user ?? null);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      // Switch DB first — all subsequent reads/writes go to the correct store.
+      switchToUserDb(session?.user?.id ?? null);
       setUser(session?.user ?? null);
       // When a session appears (OAuth redirect back), merge cloud data
       if (session?.user) {
@@ -203,23 +188,18 @@ export default function App() {
 
   const [screen, setScreen] = useState<'home' | 'quiz' | 'result' | 'progress' | 'settings' | 'victory' | 'recentprogress' | 'birdinfo'>('home');
   const [prevScreen, setPrevScreen] = useState<'progress' | 'recentprogress'>('progress');
+  const [recentProgressBack, setRecentProgressBack] = useState<'result' | 'progress'>('result');
   const [rightPanelTab, setRightPanelTab] = useState<'info' | 'curation'>('info');
   const [progressSelectedSpecies, setProgressSelectedSpecies] = useState<{ speciesCode: string; comName: string } | null>(null);
   const isAdmin = user?.user_metadata?.is_admin === true;
-  const { state, currentQuestion, isCorrect, currentFavourited, currentExcluded, revealPhotos, revealRangeMapUrl, revealSightings, questionPhoto, questionPhotoFetching, roundLevelUps, isFirstEncounter, currentMastery, startQuiz, submitAnswer, toggleFavourite, toggleExcluded, nextQuestion, removeOptionalPhoto } = useQuiz(config, settings.randomizeQuestionPhotos, user?.id);
+  const { state, currentQuestion, isCorrect, currentFavourited, currentExcluded, revealPhotos, revealRangeMapUrl, revealSightings, questionPhoto, questionPhotoFetching, roundLevelUps, roundNoLongerStruggling, isFirstEncounter, currentMastery, startQuiz, submitAnswer, toggleFavourite, toggleExcluded, nextQuestion, removeOptionalPhoto } = useQuiz(config, settings.randomizeQuestionPhotos, user?.id);
 
   // After each completed round, upload progress and refresh struggling count
   useEffect(() => {
     if (state.status !== 'complete') return;
     const expandedTypes = expandQuestionTypes(config.questionTypes, settings);
     db.progress.toArray().then(records => {
-      const struggling = new Set<string>();
-      for (const r of records) {
-        if (!expandedTypes.includes(r.questionType) || r.excluded) continue;
-        const total = r.correct + r.incorrect;
-        if (total >= 3 && r.correct / total < STRUGGLING_THRESHOLD) struggling.add(r.speciesCode);
-      }
-      setStrugglingCount(struggling.size);
+      setStrugglingCount(computeStrugglingCount(records, expandedTypes));
     });
     if (user) uploadProgress(user.id).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -377,7 +357,7 @@ export default function App() {
       )}
 
       {screen === 'progress' && (
-        <ProgressScreen
+        <ProgressScreenLife
           onBack={() => setScreen('home')}
           userId={user?.id}
           questionTypes={expandQuestionTypes(config.questionTypes, settings)}
@@ -387,6 +367,9 @@ export default function App() {
           onSelectBird={isDesktop
             ? setProgressSelectedSpecies
             : s => { setProgressSelectedSpecies(s); setPrevScreen('progress'); setScreen('birdinfo'); }}
+          regionCode={config.regionCode}
+          recentDays={config.recentDays ?? 30}
+          onRecentProgress={() => { setRecentProgressBack('progress'); setScreen('recentprogress'); }}
         />
       )}
 
@@ -473,22 +456,23 @@ export default function App() {
           config={config}
           questionTypes={expandQuestionTypes(config.questionTypes, settings)}
           levelUps={roundLevelUps}
+          noLongerStruggling={roundNoLongerStruggling}
           focusStruggling={focusStruggling}
           showFocusModeToggle={showFocusModeToggle}
           strugglingCount={strugglingCount}
           onToggleFocusStruggling={() => setFocusStruggling(f => !f)}
           onRestart={() => handleStart(config)}
           onHome={() => setScreen('home')}
-          onRecentProgress={() => setScreen('recentprogress')}
+          onRecentProgress={() => { setRecentProgressBack('result'); setScreen('recentprogress'); }}
         />
       )}
 
       {screen === 'recentprogress' && (
-        <RecentProgressScreen
+        <ProgressScreenRecent
           regionCode={config.regionCode}
           recentDays={config.recentDays ?? 30}
           questionTypes={expandQuestionTypes(config.questionTypes, settings)}
-          onBack={() => setScreen('result')}
+          onBack={() => setScreen(recentProgressBack)}
           onSelectBird={isDesktop
             ? setProgressSelectedSpecies
             : s => { setProgressSelectedSpecies(s); setPrevScreen('recentprogress'); setScreen('birdinfo'); }}

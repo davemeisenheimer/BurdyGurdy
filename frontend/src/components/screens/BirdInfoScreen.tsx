@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { fetchRegionSpecies } from '../../lib/api';
+import { fetchRegionSpecies } from '../../services/remote/api';
 import { useBirdInfo }            from '../../hooks/useBirdInfo';
 import { AudioPanel }             from '../bird/AudioPanel';
 import { RelatedSpeciesCarousel } from '../bird/RelatedSpeciesCarousel';

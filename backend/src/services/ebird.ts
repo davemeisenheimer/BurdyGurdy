@@ -99,18 +99,30 @@ export async function getBackyardSpeciesRanking(regionCode: string): Promise<str
   }
 }
 
-/** Top species by checklist frequency over the past 7 days, aggregated by appearance count and average rank.
+/** Top species by checklist frequency, sampled mid-month for each of the past 12 months.
+ *  Recent months are weighted more heavily (month 1 ago = weight 12, month 12 ago = weight 1)
+ *  so birds arriving now rank above birds that haven't yet arrived this season.
  *  Returns species codes ordered most→least common. Cached 24h. */
 export async function getCommonSpeciesCodes(regionCode: string): Promise<string[]> {
-  const key = `top100w:${regionCode}`;
+  const key = `top100annual:${regionCode}`;
   const cached = cache.get<string[]>(key);
   if (cached) return cached;
 
-  // Build date list: yesterday back through 7 days ago (yesterday has complete data)
-  const dates: Array<{ y: number; m: number; d: number }> = [];
-  for (let daysAgo = 1; daysAgo <= 7; daysAgo++) {
-    const dt = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
-    dates.push({ y: dt.getFullYear(), m: dt.getMonth() + 1, d: dt.getDate() });
+  // Sample the 15th of each of the past 12 months (mid-month has complete data).
+  // Month 1 ago = most recent = highest weight.
+  const MONTHS = 12;
+  const dates: Array<{ y: number; m: number; d: number; weight: number }> = [];
+  for (let monthsAgo = 1; monthsAgo <= MONTHS; monthsAgo++) {
+    const dt = new Date();
+    dt.setDate(1);
+    dt.setMonth(dt.getMonth() - monthsAgo);
+    dt.setDate(15);
+    dates.push({
+      y: dt.getFullYear(),
+      m: dt.getMonth() + 1,
+      d: 15,
+      weight: MONTHS + 1 - monthsAgo, // 12 for last month → 1 for 12 months ago
+    });
   }
 
   const client = ebirdClient();
@@ -122,27 +134,29 @@ export async function getCommonSpeciesCodes(regionCode: string): Promise<string[
     ),
   );
 
-  // Aggregate: track how many days each species appeared and their sum of ranks (lower = more common)
-  const appearances = new Map<string, { count: number; rankSum: number }>();
-  for (const result of results) {
+  // Weighted aggregate: each appearance contributes its month's weight to count and rank sum.
+  const scores = new Map<string, { weightedCount: number; weightedRankSum: number }>();
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
     if (result.status !== 'fulfilled') continue;
+    const { weight } = dates[i];
     const items: Array<{ speciesCode: string }> = result.value.data;
     items.forEach((item, idx) => {
-      const existing = appearances.get(item.speciesCode) ?? { count: 0, rankSum: 0 };
-      appearances.set(item.speciesCode, {
-        count: existing.count + 1,
-        rankSum: existing.rankSum + idx,
+      const existing = scores.get(item.speciesCode) ?? { weightedCount: 0, weightedRankSum: 0 };
+      scores.set(item.speciesCode, {
+        weightedCount:   existing.weightedCount + weight,
+        weightedRankSum: existing.weightedRankSum + idx * weight,
       });
     });
   }
 
-  if (appearances.size === 0) return [];
+  if (scores.size === 0) return [];
 
-  // Sort: most days first, then by average rank (lower = more common)
-  const codes = [...appearances.entries()]
+  // Sort: highest weighted count first, then by weighted average rank (lower = more common).
+  const codes = [...scores.entries()]
     .sort(([, a], [, b]) => {
-      if (b.count !== a.count) return b.count - a.count;
-      return a.rankSum / a.count - b.rankSum / b.count;
+      if (b.weightedCount !== a.weightedCount) return b.weightedCount - a.weightedCount;
+      return a.weightedRankSum / a.weightedCount - b.weightedRankSum / b.weightedCount;
     })
     .map(([code]) => code);
 

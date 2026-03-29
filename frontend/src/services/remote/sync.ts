@@ -3,10 +3,10 @@
  * remote records back. Merge rule: whichever record has the higher
  * `lastAsked` timestamp is considered more recent and wins.
  */
-import { supabase } from './supabase';
-import { db } from './db';
-import type { BirdProgress } from '../types';
-import type { AppSettings, QuizConfigPrefs } from './settings';
+import { supabase } from '../../lib/supabase';
+import { db } from '../../lib/db';
+import type { BirdProgress } from '../../types';
+import type { AppSettings, QuizConfigPrefs } from '../../lib/settings';
 
 // ── Upload ────────────────────────────────────────────────────────────────────
 
@@ -31,7 +31,7 @@ export async function uploadProgress(userId: string): Promise<void> {
     excluded:            r.excluded    ?? false,
     mastery_level:       r.masteryLevel       ?? 0,
     consecutive_correct: r.consecutiveCorrect ?? 0,
-    in_history:          r.inHistory   ?? false,
+    in_history:          r.isMastered  ?? false,
   }));
 
   const { error } = await supabase
@@ -42,6 +42,24 @@ export async function uploadProgress(userId: string): Promise<void> {
 }
 
 // ── Download & merge ──────────────────────────────────────────────────────────
+
+type LocalSnapshot  = { lastAsked: number; isMastered?: boolean; masteryLevel?: number } | null;
+type RemoteSnapshot = { last_asked: number; in_history?: boolean; mastery_level?: number };
+
+/** Pure predicate — exported for unit tests. */
+export function decideTakeRemote(local: LocalSnapshot, remote: RemoteSnapshot): boolean {
+  const localHistory  = local?.isMastered   ?? false;
+  const remoteHistory = remote.in_history   ?? false;
+  const localLevel    = local?.masteryLevel  ?? 0;
+  const remoteLevel   = remote.mastery_level ?? 0;
+  return (
+    !local
+    || (local.lastAsked === 0 && remote.last_asked > 0)
+    || (remoteHistory && !localHistory)
+    || (!remoteHistory && !localHistory && remoteLevel > localLevel)
+    || (remoteHistory === localHistory && remoteLevel === localLevel && remote.last_asked > local.lastAsked)
+  );
+}
 
 /**
  * Downloads all cloud records for the user and merges them into local
@@ -64,16 +82,7 @@ export async function downloadAndMerge(userId: string): Promise<number> {
   await Promise.all(
     data.map(async remote => {
       const local = await db.progress.get([remote.species_code, remote.question_type] as [string, string]);
-      const localHistory  = local?.inHistory    ?? false;
-      const remoteHistory = remote.in_history   ?? false;
-      const localLevel    = local?.masteryLevel  ?? 0;
-      const remoteLevel   = remote.mastery_level ?? 0;
-      const shouldTakeRemote =
-        !local
-        || (local.lastAsked === 0 && remote.last_asked > 0)
-        || (remoteHistory && !localHistory)
-        || (!remoteHistory && !localHistory && remoteLevel > localLevel)
-        || (remoteHistory === localHistory && remoteLevel === localLevel && remote.last_asked > local.lastAsked);
+      const shouldTakeRemote = decideTakeRemote(local ?? null, remote);
       if (shouldTakeRemote) {
         const record: BirdProgress = {
           speciesCode:        remote.species_code,
@@ -87,7 +96,7 @@ export async function downloadAndMerge(userId: string): Promise<number> {
           excluded:           remote.excluded,
           masteryLevel:       remote.mastery_level,
           consecutiveCorrect: remote.consecutive_correct,
-          inHistory:          remote.in_history,
+          isMastered:         remote.in_history,
         };
         await db.progress.put(record);
       }

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import type { QuizConfig, QuestionType, LevelUpEvent } from '../../types';
+import type { QuizConfig, QuestionType, LevelUpEvent, NoLongerStrugglingEvent } from '../../types';
 import { db } from '../../lib/db';
 import { masteryBadgeClass, masteryLabel } from '../../lib/mastery';
+import { isStrugglingByWindow, STRUGGLING_WINDOW, STRUGGLING_MIN_CORRECT } from '../../lib/struggling';
 import { FocusModeToggle } from '../ui/FocusModeToggle';
 
 const SHORT_TYPE_LABELS: Record<string, string> = {
@@ -16,6 +17,7 @@ interface Props {
   config: QuizConfig;
   questionTypes: QuestionType[];
   levelUps: LevelUpEvent[];
+  noLongerStruggling?: NoLongerStrugglingEvent[];
   focusStruggling?: boolean;
   showFocusModeToggle?: boolean;
   strugglingCount?: number;
@@ -23,6 +25,13 @@ interface Props {
   onRestart: () => void;
   onHome: () => void;
   onRecentProgress: () => void;
+}
+
+interface StrugglingBird {
+  speciesCode: string;
+  comName: string;
+  questionType: QuestionType;
+  recentCorrect: number;
 }
 
 interface MasteryStats {
@@ -76,10 +85,42 @@ function BirdList({ birds, cutoff }: { birds: { comName: string; events: LevelUp
   );
 }
 
-function LevelUpSummary({ levelUps }: { levelUps: LevelUpEvent[] }) {
+function groupNoLongerStruggling(events: NoLongerStrugglingEvent[]) {
+  const bySpecies = new Map<string, { comName: string; events: NoLongerStrugglingEvent[] }>();
+  for (const ev of events) {
+    const entry = bySpecies.get(ev.speciesCode) ?? { comName: ev.comName, events: [] };
+    entry.events.push(ev);
+    bySpecies.set(ev.speciesCode, entry);
+  }
+  return [...bySpecies.values()];
+}
+
+function groupStrugglingBirds(birds: StrugglingBird[]) {
+  const bySpecies = new Map<string, { comName: string; birds: StrugglingBird[] }>();
+  for (const b of birds) {
+    const entry = bySpecies.get(b.speciesCode) ?? { comName: b.comName, birds: [] };
+    entry.birds.push(b);
+    bySpecies.set(b.speciesCode, entry);
+  }
+  // Sort closest-to-recovery first (highest recentCorrect at the top)
+  return [...bySpecies.values()].sort((a, b) =>
+    Math.max(...b.birds.map(x => x.recentCorrect)) - Math.max(...a.birds.map(x => x.recentCorrect))
+  );
+}
+
+function LevelUpSummary({ levelUps, noLongerStruggling = [], stillStruggling = [] }: { levelUps: LevelUpEvent[]; noLongerStruggling?: NoLongerStrugglingEvent[]; stillStruggling?: StrugglingBird[] }) {
   const CUTOFF = 4;
   const harder    = groupBySpecies(levelUps.filter(ev => !ev.graduated));
   const graduated = groupBySpecies(levelUps.filter(ev => ev.graduated));
+
+  // Don't show "no longer struggling" for birds that also appear in "graduated" — graduation is the bigger event.
+  const graduatedCodes = new Set(levelUps.filter(ev => ev.graduated).map(ev => ev.speciesCode));
+  const recovered = groupNoLongerStruggling(noLongerStruggling.filter(ev => !graduatedCodes.has(ev.speciesCode)));
+
+  const grouped = groupStrugglingBirds(stillStruggling);
+
+  const hasContent = harder.length > 0 || graduated.length > 0 || recovered.length > 0 || grouped.length > 0;
+  if (!hasContent) return null;
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 mb-6 text-left space-y-4">
@@ -99,14 +140,81 @@ function LevelUpSummary({ levelUps }: { levelUps: LevelUpEvent[] }) {
           <BirdList birds={graduated} cutoff={CUTOFF} />
         </div>
       )}
+      {recovered.length > 0 && (
+        <div className={(harder.length > 0 || graduated.length > 0) ? 'border-t border-slate-100 pt-4' : ''}>
+          <p className="text-sm font-semibold text-sky-700 mb-3">
+            ✓ {recovered.length} {recovered.length === 1 ? 'bird' : 'birds'} no longer struggling
+          </p>
+          <div className="space-y-2">
+            {recovered.map(({ comName, events }) => (
+              <div key={comName} className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <span className="text-sm text-slate-700 font-medium">{comName}</span>
+                <span className="flex flex-wrap gap-1">
+                  {events.map(ev => (
+                    <span key={ev.questionType} className="text-xs px-1.5 py-0.5 rounded font-medium bg-sky-50 text-sky-700">
+                      {events.length > 1 ? `${SHORT_TYPE_LABELS[ev.questionType] ?? ev.questionType}: ` : ''}{ev.recentCorrect}/{STRUGGLING_WINDOW} recent correct
+                    </span>
+                  ))}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {grouped.length > 0 && (
+        <StrugglingList
+          grouped={grouped}
+          hasPrevSection={harder.length > 0 || graduated.length > 0 || recovered.length > 0}
+          cutoff={CUTOFF}
+        />
+      )}
     </div>
   );
 }
 
-export function ResultScreen({ score, config, questionTypes, levelUps, focusStruggling, showFocusModeToggle, strugglingCount, onToggleFocusStruggling, onRestart, onHome, onRecentProgress }: Props) {
+function StrugglingList({ grouped, hasPrevSection, cutoff }: {
+  grouped: ReturnType<typeof groupStrugglingBirds>;
+  hasPrevSection: boolean;
+  cutoff: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? grouped : grouped.slice(0, cutoff);
+  return (
+    <div className={hasPrevSection ? 'border-t border-slate-100 pt-4' : ''}>
+      <p className="text-sm font-semibold text-amber-700 mb-3">
+        Still struggling (need {STRUGGLING_MIN_CORRECT}/{STRUGGLING_WINDOW} recent correct):
+      </p>
+      <div className="space-y-2">
+        {visible.map(({ comName, birds }) => (
+          <div key={comName} className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <span className="text-sm text-slate-700 font-medium">{comName}</span>
+            <span className="flex flex-wrap gap-1">
+              {birds.map(b => (
+                <span key={b.questionType} className="text-xs px-1.5 py-0.5 rounded font-medium bg-amber-50 text-amber-700">
+                  {birds.length > 1 ? `${SHORT_TYPE_LABELS[b.questionType] ?? b.questionType}: ` : ''}{b.recentCorrect}/{STRUGGLING_WINDOW}
+                </span>
+              ))}
+            </span>
+          </div>
+        ))}
+      </div>
+      {grouped.length > cutoff && (
+        <button
+          onClick={() => setExpanded(e => !e)}
+          className="mt-2 text-xs text-sky-600 hover:underline"
+        >
+          {expanded ? 'Show less' : `and ${grouped.length - cutoff} more…`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function ResultScreen({ score, config, questionTypes, levelUps, noLongerStruggling = [], focusStruggling, showFocusModeToggle, strugglingCount, onToggleFocusStruggling, onRestart, onHome, onRecentProgress }: Props) {
   const pct = Math.round((score.correct / score.total) * 100);
   const emoji = pct >= 80 ? '🎉' : pct >= 60 ? '🙂' : '💪';
   const [masteryStats, setMasteryStats] = useState<MasteryStats | null>(null);
+  const [stillStruggling, setStillStruggling] = useState<StrugglingBird[]>([]);
 
   useEffect(() => {
     const back = config.recentDays ?? 30;
@@ -127,13 +235,34 @@ export function ResultScreen({ score, config, questionTypes, levelUps, focusStru
 
       let mastered = 0;
       for (const { speciesCode } of recentSpecies) {
-        const allGraduated = questionTypes.every(t => progressMap.get(`${speciesCode}:${t}`)?.inHistory === true);
+        const allGraduated = questionTypes.every(t => progressMap.get(`${speciesCode}:${t}`)?.isMastered === true);
         if (allGraduated) mastered++;
       }
 
       setMasteryStats({ mastered, total: recentSpecies.length });
     })().catch(() => {});
   }, []);
+
+  // Load currently-struggling birds from the DB for focus mode summary.
+  useEffect(() => {
+    if (!focusStruggling) return;
+    db.progress.toArray().then(records => {
+      const birds: StrugglingBird[] = records
+        .filter(r => {
+          if (!questionTypes.includes(r.questionType)) return false;
+          if (r.excluded) return false;
+          if (!(r.isMastered ?? false)) return false;
+          return isStrugglingByWindow(r.recentAnswers ?? []);
+        })
+        .map(r => ({
+          speciesCode: r.speciesCode,
+          comName: r.comName,
+          questionType: r.questionType,
+          recentCorrect: (r.recentAnswers ?? []).filter(Boolean).length,
+        }));
+      setStillStruggling(birds);
+    }).catch(() => {});
+  }, [focusStruggling, questionTypes]);
 
   const windowLabel = config.recentDays === 1 ? '1 day' : `${config.recentDays ?? 30} days`;
 
@@ -174,7 +303,7 @@ export function ResultScreen({ score, config, questionTypes, levelUps, focusStru
           </div>
         )}
 
-        {levelUps.length > 0 && <LevelUpSummary levelUps={levelUps} />}
+        {(levelUps.length > 0 || noLongerStruggling.length > 0 || stillStruggling.length > 0) && <LevelUpSummary levelUps={levelUps} noLongerStruggling={noLongerStruggling} stillStruggling={stillStruggling} />}
 
         <div className="space-y-3">
           <button

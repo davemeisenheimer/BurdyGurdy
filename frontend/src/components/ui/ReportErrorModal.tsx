@@ -37,7 +37,8 @@ export function ReportErrorModal({ mediaType, mediaUrl, comName, onSubmit, onClo
     else { a.play().catch(() => {}); setPlaying(true); }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
     if (!issueType) return;
     onSubmit({ issueType, wrongBird: wrongBird.trim(), description: description.trim() });
   };
@@ -47,9 +48,10 @@ export function ReportErrorModal({ mediaType, mediaUrl, comName, onSubmit, onClo
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={onClose}
     >
-      <div
+      <form
         className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5"
         onClick={e => e.stopPropagation()}
+        onSubmit={handleSubmit}
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
@@ -127,14 +129,14 @@ export function ReportErrorModal({ mediaType, mediaUrl, comName, onSubmit, onClo
             Cancel
           </button>
           <button
-            onClick={handleSubmit}
+            type="submit"
             disabled={!issueType}
             className="flex-1 py-2 bg-forest-600 hover:bg-forest-700 text-white rounded-xl text-sm font-medium disabled:opacity-40 transition-colors"
           >
             Send report
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

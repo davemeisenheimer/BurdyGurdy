@@ -30,6 +30,7 @@ export interface QuizQuestion {
   options: string[];
   optionAudioUrls?: string[];
   correctAnswer: string;
+  noAudio?: boolean;  // true when no recordings exist — frontend awards a free correct answer
 }
 
 
@@ -459,6 +460,9 @@ router.post('/questions', async (req, res) => {
         ]);
 
         const availableRecordings = filterRecordings(recordings, bannedAudioSet);
+        if (availableRecordings.length === 0 && ['song', 'song-latin'].includes(q.type as string)) {
+          q.noAudio = true;
+        }
         if (availableRecordings.length > 0) {
           // Shuffle and take up to 3 paired tracks so the frontend can fall back if a URL fails.
           // Each track keeps its audio and spectrogram together to avoid a mismatch on fallback.
@@ -497,7 +501,7 @@ router.post('/questions', async (req, res) => {
 
     const allValid = questions.filter(q => {
       const t = q.type as string;
-      if (['song', 'song-latin'].includes(t) && !q.audioUrl) return false;
+      if (['song', 'song-latin'].includes(t) && !q.audioUrl && !q.noAudio) return false;
       if (['image', 'image-latin', 'image-song'].includes(t) && !q.imageUrl) return false;
       if (['sono', 'sono-song'].includes(t) && !q.sonoUrl) return false;
       if (t.endsWith('-song') && (!q.optionAudioUrls || q.optionAudioUrls.length < 4 || q.optionAudioUrls.some(u => !u))) return false;

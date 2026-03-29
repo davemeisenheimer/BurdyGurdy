@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { QuizQuestion, QuestionType, BirdSpecies, AttributedPhoto } from '../types';
+import type { QuizQuestion, QuestionType, BirdSpecies, AttributedPhoto } from '../../types';
 
 const api = axios.create({ baseURL: (import.meta.env.VITE_API_URL ?? '') + '/api' });
 

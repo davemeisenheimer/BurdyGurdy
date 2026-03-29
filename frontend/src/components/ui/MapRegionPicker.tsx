@@ -2,8 +2,8 @@ import { useState, useCallback, useRef } from 'react';
 import { MapContainer, TileLayer, CircleMarker, useMapEvents } from 'react-leaflet';
 import type { LatLng } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { locateRegion } from '../../lib/api';
-import type { LocateResult } from '../../lib/api';
+import { locateRegion } from '../../services/remote/api';
+import type { LocateResult } from '../../services/remote/api';
 
 interface Props {
   onSelect: (code: string, name: string) => void;

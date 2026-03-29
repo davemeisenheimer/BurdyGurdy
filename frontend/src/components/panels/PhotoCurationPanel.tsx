@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { db } from '../../lib/db';
-import { fetchBirdPhotos, fetchAllSpecies } from '../../lib/api';
+import { fetchBirdPhotos, fetchAllSpecies } from '../../services/remote/api';
 import { blockPhotoDirectly, unblockPhotoDirectly } from '../../lib/adminSync';
-import type { AllSpeciesEntry } from '../../lib/api';
+import type { AllSpeciesEntry } from '../../services/remote/api';
 
 interface PhotoEntry { url: string; label: string; }
 

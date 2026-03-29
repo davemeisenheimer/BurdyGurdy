@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import axios from 'axios';
-import { getTaxonomy, getRegionalSpecies, ebirdClient, getCommonSpeciesCodes, getBackyardSpeciesRanking, getSpeciesList } from '../services/ebird';
+import { getTaxonomy, getRegionalSpecies, ebirdClient, getCommonSpeciesCodes, getSpeciesList } from '../services/ebird';
 import { getRecordings } from '../services/xenocanto';
 import { getSpeciesPhotoUrl, getSpeciesPhotoUrls, getSpeciesPhotoUrlsForQuestion } from '../services/macaulay';
 import { getWikipediaSummary, getWikipediaRangeMap, getWikipediaRangeMapLegend, getWikipediaPhotos } from '../services/wikipedia';
@@ -9,6 +9,17 @@ import { BACKYARD_FAMILIES } from '../constants';
 import { filterObservationsToKnownSpecies } from '../lib/speciesFilter';
 
 const router = Router();
+
+const PRIORITY_GROUPS = ['recentCommon', 'recentUncommon', 'regionCommon', 'regionUncommon', 'rareUncommon'] as const;
+
+/** Returns the 0-based sort index for a species given its region/observation flags. */
+function pgIndex(isHistorical: boolean, isBackyard: boolean, commonRank: number): number {
+  if (!isHistorical && isBackyard)       return 0; // recentCommon
+  if (!isHistorical && !isBackyard)      return 1; // recentUncommon
+  if (isHistorical && commonRank < 9999) return 2; // regionCommon   — any historically common bird
+  if (isHistorical && isBackyard)        return 3; // regionUncommon — uncommon but backyard family
+  return 4;                                        // rareUncommon   — uncommon + non-backyard (vagrants)
+}
 
 // GET /api/birds/region/:regionCode
 // Returns species recently observed in a region, enriched with taxonomy info.
@@ -19,17 +30,15 @@ router.get('/region/:regionCode', async (req, res) => {
     const { regionCode } = req.params;
     const backParam = parseInt(req.query.back as string);
     const back = [1, 7, 30].includes(backParam) ? backParam : 30;
-    const [observations, taxonomy, backyardCodes, top100Codes, historicalCodes] = await Promise.all([
+    const [observations, taxonomy, top100Codes, historicalCodes] = await Promise.all([
       getRegionalSpecies(regionCode, back),
       getTaxonomy(),
-      getBackyardSpeciesRanking(regionCode),
       getCommonSpeciesCodes(regionCode),
       getSpeciesList(regionCode),
     ]);
 
     const taxMap = new Map(taxonomy.map(t => [t.speciesCode, t]));
-    const commonCodes = backyardCodes.length >= 10 ? backyardCodes : top100Codes;
-    const commonRank = new Map(commonCodes.map((code, i) => [code, i]));
+    const commonRank = new Map(top100Codes.map((code, i) => [code, i]));
 
     // Build recent species (deduplicated, hybrids/slashes/spuhs excluded),
     // tagged as not historical
@@ -71,19 +80,25 @@ router.get('/region/:regionCode', async (req, res) => {
 
     const all = [...recent, ...historical];
 
-    // Sort into 4 priority groups:
-    //   0: recent + common    1: recent + not common
-    //   2: historical + common    3: historical + not common
+    // Sort into 5 priority groups:
+    //   0: recentCommon   — recent + backyard family
+    //   1: recentUncommon — recent + non-backyard family
+    //   2: regionCommon   — historical + in common ranking (any genuinely common regional bird)
+    //   3: regionUncommon — historical + NOT in common ranking + backyard family (uncommon visitors)
+    //   4: rareUncommon   — historical + NOT in common ranking + non-backyard (vagrants/rarities)
     // Within each group, order by commonness rank.
     all.sort((a, b) => {
-      const groupA = (a.isHistorical ? 2 : 0) + (a.isBackyard ? 0 : 1);
-      const groupB = (b.isHistorical ? 2 : 0) + (b.isBackyard ? 0 : 1);
-      if (groupA !== groupB) return groupA - groupB;
+      const gA = pgIndex(a.isHistorical, a.isBackyard, a.commonRank);
+      const gB = pgIndex(b.isHistorical, b.isBackyard, b.commonRank);
+      if (gA !== gB) return gA - gB;
       return a.commonRank - b.commonRank;
     });
 
-    // Strip raw sort key; expose derived flags for client-side filtering
-    res.json(all.map(({ commonRank, ...rest }) => ({ ...rest, isCommon: commonRank < 9999 })));
+    // Strip raw sort key; send priorityGroup string for client-side promotion ordering
+    res.json(all.map(s => {
+      const { commonRank, ...rest } = s;
+      return { ...rest, priorityGroup: PRIORITY_GROUPS[pgIndex(rest.isHistorical, rest.isBackyard, commonRank)] };
+    }));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch regional birds' });

@@ -1,5 +1,5 @@
 import { db } from './db';
-import { STRUGGLING_THRESHOLD } from './adaptive';
+import { STRUGGLING_THRESHOLD } from './struggling';
 import type { QuestionType } from '../types';
 
 const VICTORY_KEY = 'birdygurdy_victories';
@@ -66,7 +66,7 @@ export function mergeVictorySeen(remoteKeys: string[]): void {
  * Checks whether the player has mastered all non-historical birds in the region
  * for the given observation window and question types.
  *
- * Mastered = inHistory === true (graduated from level 2 with a 5-consecutive-correct streak)
+ * Mastered = isMastered === true (graduated from level 2 with a 5-consecutive-correct streak)
  * + overall accuracy across those records > STRUGGLING_THRESHOLD.
  */
 export async function checkVictoryCondition(
@@ -97,7 +97,7 @@ export async function checkVictoryCondition(
   for (const { speciesCode } of recentSpecies) {
     for (const type of questionTypes) {
       const record = recordMap.get(`${speciesCode}:${type}`);
-      if (!record || !record.inHistory) {
+      if (!record || !record.isMastered) {
         allGraduated = false;
       }
       if (record) {

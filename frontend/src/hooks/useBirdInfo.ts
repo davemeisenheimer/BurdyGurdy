@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { fetchBirdInfo, fetchRecentSightings } from '../lib/api';
-import type { BirdInfoData, RecentSighting } from '../lib/api';
+import { fetchBirdInfo, fetchRecentSightings } from '../services/remote/api';
+import type { BirdInfoData, RecentSighting } from '../services/remote/api';
 
 export function useBirdInfo(
   speciesCode: string | null,

@@ -6,7 +6,7 @@ import {
   blockReport, invalidateReport, deleteReport, unblockReport,
 } from '../../lib/adminSync';
 import type { MediaReport } from '../../lib/adminSync';
-import { fetchAdminBlockedMedia } from '../../lib/sync';
+import { fetchAdminBlockedMedia } from '../../services/remote/sync';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

@@ -12,7 +12,7 @@ function makeRecord(
   speciesCode: string,
   questionType = 'image',
   masteryLevel = 0,
-  inHistory = false,
+  isMastered = false,
   lastAsked = Date.now(),
   consecutiveCorrect = 0,
 ): BirdProgress {
@@ -28,7 +28,7 @@ function makeRecord(
     excluded: false,
     masteryLevel,
     consecutiveCorrect,
-    inHistory,
+    isMastered,
   };
 }
 
@@ -84,7 +84,7 @@ describe('categoriseRecentBirds', () => {
     expect(result[0].category).toBe('hard');
   });
 
-  it('graduated bird (inHistory=true) for all question types → mastered', () => {
+  it('graduated bird (isMastered=true) for all question types → mastered', () => {
     const result = categoriseRecentBirds(
       [makeSpecies('amero')],
       [makeRecord('amero', 'image', 2, true)],

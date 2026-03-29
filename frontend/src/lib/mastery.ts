@@ -1,3 +1,5 @@
+import { isStrugglingByWindow } from './struggling';
+
 /** Consecutive-correct streak needed to advance from level 0→1 and 1→2. */
 export const MASTERY_ADVANCE_STREAK = 3;
 /** Consecutive-correct streak needed to graduate from level 2 to mastered. */
@@ -33,8 +35,7 @@ export function masteryLabel(level: number, graduated = false): string {
   return MASTERY_LABELS[Math.min(level, MASTERY_LABELS.length - 1)];
 }
 
-/** True when accuracy is below the struggling threshold (mirrors adaptive.ts calcWeight logic). */
-export function isStruggling(correct: number, incorrect: number): boolean {
-  const total = correct + incorrect;
-  return total > 0 && correct / total < 0.90;
+/** True when the mastered bird's rolling window shows fewer than STRUGGLING_MIN_CORRECT correct. */
+export function isStruggling(recentAnswers: boolean[]): boolean {
+  return isStrugglingByWindow(recentAnswers);
 }
