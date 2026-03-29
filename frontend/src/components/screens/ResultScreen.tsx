@@ -25,6 +25,7 @@ interface Props {
   onRestart: () => void;
   onHome: () => void;
   onRecentProgress: () => void;
+  onLifeList: () => void;
 }
 
 interface StrugglingBird {
@@ -210,7 +211,7 @@ function StrugglingList({ grouped, hasPrevSection, cutoff }: {
   );
 }
 
-export function ResultScreen({ score, config, questionTypes, levelUps, noLongerStruggling = [], focusStruggling, showFocusModeToggle, strugglingCount, onToggleFocusStruggling, onRestart, onHome, onRecentProgress }: Props) {
+export function ResultScreen({ score, config, questionTypes, levelUps, noLongerStruggling = [], focusStruggling, showFocusModeToggle, strugglingCount, onToggleFocusStruggling, onRestart, onHome, onRecentProgress, onLifeList }: Props) {
   const pct = Math.round((score.correct / score.total) * 100);
   const emoji = pct >= 80 ? '🎉' : pct >= 60 ? '🙂' : '💪';
   const [masteryStats, setMasteryStats] = useState<MasteryStats | null>(null);
@@ -282,17 +283,27 @@ export function ResultScreen({ score, config, questionTypes, levelUps, noLongerS
           </div>
           {masteryStats !== null && (
             <div className="text-sm text-slate-500 border-t border-slate-100 pt-4">
-              You have mastered{' '}
-              <span className="font-semibold text-slate-700">{masteryStats.mastered}</span>
-              {' '}out of{' '}
-              <span className="font-semibold text-slate-700">{masteryStats.total}</span>
-              {' '}birds seen in your region in the past {windowLabel}.{' '}
-              <button
-                onClick={onRecentProgress}
-                className="text-forest-600 hover:text-forest-700 hover:underline font-medium"
-              >
-                View recent progress →
-              </button>
+              <div>
+                You have mastered{' '}
+                <span className="font-semibold text-slate-700">{masteryStats.mastered}</span>
+                {' '}out of{' '}
+                <span className="font-semibold text-slate-700">{masteryStats.total}</span>
+                {' '}birds seen in your region in the past {windowLabel}.{' '}
+                <button
+                  onClick={onRecentProgress}
+                  className="text-forest-600 hover:text-forest-700 hover:underline font-medium"
+                >
+                  View recent progress →
+                </button>
+              </div>
+              <div className="text-center mt-2">
+                <button
+                  onClick={onLifeList}
+                  className="text-forest-600 hover:text-forest-700 hover:underline font-medium"
+                >
+                  View Life List
+                </button>
+              </div>
             </div>
           )}
         </div>

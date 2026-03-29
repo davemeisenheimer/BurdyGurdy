@@ -189,6 +189,7 @@ export default function App() {
   const [screen, setScreen] = useState<'home' | 'quiz' | 'result' | 'progress' | 'settings' | 'victory' | 'recentprogress' | 'birdinfo'>('home');
   const [prevScreen, setPrevScreen] = useState<'progress' | 'recentprogress'>('progress');
   const [recentProgressBack, setRecentProgressBack] = useState<'result' | 'progress'>('result');
+  const [lifeListBack, setLifeListBack] = useState<'home' | 'result'>('home');
   const [rightPanelTab, setRightPanelTab] = useState<'info' | 'curation'>('info');
   const [progressSelectedSpecies, setProgressSelectedSpecies] = useState<{ speciesCode: string; comName: string } | null>(null);
   const isAdmin = user?.user_metadata?.is_admin === true;
@@ -358,7 +359,7 @@ export default function App() {
 
       {screen === 'progress' && (
         <ProgressScreenLife
-          onBack={() => setScreen('home')}
+          onBack={() => { setScreen(lifeListBack); setLifeListBack('home'); }}
           userId={user?.id}
           questionTypes={expandQuestionTypes(config.questionTypes, settings)}
           focusStruggling={focusStruggling}
@@ -464,6 +465,7 @@ export default function App() {
           onRestart={() => handleStart(config)}
           onHome={() => setScreen('home')}
           onRecentProgress={() => { setRecentProgressBack('result'); setScreen('recentprogress'); }}
+          onLifeList={() => { setLifeListBack('result'); setScreen('progress'); }}
         />
       )}
 
