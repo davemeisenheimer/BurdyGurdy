@@ -2,7 +2,8 @@ import { useEffect, useState, Fragment } from 'react';
 import { db } from '../../lib/db';
 import { categoriseRecentBirds, summariseCounts } from '../../lib/recentProgress';
 import { DEV_SHOW_PALETTE_SPLIT } from '../../lib/devFlags';
-import { MASTERY_LABELS, MASTERY_BADGE_COLORS, MASTERED_BADGE_COLOR, masteryThreshold, isStruggling } from '../../lib/mastery';
+import { MASTERY_LABELS, MASTERY_BADGE_COLORS, MASTERED_BADGE_COLOR, masteryThreshold } from '../../lib/mastery';
+import { isNonMasteredStruggling } from '../../lib/struggling';
 import { MasteryBadge } from '../ui/MasteryBadge';
 import type { QuestionType, CachedSpecies, BirdProgress } from '../../types';
 import type { RecentBirdEntry, RecentProgressCategory } from '../../lib/recentProgress';
@@ -41,7 +42,7 @@ const SECTION_COLORS: Record<RecentProgressCategory, string> = {
   mastered: 'text-emerald-700',
 };
 
-export function RecentProgressScreen({ regionCode, recentDays, questionTypes, onBack, onSelectBird }: Props) {
+export function ProgressScreenRecent({ regionCode, recentDays, questionTypes, onBack, onSelectBird }: Props) {
   const [cachedSpecies, setCachedSpecies]       = useState<CachedSpecies[]>([]);
   const [progressRecords, setProgressRecords]   = useState<BirdProgress[]>([]);
   const [loading, setLoading]                   = useState(true);
@@ -234,7 +235,7 @@ function BirdCard({ bird, questionTypes, onSelectBird }: { bird: RecentBirdEntry
   }
 
   // easy / medium / hard
-  const activeRecords = bird.records.filter(r => !r.inHistory);
+  const activeRecords = bird.records.filter(r => !r.isMastered);
   const leading = activeRecords.reduce<(typeof activeRecords)[0] | null>((best, r) =>
     (r.masteryLevel ?? 0) >= (best?.masteryLevel ?? -1) ? r : best, null,
   );
@@ -254,13 +255,13 @@ function BirdCard({ bird, questionTypes, onSelectBird }: { bird: RecentBirdEntry
           <span className="font-medium text-slate-700">{bird.comName}</span>
           <MasteryBadge
             className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${MASTERY_BADGE_COLORS[Math.min(lvl, 2)]}`}
-            isStruggling={leading !== null && isStruggling(leading.correct, leading.incorrect)}
+            isStruggling={leading !== null && isNonMasteredStruggling(leading.correct, leading.incorrect)}
           >
             {streak}/{threshold} {MASTERY_LABELS[Math.min(lvl, 2)]}
           </MasteryBadge>
-          {typeCount > 1 && bird.records.some(r => r.inHistory) && (
+          {typeCount > 1 && bird.records.some(r => r.isMastered) && (
             <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${MASTERED_BADGE_COLOR}`}>
-              {bird.records.filter(r => r.inHistory).length}/{typeCount} mastered
+              {bird.records.filter(r => r.isMastered).length}/{typeCount} mastered
             </span>
           )}
         </div>

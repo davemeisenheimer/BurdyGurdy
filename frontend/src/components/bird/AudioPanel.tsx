@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import type { BirdInfoData } from '../../lib/api';
+import type { BirdInfoData } from '../../services/remote/api';
 
 interface Props {
   recordings:   BirdInfoData['recordings'];

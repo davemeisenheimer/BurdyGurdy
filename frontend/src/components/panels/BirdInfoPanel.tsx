@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import type { QuizQuestion } from '../../types';
-import { fetchBirdInfo, fetchRecentSightings, fetchRegionSpecies } from '../../lib/api';
-import type { BirdInfoData, RecentSighting } from '../../lib/api';
+import { fetchBirdInfo, fetchRecentSightings, fetchRegionSpecies } from '../../services/remote/api';
+import type { BirdInfoData, RecentSighting } from '../../services/remote/api';
 import { WelcomePanel }          from '../bird/WelcomePanel';
 import { AnswerBanner }          from '../bird/AnswerBanner';
 import { AudioPanel }            from '../bird/AudioPanel';

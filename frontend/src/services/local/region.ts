@@ -1,12 +1,27 @@
-import { db } from './db';
-import { fetchRegionSpecies } from './api';
-import type { CachedSpecies } from '../types';
+import { db } from '../../lib/db';
+import { fetchRegionSpecies } from '../remote/api';
+import type { BirdSpecies, CachedSpecies } from '../../types';
 
 /** Cache TTL scales with the observation window — shorter windows need fresher data. */
 function ttlMs(back: number): number {
   if (back <= 1)  return 1 * 60 * 60 * 1000;  // 1 day window  → 1 hour
   if (back <= 7)  return 6 * 60 * 60 * 1000;  // 7 day window  → 6 hours
   return          24 * 60 * 60 * 1000;          // 30 day window → 24 hours
+}
+
+/**
+ * Maps the full BirdSpecies API response to the leaner CachedSpecies shape.
+ * All species from all five promotion groups are included — no filtering.
+ * Exported for unit tests.
+ */
+export function buildSpeciesCache(full: BirdSpecies[]): CachedSpecies[] {
+  return full.map(s => ({
+    speciesCode:   s.speciesCode,
+    comName:       s.comName,
+    sciName:       s.sciName,
+    isHistorical:  s.isHistorical,
+    priorityGroup: s.priorityGroup,
+  }));
 }
 
 /**
@@ -23,22 +38,12 @@ export async function getRegionSpecies(regionCode: string, back = 30): Promise<C
   }
 
   const full = await fetchRegionSpecies(regionCode, back);
-  const species: CachedSpecies[] = full
-    .filter(s => !s.isHistorical || s.isCommon)
-    .map(s => ({
-      speciesCode: s.speciesCode,
-      comName: s.comName,
-      sciName: s.sciName,
-      isHistorical: s.isHistorical,
-    }));
+  const species = buildSpeciesCache(full);
 
-  // Preserve promotionIndex across cache refreshes so we don't restart the promotion queue
-  const existing = await db.regionSpecies.get(cacheKey);
   await db.regionSpecies.put({
     regionCode: cacheKey,
     species,
     cachedAt: Date.now(),
-    promotionIndex: existing?.promotionIndex ?? 0,
   });
   return species;
 }

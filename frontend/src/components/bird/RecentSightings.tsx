@@ -1,4 +1,4 @@
-import type { RecentSighting } from '../../lib/api';
+import type { RecentSighting } from '../../services/remote/api';
 
 function parseLocName(locName: string): { name: string; coords: string | null } {
   const bracketed = locName.match(/^(.+?)\s*\(\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*\)\s*$/);

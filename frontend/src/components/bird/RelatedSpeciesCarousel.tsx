@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import type { AttributedPhoto } from '../../types';
-import { fetchRegionSpecies, fetchBirdPhotos, fetchBirdAudio } from '../../lib/api';
-import type { CarouselRecording } from '../../lib/api';
+import { fetchRegionSpecies, fetchBirdPhotos, fetchBirdAudio } from '../../services/remote/api';
+import type { CarouselRecording } from '../../services/remote/api';
 import { db } from '../../lib/db';
 import type { SlideSpecies } from './types';
 

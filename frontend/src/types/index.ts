@@ -4,6 +4,8 @@ export type QuestionType =
   | 'image-song' | 'sono-song' | 'latin-song';
 export type GameMode = 'adaptive' | 'random';
 
+export type PriorityGroup = 'recentCommon' | 'recentUncommon' | 'regionCommon' | 'regionUncommon' | 'rareUncommon';
+
 export interface BirdSpecies {
   speciesCode: string;
   comName: string;
@@ -13,7 +15,7 @@ export interface BirdSpecies {
   order?: string;
   isBackyard?: boolean;
   isHistorical?: boolean;
-  isCommon?: boolean;
+  priorityGroup?: PriorityGroup;
 }
 
 export interface AttributedPhoto {
@@ -33,14 +35,16 @@ export interface CachedSpecies {
   comName: string;
   sciName: string;
   isHistorical?: boolean;
+  priorityGroup?: PriorityGroup;
 }
 
 /** IndexedDB record for caching the ordered regional species list. */
 export interface RegionSpeciesCache {
   regionCode: string;
-  species: CachedSpecies[];  // ordered: backyard-common-first, then other-common-first
+  species: CachedSpecies[];  // ordered by 5-group priority: recentCommon → recentUncommon → regionCommon → regionUncommon → rareUncommon
   cachedAt: number;
-  promotionIndex: number;    // index of the next bird to promote into the learning palette
+  promotionIndex?: number;                                     // legacy — no longer written, kept so old records deserialise cleanly
+  promotionIndexByType?: Partial<Record<QuestionType, number>>; // legacy — no longer written, kept so old records deserialise cleanly
 }
 
 export interface QuizQuestion {
@@ -59,6 +63,7 @@ export interface QuizQuestion {
   options: string[];
   optionAudioUrls?: string[];
   correctAnswer: string;
+  noAudio?: boolean;  // true when no recordings exist — frontend awards a free correct answer
 }
 
 export interface QuizConfig {
@@ -75,8 +80,16 @@ export interface LevelUpEvent {
   speciesCode: string;
   comName: string;
   questionType: QuestionType;
-  newLevel: number;   // 1, 2, or 3 where 3 = graduated to mastered (inHistory)
-  graduated: boolean; // true when inHistory becomes true
+  newLevel: number;   // 1, 2, or 3 where 3 = graduated to mastered
+  graduated: boolean; // true when isMastered becomes true
+}
+
+/** Fired when a mastered bird's rolling window crosses back to ≥ 80% correct. */
+export interface NoLongerStrugglingEvent {
+  speciesCode: string;
+  comName: string;
+  questionType: QuestionType;
+  recentCorrect: number;
 }
 
 export interface BirdProgress {
@@ -91,5 +104,7 @@ export interface BirdProgress {
   excluded: boolean;           // user asked never to see this bird again
   masteryLevel: number;        // 0=easy distractors, 1=same-family, 2=same-genus
   consecutiveCorrect: number;  // streak at the current mastery level
-  inHistory?: boolean;         // graduated from learning palette to history palette for this question type
+  isMastered?: boolean;        // graduated from learning palette — appears only occasionally for review
+  noAudio?: boolean;           // graduated automatically because no recordings exist for this question type
+  recentAnswers?: boolean[];   // rolling window of last STRUGGLING_WINDOW answers (mastered birds only)
 }

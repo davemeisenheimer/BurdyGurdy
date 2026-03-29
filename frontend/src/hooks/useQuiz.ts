@@ -8,17 +8,18 @@ function weightedPick<T>(candidates: Array<{ item: T; weight: number }>): T | nu
   for (const c of candidates) { r -= c.weight; if (r <= 0) return c.item; }
   return candidates[candidates.length - 1].item;
 }
-import type { QuizQuestion, QuizConfig, AttributedPhoto, LevelUpEvent } from '../types';
-import { fetchQuizQuestions, fetchBirdPhotos, fetchBirdInfo, fetchRecentSightings } from '../lib/api';
-import type { RecentSighting } from '../lib/api';
+import type { QuizQuestion, QuizConfig, AttributedPhoto, LevelUpEvent, NoLongerStrugglingEvent } from '../types';
+import { fetchQuizQuestions, fetchBirdPhotos, fetchBirdInfo, fetchRecentSightings } from '../services/remote/api';
+import type { RecentSighting } from '../services/remote/api';
 import { db } from '../lib/db';
 import {
-  recordAnswer, setFavourite, getFavourited,
+  recordAnswer, graduateNoAudio, setFavourite, getFavourited,
   setExcluded, getExcluded, getAdaptiveParams,
-  maintainLevel0Palette, checkAndPromote, STRUGGLING_THRESHOLD,
-} from '../lib/adaptive';
-import { getRegionSpecies } from '../lib/regionCache';
-import { uploadUserBlockedPhoto } from '../lib/sync';
+  maintainLevel0Palette,
+} from '../services/local/progress';
+import { isStrugglingByWindow } from '../lib/struggling';
+import { getRegionSpecies } from '../services/local/region';
+import { uploadUserBlockedPhoto } from '../services/remote/sync';
 
 export type QuizStatus = 'idle' | 'loading' | 'active' | 'answered' | 'complete' | 'error';
 
@@ -51,8 +52,9 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
   // overwrite the current question's photo state (which would corrupt the report URL).
   const prefetchedPhotoRef = useRef<{ questionId: string; photo: AttributedPhoto } | null>(null);
   const [roundLevelUps, setRoundLevelUps] = useState<LevelUpEvent[]>([]);
+  const [roundNoLongerStruggling, setRoundNoLongerStruggling] = useState<NoLongerStrugglingEvent[]>([]);
   const [isFirstEncounter, setIsFirstEncounter] = useState(false);
-  const [currentMastery, setCurrentMastery] = useState<{ masteryLevel: number; consecutiveCorrect: number; inHistory: boolean; correct: number; incorrect: number } | null>(null);
+  const [currentMastery, setCurrentMastery] = useState<{ masteryLevel: number; consecutiveCorrect: number; isMastered: boolean; correct: number; incorrect: number } | null>(null);
 
   const currentQuestion = state.questions[state.currentIndex] ?? null;
   const nextQuestion_   = state.questions[state.currentIndex + 1] ?? null;
@@ -222,6 +224,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
     const cfg = overrideConfig ?? config;
     setState(s => ({ ...s, status: 'loading', error: null }));
     setRoundLevelUps([]);
+    setRoundNoLongerStruggling([]);
     try {
       let weights = {};
       let masteryLevels = {};
@@ -251,10 +254,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
           const allRecords = await db.progress.toArray();
           const strugglingSpecies = new Set(
             allRecords
-              .filter(r => {
-                const total = r.correct + r.incorrect;
-                return !r.excluded && total >= 3 && r.correct / total < STRUGGLING_THRESHOLD;
-              })
+              .filter(r => !r.excluded && (r.isMastered ?? false) && isStrugglingByWindow(r.recentAnswers ?? []))
               .map(r => r.speciesCode),
           );
           if (strugglingSpecies.size > 0) {
@@ -341,11 +341,15 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
       },
     }));
 
-    const { advancedFromLevel0, levelUp, updatedMastery } = await recordAnswer(q.speciesCode, q.type, correct, q.comName);
-    if (levelUp) setRoundLevelUps(prev => [...prev, levelUp]);
-    setCurrentMastery(updatedMastery);
-    if (advancedFromLevel0 && config.mode === 'adaptive') {
-      await checkAndPromote(config.regionCode, config.questionTypes, config.recentDays ?? 30).catch(() => {/* non-fatal */});
+    if (q.noAudio) {
+      const { levelUp, updatedMastery } = await graduateNoAudio(q.speciesCode, q.type, q.comName);
+      setRoundLevelUps(prev => [...prev, levelUp]);
+      setCurrentMastery(updatedMastery);
+    } else {
+      const { levelUp, noLongerStruggling, updatedMastery } = await recordAnswer(q.speciesCode, q.type, correct, q.comName);
+      if (levelUp) setRoundLevelUps(prev => [...prev, levelUp]);
+      if (noLongerStruggling) setRoundNoLongerStruggling(prev => [...prev, noLongerStruggling]);
+      setCurrentMastery(updatedMastery);
     }
   }, [state.questions, state.currentIndex, state.status, config]);
 
@@ -399,6 +403,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
     questionPhoto: questionPhoto !== null && questionPhoto.questionId === currentQuestion?.id ? questionPhoto.photo : null,
     questionPhotoFetching: questionPhoto?.questionId !== currentQuestion?.id && questionPhotoFetching,
     roundLevelUps,
+    roundNoLongerStruggling,
     isFirstEncounter,
     currentMastery,
     startQuiz,

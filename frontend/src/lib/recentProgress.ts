@@ -32,7 +32,7 @@ export interface RecentBirdEntry {
  *   easy     — at least one asked record; highest active mastery level = 0
  *   medium   — highest active mastery level = 1
  *   hard     — highest active mastery level = 2 (not yet graduated)
- *   mastered — every questionType is graduated (inHistory=true) for this species
+ *   mastered — every questionType is graduated (isMastered=true) for this species
  */
 export function categoriseRecentBirds(
   recentSpecies: CachedSpecies[],
@@ -67,7 +67,7 @@ export function categoriseRecentBirds(
 
       // A bird is fully mastered when every active question type has graduated.
       const allGraduated = questionTypes.every(
-        t => allRecords.find(r => r.questionType === t)?.inHistory === true,
+        t => allRecords.find(r => r.questionType === t)?.isMastered === true,
       );
       if (allGraduated) {
         return {
@@ -80,7 +80,7 @@ export function categoriseRecentBirds(
         };
       }
 
-      const activeRecords = askedRecords.filter(r => !r.inHistory);
+      const activeRecords = askedRecords.filter(r => !r.isMastered);
       const maxLevel      = Math.max(...activeRecords.map(r => r.masteryLevel ?? 0));
       const category: RecentProgressCategory =
         maxLevel >= 2 ? 'hard' : maxLevel === 1 ? 'medium' : 'easy';

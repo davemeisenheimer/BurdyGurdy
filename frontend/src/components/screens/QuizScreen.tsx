@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { QuizQuestion, AttributedPhoto } from '../../types';
-import type { RecentSighting } from '../../lib/api';
+import type { RecentSighting } from '../../services/remote/api';
 import { AudioPlayer } from '../ui/AudioPlayer';
 import { AnswerOption } from '../ui/AnswerOption';
 import { ProgressBar } from '../ui/ProgressBar';
-import { masteryBadgeClass, masteryLabel, masteryThreshold, MASTERY_LABELS, isStruggling } from '../../lib/mastery';
+import { masteryBadgeClass, masteryLabel, masteryThreshold, MASTERY_LABELS } from '../../lib/mastery';
+import { isNonMasteredStruggling } from '../../lib/struggling';
 import { MasteryBadge } from '../ui/MasteryBadge';
 import { ReportErrorModal } from '../ui/ReportErrorModal';
 import type { ReportErrorData } from '../ui/ReportErrorModal';
@@ -20,7 +21,7 @@ interface Props {
   isFavourited: boolean;
   isExcluded: boolean;
   isFirstEncounter?: boolean;
-  currentMastery?: { masteryLevel: number; consecutiveCorrect: number; inHistory: boolean; correct: number; incorrect: number } | null;
+  currentMastery?: { masteryLevel: number; consecutiveCorrect: number; isMastered: boolean; correct: number; incorrect: number } | null;
   revealPhotos: { primary: AttributedPhoto | null; optional: AttributedPhoto[] };
   questionPhoto: AttributedPhoto | null;
   questionPhotoFetching?: boolean;
@@ -228,7 +229,24 @@ export function QuizScreen({
 
         {!answered ? (
           /* ── QUESTION STATE ── */
-          stimType === 'image' ? (
+          question.noAudio ? (
+            /* No recordings available — inform the user and award a free correct answer */
+            <div className="h-full flex flex-col items-center justify-center px-6 gap-5 text-center">
+              <div className="text-5xl">🔇</div>
+              <div>
+                <p className="text-xl font-bold text-slate-800">{question.comName}</p>
+                <p className="text-sm italic text-slate-400 mt-0.5">{question.sciName}</p>
+              </div>
+              <p className="text-sm text-slate-500 max-w-xs">
+                No audio recordings are currently available for this bird. You'll be awarded a free correct answer and it will be marked as mastered.
+              </p>
+              {isFirstEncounter && (
+                <span className="bg-slate-700 border-2 border-amber-400 text-white text-xs font-bold px-2.5 py-1.5 rounded-full shadow-md leading-none">
+                  ✨ New bird!
+                </span>
+              )}
+            </div>
+          ) : stimType === 'image' ? (
             /* Photo question: single randomly-selected photo */
             <div className="relative h-full bg-slate-900 flex items-center justify-center">
               {questionDisplayPhoto && (
@@ -324,21 +342,35 @@ export function QuizScreen({
             )}
 
             {/* Status strip */}
-            <div className={`shrink-0 px-5 py-3 border-b flex items-center justify-between gap-3 ${isCorrect ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}>
-              <p className={`font-semibold ${isCorrect ? 'text-green-700' : 'text-red-700'}`}>
-                {isCorrect ? '✓ Correct!' : `✗ The answer was ${question.correctAnswer}`}
-              </p>
-              {currentMastery && (
-                <MasteryBadge
-                  className={`text-xs px-2 py-1 rounded-full font-medium ${masteryBadgeClass(currentMastery.masteryLevel, currentMastery.inHistory)}`}
-                  isStruggling={!currentMastery.inHistory && isStruggling(currentMastery.correct, currentMastery.incorrect)}
-                >
-                  {currentMastery.inHistory
-                    ? masteryLabel(0, true)
-                    : `${currentMastery.consecutiveCorrect}/${masteryThreshold(currentMastery.masteryLevel)} ${MASTERY_LABELS[currentMastery.masteryLevel] ?? 'Hard'}`}
-                </MasteryBadge>
-              )}
-            </div>
+            {question.noAudio ? (
+              <div className="shrink-0 px-5 py-3 border-b border-sky-100 flex items-center justify-between gap-3 bg-sky-50">
+                <p className="font-semibold text-sky-700">No audio available — automatically mastered</p>
+                {currentMastery && (
+                  <MasteryBadge
+                    className={`text-xs px-2 py-1 rounded-full font-medium ${masteryBadgeClass(currentMastery.masteryLevel, currentMastery.isMastered)}`}
+                    isStruggling={false}
+                  >
+                    {masteryLabel(0, true)}
+                  </MasteryBadge>
+                )}
+              </div>
+            ) : (
+              <div className={`shrink-0 px-5 py-3 border-b flex items-center justify-between gap-3 ${isCorrect ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}>
+                <p className={`font-semibold ${isCorrect ? 'text-green-700' : 'text-red-700'}`}>
+                  {isCorrect ? '✓ Correct!' : `✗ The answer was ${question.correctAnswer}`}
+                </p>
+                {currentMastery && (
+                  <MasteryBadge
+                    className={`text-xs px-2 py-1 rounded-full font-medium ${masteryBadgeClass(currentMastery.masteryLevel, currentMastery.isMastered)}`}
+                    isStruggling={!currentMastery.isMastered && isNonMasteredStruggling(currentMastery.correct, currentMastery.incorrect)}
+                  >
+                    {currentMastery.isMastered
+                      ? masteryLabel(0, true)
+                      : `${currentMastery.consecutiveCorrect}/${masteryThreshold(currentMastery.masteryLevel)} ${MASTERY_LABELS[currentMastery.masteryLevel] ?? 'Hard'}`}
+                  </MasteryBadge>
+                )}
+              </div>
+            )}
 
             {/* Photo/spectrogram carousel */}
             {currentRevealPhoto && (
@@ -502,35 +534,47 @@ export function QuizScreen({
         )}
       </div>
 
-      {/* Answer options — fixed position, never move */}
-      <div className="shrink-0 space-y-2">
-        {question.options.map((opt, idx) => {
-          const audioUrl = isSongAnswer ? (question.optionAudioUrls?.[idx] ?? undefined) : undefined;
-          return (
-            <AnswerOption
-              key={opt}
-              label={opt}
-              status={getOptionStatus(opt)}
-              onClick={() => onAnswer(opt)}
-              audioUrl={audioUrl}
-              isPlaying={!!audioUrl && playingOptionUrl === audioUrl}
-              onPlayToggle={audioUrl ? () => handleOptionPlayToggle(audioUrl) : undefined}
-              hideLabel={isSongAnswer && !answered}
-              onReport={answered && canReport && opt === question.correctAnswer ? () => setShowReportModal(true) : undefined}
-            />
-          );
-        })}
-      </div>
+      {/* Answer options — hidden for noAudio questions */}
+      {!question.noAudio && (
+        <div className="shrink-0 space-y-2">
+          {question.options.map((opt, idx) => {
+            const audioUrl = isSongAnswer ? (question.optionAudioUrls?.[idx] ?? undefined) : undefined;
+            return (
+              <AnswerOption
+                key={opt}
+                label={opt}
+                status={getOptionStatus(opt)}
+                onClick={() => onAnswer(opt)}
+                audioUrl={audioUrl}
+                isPlaying={!!audioUrl && playingOptionUrl === audioUrl}
+                onPlayToggle={audioUrl ? () => handleOptionPlayToggle(audioUrl) : undefined}
+                hideLabel={isSongAnswer && !answered}
+                onReport={answered && canReport && opt === question.correctAnswer ? () => setShowReportModal(true) : undefined}
+              />
+            );
+          })}
+        </div>
+      )}
 
-      {/* Next button — always occupies space; invisible until answered to prevent layout shift */}
-      <button
-        onClick={answered ? onNext : undefined}
-        className={`shrink-0 w-full py-3 rounded-xl bg-forest-600 text-white font-semibold text-lg transition-all ${
-          answered ? 'opacity-100 hover:bg-forest-700 cursor-pointer' : 'opacity-0 pointer-events-none'
-        }`}
-      >
-        {currentIndex + 1 >= totalQuestions ? 'See Results' : 'Next Question'}
-      </button>
+      {/* Next / Got it button */}
+      {question.noAudio ? (
+        <button
+          onClick={answered ? onNext : () => onAnswer(question.correctAnswer)}
+          className="shrink-0 w-full py-3 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-semibold text-lg cursor-pointer"
+        >
+          {answered ? (currentIndex + 1 >= totalQuestions ? 'See Results' : 'Next Question') : 'Got it →'}
+        </button>
+      ) : (
+        /* Always occupies space; invisible until answered to prevent layout shift */
+        <button
+          onClick={answered ? onNext : undefined}
+          className={`shrink-0 w-full py-3 rounded-xl bg-forest-600 text-white font-semibold text-lg transition-all ${
+            answered ? 'opacity-100 hover:bg-forest-700 cursor-pointer' : 'opacity-0 pointer-events-none'
+          }`}
+        >
+          {currentIndex + 1 >= totalQuestions ? 'See Results' : 'Next Question'}
+        </button>
+      )}
 
       {/* Report error modal */}
       {showReportModal && reportMediaUrl && (
