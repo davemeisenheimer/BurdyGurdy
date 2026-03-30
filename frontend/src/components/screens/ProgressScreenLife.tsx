@@ -20,6 +20,10 @@ interface Props {
   regionCode?: string;
   recentDays?: number;
   onRecentProgress?: () => void;
+  /** When provided, renders a read-only view of a friend's progress instead of local DB data. */
+  overrideRecords?: BirdProgress[];
+  /** Display name shown in the header when viewing a friend's list. */
+  friendDisplayName?: string;
 }
 
 const TYPE_LABELS: Record<QuestionType, string> = {
@@ -64,7 +68,8 @@ function getGroupLabel(bird: BirdSummary, viewRecord: BirdProgress | null, typeF
   return MASTERY_LABELS[maxMastery] ?? 'Hard';
 }
 
-export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggling, showFocusModeToggle, onToggleFocusStruggling, onSelectBird, regionCode, recentDays, onRecentProgress }: Props) {
+export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggling, showFocusModeToggle, onToggleFocusStruggling, onSelectBird, regionCode, recentDays, onRecentProgress, overrideRecords, friendDisplayName }: Props) {
+  const readOnly = overrideRecords !== undefined;
   const [birds, setBirds]               = useState<BirdSummary[]>([]);
   const [filter, setFilter]             = useState<Filter>('learning');
   const [typeFilter, setTypeFilter]     = useState<TypeFilter>(() =>
@@ -97,7 +102,10 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
 
   const load = useCallback(() => {
     setLoading(true);
-    db.progress.toArray().then(records => {
+    const recordsPromise = overrideRecords !== undefined
+      ? Promise.resolve(overrideRecords)
+      : db.progress.toArray();
+    recordsPromise.then(records => {
       const bySpecies = new Map<string, BirdProgress[]>();
       for (const r of records) {
         const list = bySpecies.get(r.speciesCode) ?? [];
@@ -289,13 +297,15 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
           <div className="flex items-center gap-4">
             <button onClick={onBack} className="text-slate-500 hover:text-slate-700 text-5xl">←</button>
             <div>
-              <h1 className="text-2xl font-bold text-slate-800 text-nowrap">Life List</h1>
+              <h1 className="text-2xl font-bold text-slate-800 text-nowrap">
+                {friendDisplayName ? `${friendDisplayName}'s Life List` : 'Life List'}
+              </h1>
               {nonExcluded.length > 0 && (
                 <p className="text-xs text-slate-400">{nonExcluded.length} birds seen in BirdyGurdy</p>
               )}
             </div>
           </div>
-          {!confirmClear ? (
+          {!readOnly && !confirmClear ? (
             <button
               onClick={() => setConfirmClear(true)}
               className="text-xs text-slate-400 hover:text-red-500 transition-colors"
@@ -488,7 +498,7 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
                       {typeFilter !== 'all' ? TYPE_LABELS[typeFilter] ?? typeFilter : 'overall'}
                     </span>
                   </div>
-                  {bird.excluded && (
+                  {bird.excluded && !readOnly && (
                     <button
                       onClick={() => handleUnexclude(bird.speciesCode)}
                       className="text-xs px-2 py-1 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors shrink-0"

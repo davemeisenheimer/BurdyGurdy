@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { QuizConfig } from './types';
+import type { BirdProgress } from './types';
 import { HomeScreen } from './components/screens/HomeScreen';
 import { QuizScreen } from './components/screens/QuizScreen';
 import { ResultScreen } from './components/screens/ResultScreen';
@@ -8,13 +9,17 @@ import { ProgressScreenRecent } from './components/screens/ProgressScreenRecent'
 import { BirdInfoScreen } from './components/screens/BirdInfoScreen';
 import { SettingsScreen } from './components/screens/SettingsScreen';
 import { VictoryScreen } from './components/screens/VictoryScreen';
+import { FriendsScreen } from './components/screens/FriendsScreen';
+import { NotificationsScreen } from './components/screens/NotificationsScreen';
 import { CurationPanel } from './components/panels/CurationPanel';
 import { BirdInfoPanel } from './components/panels/BirdInfoPanel';
 import { AuthPanel } from './components/panels/AuthPanel';
+import { Toast } from './components/ui/Toast';
 import { useQuiz } from './hooks/useQuiz';
+import { useNotifications } from './hooks/useNotifications';
 import { loadSettings, saveSettings, loadQuizPrefs, saveQuizPrefs } from './lib/settings';
 import type { AppSettings } from './lib/settings';
-import { checkVictoryCondition, hasSeenVictory, markVictorySeen, getVictorySeen, mergeVictorySeen } from './lib/victory';
+import { checkVictoryCondition, hasSeenVictory, markVictorySeen, getVictorySeen, mergeVictorySeen, describeMastery, describeWindow } from './lib/victory';
 import { locateRegion, fetchBlockedPhotos } from './services/remote/api';
 import type { LocateResult } from './services/remote/api';
 import { db, switchToUserDb } from './lib/db';
@@ -24,6 +29,8 @@ import { uploadProgress, downloadAndMerge, uploadSettings, downloadSettings, dow
 import { computeStrugglingCount } from './lib/struggling';
 import { expandQuestionTypes } from './lib/questionTypes';
 import type { ReportErrorData } from './components/ui/ReportErrorModal';
+import { markNotificationsRead } from './lib/notifications';
+import { fetchFriendProgress } from './lib/friends';
 
 const RECENT_DAYS: Record<'day' | 'week' | 'month', number> = { day: 1, week: 7, month: 30 };
 
@@ -36,6 +43,16 @@ const DEFAULT_CONFIG: QuizConfig = {
   recentDays: 30,
 };
 
+// Capture the invite token from the URL into sessionStorage so it survives
+// both React StrictMode remounts and Vite HMR module re-execution.
+(() => {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('invite');
+  if (token) {
+    sessionStorage.setItem('pendingInvite', token);
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+})();
 
 export default function App() {
   const [config, setConfig] = useState<QuizConfig>(() => {
@@ -57,6 +74,37 @@ export default function App() {
   const [showAuth, setShowAuth]       = useState(false);
   const [showUploadPrompt, setShowUploadPrompt] = useState(false);
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
+
+  const [pendingInviteToken] = useState<string | null>(() => sessionStorage.getItem('pendingInvite'));
+  const [screen, setScreen] = useState<'home' | 'quiz' | 'result' | 'progress' | 'settings' | 'victory' | 'recentprogress' | 'birdinfo' | 'friends' | 'notifications' | 'friendprogress'>(
+    () => sessionStorage.getItem('pendingInvite') ? 'friends' : 'home',
+  );
+  const [prevScreen, setPrevScreen] = useState<'progress' | 'recentprogress'>('progress');
+  const [recentProgressBack, setRecentProgressBack] = useState<'result' | 'progress'>('result');
+  const [lifeListBack, setLifeListBack] = useState<'home' | 'result'>('home');
+  const [rightPanelTab, setRightPanelTab] = useState<'info' | 'curation'>('info');
+  const [progressSelectedSpecies, setProgressSelectedSpecies] = useState<{ speciesCode: string; comName: string } | null>(null);
+  const [friendProgressRecords, setFriendProgressRecords] = useState<BirdProgress[]>([]);
+  const [friendProgressName, setFriendProgressName]       = useState('');
+
+  const {
+    notifications,
+    setNotifications,
+    hasUnread,
+    setHasUnread,
+    currentToast,
+    setCurrentToast,
+    sendFriendNotification,
+    performSignOut,
+    sessionQuestionsRef,
+    sessionRoundsRef,
+    sessionMasteredRef,
+    sessionInitialMasteredRef,
+  } = useNotifications({ user, screen, onViewNotifications: () => setScreen('notifications') });
+
+  const isAdmin = user?.user_metadata?.is_admin === true;
+  const { state, currentQuestion, isCorrect, currentFavourited, currentExcluded, revealPhotos, revealRangeMapUrl, revealSightings, questionPhoto, questionPhotoFetching, roundLevelUps, roundNoLongerStruggling, isFirstEncounter, currentMastery, startQuiz, submitAnswer, toggleFavourite, toggleExcluded, nextQuestion, removeOptionalPhoto } = useQuiz(config, settings.randomizeQuestionPhotos, user?.id);
+
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 1024px)');
     const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
@@ -67,20 +115,20 @@ export default function App() {
   // Recompute struggling count whenever question types or settings change (also runs on mount)
   useEffect(() => {
     const expandedTypes = expandQuestionTypes(config.questionTypes, settings);
-    db.progress.toArray().then(records => {
-      setStrugglingCount(computeStrugglingCount(records, expandedTypes));
-    });
+    db.progress.toArray()
+      .then(records => { setStrugglingCount(computeStrugglingCount(records, expandedTypes)); })
+      .catch(() => { /* DB may be mid-switch; re-runs when settings change */ });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.questionTypes, settings]);
 
-  // Auto sign-out after 12 hours of inactivity
-  const INACTIVITY_MS = 12 * 60 * 60 * 1000;
+  // Auto sign-out after 30 minutes of inactivity
+  const INACTIVITY_MS = 30 * 60 * 1000;
   const ACTIVITY_KEY  = 'lastActivity';
   useEffect(() => {
     const touch = () => localStorage.setItem(ACTIVITY_KEY, String(Date.now()));
     const check = () => {
       const last = Number(localStorage.getItem(ACTIVITY_KEY) ?? Date.now());
-      if (Date.now() - last > INACTIVITY_MS) supabase.auth.signOut();
+      if (Date.now() - last > INACTIVITY_MS) performSignOut();
     };
     let throttle: ReturnType<typeof setTimeout> | null = null;
     const onActivity = () => { if (!throttle) throttle = setTimeout(() => { touch(); throttle = null; }, 60_000); };
@@ -96,6 +144,7 @@ export default function App() {
       document.removeEventListener('visibilitychange', check);
     };
   }, []);
+
   const handleQuizPrefsChange = (prefs: { questionTypes: QuizConfig['questionTypes']; mode: QuizConfig['mode']; questionsPerRound: number; groupId: string; regionCode: string }) => {
     const newPrefs = { questionTypes: prefs.questionTypes, mode: prefs.mode, questionsPerRound: prefs.questionsPerRound, groupId: prefs.groupId, regionCode: prefs.regionCode };
     saveQuizPrefs(newPrefs);
@@ -120,12 +169,11 @@ export default function App() {
   // Auth: restore session on load and listen for changes
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      // Switch to the user's own DB before the component renders with their session.
       switchToUserDb(data.session?.user?.id ?? null);
       setUser(data.session?.user ?? null);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       // Switch DB first — all subsequent reads/writes go to the correct store.
       switchToUserDb(session?.user?.id ?? null);
       setUser(session?.user ?? null);
@@ -163,6 +211,17 @@ export default function App() {
         }).catch(() => {});
         downloadUserBlockedPhotos(userId).catch(() => {});
         fetchAdminBlockedMedia().catch(() => {});
+        // On actual sign-in (not page reload), send login notification and record initial mastered count
+        if (event === 'SIGNED_IN') {
+          db.progress.toArray()
+            .then(records => { sessionInitialMasteredRef.current = records.filter(r => r.isMastered).length; })
+            .catch(() => {});
+          sendFriendNotification('login', {});
+          // Reset session stats
+          sessionQuestionsRef.current = 0;
+          sessionRoundsRef.current = 0;
+          sessionMasteredRef.current = 0;
+        }
       }
     });
     return () => subscription.unsubscribe();
@@ -186,22 +245,19 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const [screen, setScreen] = useState<'home' | 'quiz' | 'result' | 'progress' | 'settings' | 'victory' | 'recentprogress' | 'birdinfo'>('home');
-  const [prevScreen, setPrevScreen] = useState<'progress' | 'recentprogress'>('progress');
-  const [recentProgressBack, setRecentProgressBack] = useState<'result' | 'progress'>('result');
-  const [lifeListBack, setLifeListBack] = useState<'home' | 'result'>('home');
-  const [rightPanelTab, setRightPanelTab] = useState<'info' | 'curation'>('info');
-  const [progressSelectedSpecies, setProgressSelectedSpecies] = useState<{ speciesCode: string; comName: string } | null>(null);
-  const isAdmin = user?.user_metadata?.is_admin === true;
-  const { state, currentQuestion, isCorrect, currentFavourited, currentExcluded, revealPhotos, revealRangeMapUrl, revealSightings, questionPhoto, questionPhotoFetching, roundLevelUps, roundNoLongerStruggling, isFirstEncounter, currentMastery, startQuiz, submitAnswer, toggleFavourite, toggleExcluded, nextQuestion, removeOptionalPhoto } = useQuiz(config, settings.randomizeQuestionPhotos, user?.id);
-
-  // After each completed round, upload progress and refresh struggling count
+  // After each completed round, upload progress, refresh struggling count, track session stats
   useEffect(() => {
     if (state.status !== 'complete') return;
     const expandedTypes = expandQuestionTypes(config.questionTypes, settings);
-    db.progress.toArray().then(records => {
-      setStrugglingCount(computeStrugglingCount(records, expandedTypes));
-    });
+    db.progress.toArray()
+      .then(records => {
+        setStrugglingCount(computeStrugglingCount(records, expandedTypes));
+        // Track newly mastered birds this session
+        const currentMastered = records.filter(r => r.isMastered).length;
+        sessionMasteredRef.current = Math.max(0, currentMastered - sessionInitialMasteredRef.current);
+      })
+      .catch(() => {});
+    sessionRoundsRef.current += 1;
     if (user) uploadProgress(user.id).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.status]);
@@ -228,6 +284,7 @@ export default function App() {
   };
 
   const handleNext = () => {
+    sessionQuestionsRef.current += 1;
     nextQuestion();
     if (state.status === 'complete') setScreen('result');
   };
@@ -274,6 +331,11 @@ export default function App() {
         if (won && !hasSeenVictory(settings.recentWindow, expandedTypes)) {
           markVictorySeen(settings.recentWindow, expandedTypes);
           if (user) uploadSettings(user.id, settings, loadQuizPrefs(), getVictorySeen()).catch(() => {});
+          sendFriendNotification('victory', {
+            masteryDesc: describeMastery(expandedTypes),
+            windowDesc: describeWindow(settings.recentWindow),
+            regionCode: config.regionCode,
+          });
           setScreen('victory');
         } else {
           setScreen('result');
@@ -293,8 +355,16 @@ export default function App() {
     if (focusStruggling && !showFocusModeToggle) setFocusStruggling(false);
   }, [focusStruggling, showFocusModeToggle]);
 
+  async function handleViewFriendLifeList(friendUserId: string, displayName: string) {
+    const records = await fetchFriendProgress(friendUserId).catch(() => []);
+    setFriendProgressRecords(records);
+    setFriendProgressName(displayName);
+    setScreen('friendprogress');
+  }
+
   return (
     <div className="font-sans lg:flex lg:h-screen">
+      <Toast toast={currentToast} onDismiss={() => setCurrentToast(null)} />
 
       {/* ── Right panel: desktop only ── */}
       {isDesktop && <div className="lg:flex lg:order-2 flex-col flex-1 border-l-2 border-slate-200 overflow-hidden">
@@ -330,7 +400,7 @@ export default function App() {
             autoplayRevealAudio={settings.autoplayRevealAudio}
             userEmail={user?.email}
             onAuthClick={() => setShowAuth(true)}
-            onSignOut={() => supabase.auth.signOut()}
+            onSignOut={performSignOut}
           />
         )}
 
@@ -350,9 +420,12 @@ export default function App() {
           onStart={handleStart}
           onProgress={() => setScreen('progress')}
           onSettings={() => setScreen('settings')}
+          onFriends={() => setScreen('friends')}
+          onNotifications={() => setScreen('notifications')}
+          hasUnreadNotifications={hasUnread}
           userEmail={user?.email}
           onAuthClick={() => setShowAuth(true)}
-          onSignOut={() => supabase.auth.signOut()}
+          onSignOut={performSignOut}
           onQuizPrefsChange={handleQuizPrefsChange}
         />
       )}
@@ -498,6 +571,45 @@ export default function App() {
           questionTypes={expandQuestionTypes(config.questionTypes, settings)}
           onKeepPlaying={() => handleStart(config)}
           onHome={() => setScreen('home')}
+        />
+      )}
+
+      {screen === 'friends' && (
+        <FriendsScreen
+          userId={user?.id ?? null}
+          userEmail={user?.email ?? null}
+          inviteToken={pendingInviteToken}
+          onBack={() => { sessionStorage.removeItem('pendingInvite'); setScreen('home'); }}
+          onViewFriendLifeList={handleViewFriendLifeList}
+        />
+      )}
+
+      {screen === 'notifications' && (
+        <NotificationsScreen
+          notifications={notifications}
+          onBack={() => setScreen('home')}
+          onNotificationsRead={ids => {
+            setNotifications(prev => prev.map(n => ids.includes(n.id) ? { ...n, read: true } : n));
+            setHasUnread(false);
+            markNotificationsRead(ids).catch(() => {});
+          }}
+        />
+      )}
+
+      {screen === 'friendprogress' && (
+        <ProgressScreenLife
+          onBack={() => setScreen('friends')}
+          userId={user?.id}
+          questionTypes={expandQuestionTypes(config.questionTypes, settings)}
+          focusStruggling={false}
+          showFocusModeToggle={false}
+          onToggleFocusStruggling={() => {}}
+          onSelectBird={isDesktop ? setProgressSelectedSpecies : s => { setProgressSelectedSpecies(s); setPrevScreen('progress'); setScreen('birdinfo'); }}
+          regionCode={config.regionCode}
+          recentDays={config.recentDays ?? 30}
+          onRecentProgress={() => {}}
+          overrideRecords={friendProgressRecords}
+          friendDisplayName={friendProgressName}
         />
       )}
       </div>{/* end game column */}

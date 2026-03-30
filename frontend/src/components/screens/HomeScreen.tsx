@@ -12,6 +12,9 @@ interface Props {
   onStart: (config: QuizConfig) => void;
   onProgress: () => void;
   onSettings: () => void;
+  onFriends: () => void;
+  onNotifications: () => void;
+  hasUnreadNotifications: boolean;
   userEmail?: string | null;
   onAuthClick: () => void;
   onSignOut: () => void;
@@ -27,7 +30,7 @@ const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: 'sono',   label: 'Spectrogram' },
 ];
 
-export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSettings, userEmail, onAuthClick, onSignOut, onQuizPrefsChange }: Props) {
+export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSettings, onFriends, onNotifications, hasUnreadNotifications, userEmail, onAuthClick, onSignOut, onQuizPrefsChange }: Props) {
   const [regionCode, setRegionCode] = useState(initialConfig.regionCode);
   const [selectedTypes, setSelectedTypes] = useState<QuestionType[]>(initialConfig.questionTypes);
   const [mode, setMode] = useState<GameMode>(initialConfig.mode);
@@ -89,6 +92,34 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
           >
             ⚙
           </button>
+          <button
+            onClick={onFriends}
+            className="absolute right-20 top-0 w-8 h-8 rounded-full border border-slate-300 text-slate-500 hover:bg-slate-100 flex items-center justify-center"
+            aria-label="Friends"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </button>
+          {/* Notifications / mail icon */}
+          <div className="absolute right-[7.5rem] top-0">
+            <button
+              onClick={onNotifications}
+              className="w-8 h-8 rounded-full border border-slate-300 text-slate-500 hover:bg-slate-100 flex items-center justify-center relative"
+              aria-label="Notifications"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                <polyline points="22,6 12,13 2,6"/>
+              </svg>
+              {hasUnreadNotifications && (
+                <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-white" />
+              )}
+            </button>
+          </div>
           <img src="/BurdyNotebook.png" alt="" className="h-16 w-auto mx-auto" />
           <h1 className="text-4xl font-bold text-forest-800">BurdyGurdy</h1>
           <p className="text-slate-500 mt-2">Learn the birds that make sense</p>
