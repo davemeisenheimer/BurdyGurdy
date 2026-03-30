@@ -6,7 +6,7 @@ import {
   MAX_LEVEL_0_SIZE, MAX_LEVEL_0_SIZE_FIRST, MAX_LEVEL_0_SIZE_SECOND, MAX_LEVEL_0_SIZE_THIRD,
 } from '../../lib/adaptive';
 import type { AdaptiveParams, RecordAnswerResult } from '../../lib/adaptive';
-import type { QuestionType, CachedSpecies, LevelUpEvent } from '../../types';
+import type { QuestionType, CachedSpecies, LevelUpEvent, BirdProgress } from '../../types';
 
 // Re-export so call sites that previously imported these from adaptive can
 // switch to this module without touching every consumer individually.
