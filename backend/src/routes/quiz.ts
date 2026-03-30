@@ -377,7 +377,7 @@ router.post('/questions', async (req, res) => {
     const historyKeySet = new Set<string>(historyKeys as string[]);
 
     const candidates: Candidate[] = buildCandidates(
-      questionPool, filteredPool, recentCodes, weightsMap, types as QuestionType[], adaptiveMode, level0KeySet,
+      questionPool, filteredPool, recentCodes, weightsMap, types as QuestionType[], adaptiveMode, level0KeySet, paletteCodes,
     );
 
     const recentUnmasteredMin = adaptiveMode ? Math.ceil(count * 0.67) : 0;

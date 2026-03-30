@@ -109,6 +109,22 @@ class BirdyGurdyDB extends Dexie {
         delete record.inHistory;
       });
     });
+    // v11: purge seeded-but-never-asked level-0 records created under the old broken
+    //      palette-gate behaviour (backend was assigning NEW_ENCOUNTER_WEIGHT to all
+    //      eBird recent-window birds instead of only palette birds, causing wrong birds
+    //      like Snow Goose to be seeded before backyard birds). Deleting unasked records
+    //      lets maintainLevel0Palette immediately re-seed from the correctly ordered
+    //      priority list. Birds already answered (lastAsked > 0) are untouched.
+    this.version(11).stores({
+      progress: '[speciesCode+questionType], speciesCode, weight, lastAsked',
+      regionSpecies: 'regionCode',
+      blockedPhotos: 'url',
+      adminBlockedMedia: '[url+speciesCode]',
+    }).upgrade(tx =>
+      tx.table('progress').filter(
+        r => r.lastAsked === 0 && (r.masteryLevel ?? 0) === 0 && !(r.isMastered ?? false),
+      ).delete(),
+    );
   }
 }
 

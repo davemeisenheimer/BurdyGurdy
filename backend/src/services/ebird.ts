@@ -99,9 +99,10 @@ export async function getBackyardSpeciesRanking(regionCode: string): Promise<str
   }
 }
 
-/** Top species by checklist frequency, sampled mid-month for each of the past 12 months.
- *  Recent months are weighted more heavily (month 1 ago = weight 12, month 12 ago = weight 1)
- *  so birds arriving now rank above birds that haven't yet arrived this season.
+/** Species observed in a region, ranked by annual frequency.
+ *  Samples historic observations on the 15th of each of the past 12 months using
+ *  the /data/obs/historic endpoint (works at all region levels: country, state, county).
+ *  Recent months are weighted more heavily so birds arriving now rank above absent-season birds.
  *  Returns species codes ordered most→least common. Cached 24h. */
 export async function getCommonSpeciesCodes(regionCode: string): Promise<string[]> {
   const key = `top100annual:${regionCode}`;
@@ -128,13 +129,13 @@ export async function getCommonSpeciesCodes(regionCode: string): Promise<string[
   const client = ebirdClient();
   const results = await Promise.allSettled(
     dates.map(({ y, m, d }) =>
-      client.get(`/product/top100/${regionCode}/${y}/${m}/${d}`, {
-        params: { rankBy: 'cl', maxResults: 100 },
+      client.get(`/data/obs/${regionCode}/historic/${y}/${m}/${d}`, {
+        params: { maxResults: 200, includeProvisional: true },
       }),
     ),
   );
 
-  // Weighted aggregate: each appearance contributes its month's weight to count and rank sum.
+  // Weighted aggregate: each appearance contributes its month's weight to count and position sum.
   const scores = new Map<string, { weightedCount: number; weightedRankSum: number }>();
   for (let i = 0; i < results.length; i++) {
     const result = results[i];
@@ -152,7 +153,8 @@ export async function getCommonSpeciesCodes(regionCode: string): Promise<string[
 
   if (scores.size === 0) return [];
 
-  // Sort: highest weighted count first, then by weighted average rank (lower = more common).
+  // Sort: highest weighted count first (appeared in more months = more common overall),
+  // then by weighted average position (lower position = more frequently reported on each date).
   const codes = [...scores.entries()]
     .sort(([, a], [, b]) => {
       if (b.weightedCount !== a.weightedCount) return b.weightedCount - a.weightedCount;
