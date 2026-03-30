@@ -117,6 +117,10 @@ function openDb(instance: BirdyGurdyDB): BirdyGurdyDB {
   // reject the open promise.  Delete and reload — onAuthStateChange fires on the next
   // load for already-signed-in users, which triggers the full cloud sync automatically.
   instance.open().catch(async err => {
+    // DatabaseClosedError is expected when switchToUserDb closes the DB while it is
+    // still opening (e.g. onAuthStateChange fires before open() resolves).  It is not
+    // a schema corruption — the caller has already reassigned `db` to the new instance.
+    if (err?.name === 'DatabaseClosedError') return;
     console.error('BirdyGurdyDB: failed to open, resetting database:', err);
     try { await instance.delete(); } catch { /* best-effort */ }
     window.location.reload();

@@ -135,7 +135,7 @@ export async function downloadSettings(userId: string): Promise<{
     .from('user_settings')
     .select('*')
     .eq('user_id', userId)
-    .single();
+    .maybeSingle();
   if (error || !data) return null;
   return {
     appSettings:  data.app_settings  as AppSettings,

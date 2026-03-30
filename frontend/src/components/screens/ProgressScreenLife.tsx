@@ -20,6 +20,10 @@ interface Props {
   regionCode?: string;
   recentDays?: number;
   onRecentProgress?: () => void;
+  /** When provided, renders a read-only view of a friend's progress instead of local DB data. */
+  overrideRecords?: BirdProgress[];
+  /** Display name shown in the header when viewing a friend's list. */
+  friendDisplayName?: string;
 }
 
 const TYPE_LABELS: Record<QuestionType, string> = {
@@ -64,7 +68,8 @@ function getGroupLabel(bird: BirdSummary, viewRecord: BirdProgress | null, typeF
   return MASTERY_LABELS[maxMastery] ?? 'Hard';
 }
 
-export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggling, showFocusModeToggle, onToggleFocusStruggling, onSelectBird, regionCode, recentDays, onRecentProgress }: Props) {
+export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggling, showFocusModeToggle, onToggleFocusStruggling, onSelectBird, regionCode, recentDays, onRecentProgress, overrideRecords, friendDisplayName }: Props) {
+  const readOnly = overrideRecords !== undefined;
   const [birds, setBirds]               = useState<BirdSummary[]>([]);
   const [filter, setFilter]             = useState<Filter>('learning');
   const [typeFilter, setTypeFilter]     = useState<TypeFilter>(() =>
@@ -97,7 +102,10 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
 
   const load = useCallback(() => {
     setLoading(true);
-    db.progress.toArray().then(records => {
+    const recordsPromise = overrideRecords !== undefined
+      ? Promise.resolve(overrideRecords)
+      : db.progress.toArray();
+    recordsPromise.then(records => {
       const bySpecies = new Map<string, BirdProgress[]>();
       for (const r of records) {
         const list = bySpecies.get(r.speciesCode) ?? [];
@@ -134,7 +142,7 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    if (!regionCode) return;
+    if (readOnly || !regionCode) return;
     const back = recentDays ?? 30;
     const cacheKey = `${regionCode}:${back}`;
     (async () => {
@@ -289,36 +297,49 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
           <div className="flex items-center gap-4">
             <button onClick={onBack} className="text-slate-500 hover:text-slate-700 text-5xl">←</button>
             <div>
-              <h1 className="text-2xl font-bold text-slate-800 text-nowrap">Life List</h1>
+              <h1 className="text-2xl font-bold text-slate-800 text-nowrap">
+                {friendDisplayName ? `${friendDisplayName}'s Life List` : 'Life List'}
+              </h1>
               {nonExcluded.length > 0 && (
                 <p className="text-xs text-slate-400">{nonExcluded.length} birds seen in BirdyGurdy</p>
               )}
             </div>
           </div>
-          {!confirmClear ? (
-            <button
-              onClick={() => setConfirmClear(true)}
-              className="text-xs text-slate-400 hover:text-red-500 transition-colors"
-            >
-              Clear history
-            </button>
-          ) : (
-            <div className="flex flex-col items-end gap-1.5 ml-4">
-              {userId ? (
-                <>
-                  <span className="text-xs text-slate-500 text-right">Cloud data will resync on next sign-in unless you clear both.</span>
-                  <div className="flex gap-2">
+          {!readOnly && (
+            confirmClear ? (
+              <div className="flex flex-col items-end gap-1.5 ml-4">
+                {userId ? (
+                  <>
+                    <span className="text-xs text-slate-500 text-right">Cloud data will resync on next sign-in unless you clear both.</span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleClearHistory(false)}
+                        className="text-xs px-2 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600"
+                      >
+                        Local only
+                      </button>
+                      <button
+                        onClick={() => handleClearHistory(true)}
+                        className="text-xs px-2 py-1 bg-red-700 text-white rounded-lg hover:bg-red-800"
+                      >
+                        Local + cloud
+                      </button>
+                      <button
+                        onClick={() => setConfirmClear(false)}
+                        className="text-xs px-2 py-1 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-100"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500">Are you sure you want to start over?</span>
                     <button
                       onClick={() => handleClearHistory(false)}
                       className="text-xs px-2 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600"
                     >
-                      Local only
-                    </button>
-                    <button
-                      onClick={() => handleClearHistory(true)}
-                      className="text-xs px-2 py-1 bg-red-700 text-white rounded-lg hover:bg-red-800"
-                    >
-                      Local + cloud
+                      Yes
                     </button>
                     <button
                       onClick={() => setConfirmClear(false)}
@@ -327,25 +348,16 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
                       Cancel
                     </button>
                   </div>
-                </>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-500">Are you sure you want to start over?</span>
-                  <button
-                    onClick={() => handleClearHistory(false)}
-                    className="text-xs px-2 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600"
-                  >
-                    Yes
-                  </button>
-                  <button
-                    onClick={() => setConfirmClear(false)}
-                    className="text-xs px-2 py-1 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-100"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmClear(true)}
+                className="text-xs text-slate-400 hover:text-red-500 transition-colors"
+              >
+                Clear history
+              </button>
+            )
           )}
         </div>
 
@@ -359,6 +371,13 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
                 View progress →
               </button>
             )}
+          </p>
+        )}
+        {masteryStats === null && onRecentProgress && (
+          <p className="text-xs text-slate-500 mb-3">
+            <button onClick={onRecentProgress} className="text-forest-600 hover:underline font-medium">
+              View recent progress →
+            </button>
           </p>
         )}
 
@@ -488,7 +507,7 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
                       {typeFilter !== 'all' ? TYPE_LABELS[typeFilter] ?? typeFilter : 'overall'}
                     </span>
                   </div>
-                  {bird.excluded && (
+                  {bird.excluded && !readOnly && (
                     <button
                       onClick={() => handleUnexclude(bird.speciesCode)}
                       className="text-xs px-2 py-1 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors shrink-0"

@@ -14,6 +14,8 @@ interface Props {
   questionTypes: QuestionType[];
   onBack: () => void;
   onSelectBird?: (species: { speciesCode: string; comName: string }) => void;
+  overrideRecords?: BirdProgress[];
+  friendDisplayName?: string;
 }
 
 const TYPE_LABELS: Record<QuestionType, string> = {
@@ -42,7 +44,7 @@ const SECTION_COLORS: Record<RecentProgressCategory, string> = {
   mastered: 'text-emerald-700',
 };
 
-export function ProgressScreenRecent({ regionCode, recentDays, questionTypes, onBack, onSelectBird }: Props) {
+export function ProgressScreenRecent({ regionCode, recentDays, questionTypes, onBack, onSelectBird, overrideRecords, friendDisplayName }: Props) {
   const [cachedSpecies, setCachedSpecies]       = useState<CachedSpecies[]>([]);
   const [progressRecords, setProgressRecords]   = useState<BirdProgress[]>([]);
   const [loading, setLoading]                   = useState(true);
@@ -57,7 +59,7 @@ export function ProgressScreenRecent({ regionCode, recentDays, questionTypes, on
       const cacheKey = `${regionCode}:${recentDays}`;
       const [cached, records] = await Promise.all([
         db.regionSpecies.get(cacheKey),
-        db.progress.toArray(),
+        overrideRecords !== undefined ? Promise.resolve(overrideRecords) : db.progress.toArray(),
       ]);
 
       if (!cached || cached.species.length === 0) {
@@ -70,7 +72,7 @@ export function ProgressScreenRecent({ regionCode, recentDays, questionTypes, on
       setProgressRecords(records);
       setLoading(false);
     })().catch(() => setLoading(false));
-  }, [regionCode, recentDays]);
+  }, [regionCode, recentDays, overrideRecords]);
 
   // Types actually present in DB records for species in the recent window
   const recentCodes = new Set(cachedSpecies.map(s => s.speciesCode));
@@ -98,8 +100,8 @@ export function ProgressScreenRecent({ regionCode, recentDays, questionTypes, on
           <div className="flex items-center gap-4 mb-2">
             <button onClick={onBack} className="text-slate-500 hover:text-slate-700 text-5xl">←</button>
             <div>
-              <h1 className="text-2xl font-bold text-slate-800">Recent Progress</h1>
-              <p className="text-sm text-slate-500">{regionCode} · past {windowLabel} · {total} birds</p>
+              <h1 className="text-2xl font-bold text-slate-800">{friendDisplayName ? `${friendDisplayName} in Your Region` : 'Recent Progress'}</h1>
+              <p className="text-sm text-slate-500">{regionCode} · past {windowLabel} · {total} birds{friendDisplayName ? ' · your region & window' : ''}</p>
             </div>
           </div>
 
