@@ -10,9 +10,12 @@
   * {
     scrollbar-width: thin;
     scrollbar-color: rgb(203 213 225 / 0.8) transparent;
-    user-select: none;
   }
 
+  button {
+    user-select: none;
+  }
+  
   input, textarea, [contenteditable] {
     user-select: text;
   }
