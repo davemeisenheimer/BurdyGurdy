@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { PhotoCurationPanel } from './PhotoCurationPanel';
+import { AudioCurationPanel } from './AudioCurationPanel';
 import {
   fetchPendingReports, fetchBlockedReports,
   blockReport, invalidateReport, deleteReport, unblockReport,
@@ -178,21 +179,19 @@ function ReportDetail({
           <div className="space-y-2 pt-1">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Actions</p>
 
-            {/* Block scope — only for photos */}
-            {report.mediaType === 'photo' && (
-              <div className="flex gap-2 mb-1">
-                {(['full', 'question'] as const).map(s => (
-                  <label key={s} className={`flex-1 flex items-center justify-center gap-1.5 border rounded-lg px-2 py-1.5 cursor-pointer text-xs transition-colors ${blockScope === s ? 'border-red-500 bg-red-50 text-red-700 font-medium' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-                    <input type="radio" name="blockScope" checked={blockScope === s} onChange={() => setBlockScope(s)} className="sr-only" />
-                    {s === 'full' ? 'Block everywhere' : 'Block from questions only'}
-                  </label>
-                ))}
-              </div>
-            )}
+            {/* Block scope */}
+            <div className="flex gap-2 mb-1">
+              {(['full', 'question'] as const).map(s => (
+                <label key={s} className={`flex-1 flex items-center justify-center gap-1.5 border rounded-lg px-2 py-1.5 cursor-pointer text-xs transition-colors ${blockScope === s ? 'border-red-500 bg-red-50 text-red-700 font-medium' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                  <input type="radio" name="blockScope" checked={blockScope === s} onChange={() => setBlockScope(s)} className="sr-only" />
+                  {s === 'full' ? 'Block everywhere' : 'Block from questions only'}
+                </label>
+              ))}
+            </div>
 
             <button
               disabled={busy}
-              onClick={() => act(() => blockReport(report.id, report.mediaType === 'audio' ? 'full' : blockScope))}
+              onClick={() => act(() => blockReport(report.id, blockScope))}
               className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-medium disabled:opacity-50"
             >
               Block
@@ -376,7 +375,7 @@ function BlockedMediaTab({ refreshKey }: { refreshKey: number }) {
 
 // ── CurationPanel (tabbed) ────────────────────────────────────────────────────
 
-type Tab = 'photos' | 'reports' | 'blocked';
+type Tab = 'photos' | 'audio' | 'reports' | 'blocked';
 
 function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
@@ -406,12 +405,14 @@ export function CurationPanel() {
     <div className="flex flex-col h-full bg-slate-50">
       <div className="shrink-0 flex border-b border-slate-200 bg-white">
         <TabBtn active={tab === 'photos'}  onClick={() => setTab('photos')}>Photos</TabBtn>
+        <TabBtn active={tab === 'audio'}   onClick={() => setTab('audio')}>Audio</TabBtn>
         <TabBtn active={tab === 'reports'} onClick={() => setTab('reports')}>Reports</TabBtn>
         <TabBtn active={tab === 'blocked'} onClick={() => setTab('blocked')}>Blocked</TabBtn>
       </div>
 
       <div className="flex-1 min-h-0 overflow-hidden">
         {tab === 'photos'  && <PhotoCurationPanel />}
+        {tab === 'audio'   && <AudioCurationPanel />}
         {tab === 'reports' && <ReportsTab onBlocked={handleBlocked} />}
         {tab === 'blocked' && <BlockedMediaTab refreshKey={blockedRefresh} />}
       </div>

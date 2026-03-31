@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { QuizConfig } from './types';
 import type { BirdProgress } from './types';
 import { HomeScreen } from './components/screens/HomeScreen';
@@ -19,7 +19,7 @@ import { useQuiz } from './hooks/useQuiz';
 import { useNotifications } from './hooks/useNotifications';
 import { loadSettings, saveSettings, loadQuizPrefs, saveQuizPrefs } from './lib/settings';
 import type { AppSettings } from './lib/settings';
-import { checkVictoryCondition, hasSeenVictory, markVictorySeen, getVictorySeen, mergeVictorySeen, describeMastery, describeWindow } from './lib/victory';
+import { checkVictoryCondition, getVictorySeen, mergeVictorySeen, describeMastery, describeWindow } from './lib/victory';
 import { locateRegion, fetchBlockedPhotos } from './services/remote/api';
 import type { LocateResult } from './services/remote/api';
 import { db, switchToUserDb } from './lib/db';
@@ -71,7 +71,9 @@ export default function App() {
   const [focusStruggling, setFocusStruggling] = useState(() => localStorage.getItem('birdygurdy_focus_struggling') === 'true');
   const [strugglingCount, setStrugglingCount] = useState(0);
   const [user, setUser]               = useState<SupabaseUser | null>(null);
-  const [showAuth, setShowAuth]       = useState(false);
+  const [showAuth, setShowAuth]           = useState(false);
+  const [wasAutoSignedOut, setWasAutoSignedOut] = useState(false);
+  const userRef = useRef<SupabaseUser | null>(null);
   const [showUploadPrompt, setShowUploadPrompt] = useState(false);
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
 
@@ -121,14 +123,20 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.questionTypes, settings]);
 
+  // Keep userRef current so the inactivity closure always sees the latest value
+  useEffect(() => { userRef.current = user; }, [user]);
+  // Clear the auto-sign-out banner once the user signs back in
+  useEffect(() => { if (user) setWasAutoSignedOut(false); }, [user]);
+
   // Auto sign-out after 30 minutes of inactivity
   const INACTIVITY_MS = 30 * 60 * 1000;
   const ACTIVITY_KEY  = 'lastActivity';
   useEffect(() => {
     const touch = () => localStorage.setItem(ACTIVITY_KEY, String(Date.now()));
     const check = () => {
+      if (!userRef.current) return; // already signed out — nothing to do
       const last = Number(localStorage.getItem(ACTIVITY_KEY) ?? Date.now());
-      if (Date.now() - last > INACTIVITY_MS) performSignOut();
+      if (Date.now() - last > INACTIVITY_MS) { performSignOut(); setWasAutoSignedOut(true); }
     };
     let throttle: ReturnType<typeof setTimeout> | null = null;
     const onActivity = () => { if (!throttle) throttle = setTimeout(() => { touch(); throttle = null; }, 60_000); };
@@ -328,9 +336,7 @@ export default function App() {
     const expandedTypes = expandQuestionTypes(config.questionTypes, settings);
     checkVictoryCondition(config.regionCode, config.recentDays ?? 30, expandedTypes)
       .then(won => {
-        if (won && !hasSeenVictory(settings.recentWindow, expandedTypes)) {
-          markVictorySeen(settings.recentWindow, expandedTypes);
-          if (user) uploadSettings(user.id, settings, loadQuizPrefs(), getVictorySeen()).catch(() => {});
+        if (won && roundLevelUps.some(e => e.graduated)) {
           sendFriendNotification('victory', {
             masteryDesc: describeMastery(expandedTypes),
             windowDesc: describeWindow(settings.recentWindow),
@@ -355,13 +361,23 @@ export default function App() {
     if (focusStruggling && !showFocusModeToggle) setFocusStruggling(false);
   }, [focusStruggling, showFocusModeToggle]);
 
-  // Check for pending friend invites whenever the user changes
+  // Check for pending friend invites and subscribe to new ones in real-time
   useEffect(() => {
     if (!user?.email) { setHasPendingInvites(false); return; }
     getReceivedPendingInvites(user.email)
       .then(invites => setHasPendingInvites(invites.length > 0))
       .catch(() => {});
-  }, [user]);
+
+    const channel = supabase
+      .channel(`friend_invites:${user.email}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'friend_invites', filter: `to_email=eq.${user.email}` },
+        () => { setHasPendingInvites(true); },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.email]);
 
   async function handleViewFriendLifeList(friendUserId: string, displayName: string) {
     const records = await fetchFriendProgress(friendUserId).catch(() => []);
@@ -373,6 +389,27 @@ export default function App() {
   return (
     <div className="font-sans lg:flex lg:h-screen">
       <Toast toast={currentToast} onDismiss={() => setCurrentToast(null)} />
+
+      {wasAutoSignedOut && !user && (
+        <div className="fixed top-0 inset-x-0 z-50 flex items-center justify-between gap-3 bg-amber-50 border-b border-amber-200 px-4 py-3 text-sm text-amber-800 shadow-sm">
+          <span>You were signed out due to inactivity.</span>
+          <div className="flex items-center gap-3 shrink-0">
+            <button
+              onClick={() => { setShowAuth(true); }}
+              className="font-semibold underline hover:text-amber-900"
+            >
+              Sign in
+            </button>
+            <button
+              onClick={() => setWasAutoSignedOut(false)}
+              className="text-amber-400 hover:text-amber-700 text-base leading-none"
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Right panel: desktop only ── */}
       {isDesktop && <div className="lg:flex lg:order-2 flex-col flex-1 border-l-2 border-slate-200 overflow-hidden">
