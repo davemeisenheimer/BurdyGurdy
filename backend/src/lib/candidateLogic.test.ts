@@ -39,10 +39,18 @@ describe('buildCandidates', () => {
     expect(candidates.every(c => c.species.speciesCode === 'amero')).toBe(true);
   });
 
-  it('adaptive: new encounter (not in weightsMap) gets weight 20', () => {
+  it('adaptive: palette bird not yet in weightsMap gets weight 20', () => {
     const pool = [makeSpecies('newbird')];
-    const candidates = buildCandidates(pool, pool, new Set(['newbird']), {}, TYPES, true);
+    const paletteCodes = new Set(['newbird']);
+    const candidates = buildCandidates(pool, pool, new Set(['newbird']), {}, TYPES, true, new Set(), paletteCodes);
     expect(candidates[0].weight).toBe(20);
+  });
+
+  it('adaptive: non-palette bird not in weightsMap is excluded as a question subject', () => {
+    const pool = [makeSpecies('newbird')];
+    // newbird is in the eBird recent window but NOT in the learning palette
+    const candidates = buildCandidates(pool, pool, new Set(['newbird']), {}, TYPES, true);
+    expect(candidates).toHaveLength(0);
   });
 
   it('adaptive: unmastered bird (w=20) keeps its weight', () => {
@@ -95,7 +103,8 @@ describe('buildCandidates', () => {
   it('adaptive: multiple question types produce one candidate entry per type', () => {
     const pool = [makeSpecies('amero')];
     const types = ['image', 'song'] as const;
-    const candidates = buildCandidates(pool, pool, new Set(['amero']), {}, types, true);
+    const paletteCodes = new Set(['amero']);
+    const candidates = buildCandidates(pool, pool, new Set(['amero']), {}, types, true, new Set(), paletteCodes);
     expect(candidates).toHaveLength(2);
     expect(candidates.map(c => c.type).sort()).toEqual(['image', 'song'].sort());
   });

@@ -45,6 +45,7 @@ export function buildCandidates(
   types: QuestionType[],
   adaptiveMode: boolean,
   level0Keys: Set<string> = new Set(),
+  paletteCodes: Set<string> = new Set(),
 ): Candidate[] {
   const candidates: Candidate[] = [];
 
@@ -57,6 +58,10 @@ export function buildCandidates(
       if (!adaptiveMode) {
         weight = 1;
       } else if (w === undefined) {
+        // In adaptive mode only palette birds can be question subjects.
+        // Birds present in eBird's recent window but not yet seeded into the
+        // learning palette are excluded here — they can still appear as distractors.
+        if (!paletteCodes.has(species.speciesCode)) continue;
         weight = NEW_ENCOUNTER_WEIGHT;
       } else {
         weight = Math.max(w, MASTERED_FLOOR_WEIGHT);
