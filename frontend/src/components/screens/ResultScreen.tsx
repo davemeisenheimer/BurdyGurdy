@@ -327,7 +327,7 @@ export function ResultScreen({ score, config, questionTypes, levelUps, noLongerS
             onClick={onHome}
             className="w-full py-3 rounded-xl border-2 border-slate-300 hover:border-slate-400 text-slate-700 font-semibold text-lg transition-colors"
           >
-            Change Settings
+            Home Screen
           </button>
         </div>
       </div>

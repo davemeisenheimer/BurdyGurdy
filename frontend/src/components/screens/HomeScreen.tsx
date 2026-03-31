@@ -155,6 +155,40 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
           <div className="flex-1 min-h-4" />
           </>)}
 
+          {/* Buttons */}
+          <div className="shrink-0 flex gap-2">
+            <button
+              onClick={handleStart}
+              disabled={selectedTypes.length === 0 || !regionCode}
+              className="flex-1 py-2 rounded-xl bg-forest-600 hover:bg-forest-700 text-white font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Play
+            </button>
+            <button
+              onClick={onProgress}
+              className="flex-1 py-2 rounded-xl border-2 border-slate-300 hover:border-slate-400 text-slate-700 font-semibold transition-colors"
+            >
+              Life List
+            </button>
+          </div>
+
+          {/* Questions per round */}
+          <div className="shrink-0 mt-3">
+            <label className="block text-sm font-semibold text-slate-700 mb-1">
+              Questions per Round: <span className="text-forest-700">{questionsPerRound}</span>
+            </label>
+            <input
+              type="range"
+              min={5}
+              max={25}
+              step={5}
+              value={questionsPerRound}
+              onChange={e => { const v = Number(e.target.value); setQuestionsPerRound(v); notify({ questionsPerRound: v }); }}
+              className="w-full accent-forest-600"
+            />
+          </div>
+          <div className="flex-1 min-h-4" />
+
           {/* Question types */}
           <div className="shrink-0">
             <label className="block text-sm font-semibold text-slate-700 mb-2">Question Types</label>
@@ -219,48 +253,12 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
               Adaptive focuses on birds you find difficult. Random picks evenly.
             </p>
           </div>
-          <div className="flex-1 min-h-4" />
 
-          {/* Questions per round */}
-          <div className="shrink-0">
-            <label className="block text-sm font-semibold text-slate-700 mb-1">
-              Questions per Round: <span className="text-forest-700">{questionsPerRound}</span>
-            </label>
-            <input
-              type="range"
-              min={5}
-              max={25}
-              step={5}
-              value={questionsPerRound}
-              onChange={e => { const v = Number(e.target.value); setQuestionsPerRound(v); notify({ questionsPerRound: v }); }}
-              className="w-full accent-forest-600"
-            />
-          </div>
-          <div className="flex-1 min-h-4" />
-
-          {/* Buttons */}
-          <div className="shrink-0 space-y-3">
-            <button
-              onClick={handleStart}
-              disabled={selectedTypes.length === 0 || !regionCode}
-              className="w-full py-3 rounded-xl bg-forest-600 hover:bg-forest-700 text-white font-semibold text-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Start Game
-            </button>
-
-            <button
-              onClick={onProgress}
-              className="w-full py-2.5 rounded-xl border-2 border-slate-300 hover:border-slate-400 text-slate-700 font-semibold transition-colors"
-            >
-              My Life List
-            </button>
-          </div>
+          <p className="text-center text-xs text-slate-400 pt-4">
+            <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 underline">Privacy Policy</a>
+          </p>
         </div>
       </div>
-
-      <p className="text-center text-xs text-slate-400 py-3">
-        <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 underline">Privacy Policy</a>
-      </p>
 
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
       {isDesktop && showMap && (
