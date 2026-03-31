@@ -15,6 +15,7 @@ import { CurationPanel } from './components/panels/CurationPanel';
 import { BirdInfoPanel } from './components/panels/BirdInfoPanel';
 import { AuthPanel } from './components/panels/AuthPanel';
 import { Toast } from './components/ui/Toast';
+import { InactivitySignOutModal } from './components/ui/InactivitySignOutModal';
 import { useQuiz } from './hooks/useQuiz';
 import { useNotifications } from './hooks/useNotifications';
 import { loadSettings, saveSettings, loadQuizPrefs, saveQuizPrefs } from './lib/settings';
@@ -128,28 +129,34 @@ export default function App() {
   // Clear the auto-sign-out banner once the user signs back in
   useEffect(() => { if (user) setWasAutoSignedOut(false); }, [user]);
 
-  // Auto sign-out after 30 minutes of inactivity
+  // Auto sign-out after 30 minutes of inactivity.
+  // The check runs on every user interaction — if more than 30 minutes have
+  // passed since the last interaction, sign out and show the modal instead
+  // of performing the action.  No visibility-change check needed.
   const INACTIVITY_MS = 30 * 60 * 1000;
   const ACTIVITY_KEY  = 'lastActivity';
   useEffect(() => {
     const touch = () => localStorage.setItem(ACTIVITY_KEY, String(Date.now()));
-    const check = () => {
-      if (!userRef.current) return; // already signed out — nothing to do
-      const last = Number(localStorage.getItem(ACTIVITY_KEY) ?? Date.now());
-      if (Date.now() - last > INACTIVITY_MS) { performSignOut(); setWasAutoSignedOut(true); }
-    };
     let throttle: ReturnType<typeof setTimeout> | null = null;
-    const onActivity = () => { if (!throttle) throttle = setTimeout(() => { touch(); throttle = null; }, 60_000); };
+    const onActivity = () => {
+      if (userRef.current) {
+        const last = Number(localStorage.getItem(ACTIVITY_KEY) ?? Date.now());
+        if (Date.now() - last > INACTIVITY_MS) {
+          performSignOut();
+          setWasAutoSignedOut(true);
+          return; // don't update lastActivity — leave it stale until sign-in
+        }
+      }
+      if (!throttle) throttle = setTimeout(() => { touch(); throttle = null; }, 60_000);
+    };
     touch();
     document.addEventListener('click',      onActivity);
     document.addEventListener('keydown',    onActivity);
     document.addEventListener('touchstart', onActivity);
-    document.addEventListener('visibilitychange', check);
     return () => {
       document.removeEventListener('click',      onActivity);
       document.removeEventListener('keydown',    onActivity);
       document.removeEventListener('touchstart', onActivity);
-      document.removeEventListener('visibilitychange', check);
     };
   }, []);
 
@@ -175,8 +182,16 @@ export default function App() {
   }, []);
 
   // Auth: restore session on load and listen for changes
+  // Tracks the user ID that was active before each auth event so we can
+  // distinguish a genuine new sign-in from a silent token refresh (both
+  // fire SIGNED_IN in this version of the Supabase client).
+  const prevAuthUserIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
+      // Seed the ref so the first SIGNED_IN/INITIAL_SESSION callback knows
+      // whether the user was already authenticated on page load.
+      prevAuthUserIdRef.current = data.session?.user?.id ?? null;
       switchToUserDb(data.session?.user?.id ?? null);
       setUser(data.session?.user ?? null);
     });
@@ -219,8 +234,10 @@ export default function App() {
         }).catch(() => {});
         downloadUserBlockedPhotos(userId).catch(() => {});
         fetchAdminBlockedMedia().catch(() => {});
-        // On actual sign-in (not page reload), send login notification and record initial mastered count
-        if (event === 'SIGNED_IN') {
+        // Send login notification only on a genuine new sign-in — i.e. the user
+        // was previously signed out.  Supabase also fires SIGNED_IN on silent
+        // token refreshes (~hourly); checking prevAuthUserIdRef filters those out.
+        if (event === 'SIGNED_IN' && prevAuthUserIdRef.current === null) {
           db.progress.toArray()
             .then(records => { sessionInitialMasteredRef.current = records.filter(r => r.isMastered).length; })
             .catch(() => {});
@@ -231,6 +248,9 @@ export default function App() {
           sessionMasteredRef.current = 0;
         }
       }
+      // Keep ref current so subsequent events see the correct previous state.
+      if (event === 'SIGNED_OUT') prevAuthUserIdRef.current = null;
+      else if (session?.user)      prevAuthUserIdRef.current = session.user.id;
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -391,24 +411,10 @@ export default function App() {
       <Toast toast={currentToast} onDismiss={() => setCurrentToast(null)} />
 
       {wasAutoSignedOut && !user && (
-        <div className="fixed top-0 inset-x-0 z-50 flex items-center justify-between gap-3 bg-amber-50 border-b border-amber-200 px-4 py-3 text-sm text-amber-800 shadow-sm">
-          <span>You were signed out due to inactivity.</span>
-          <div className="flex items-center gap-3 shrink-0">
-            <button
-              onClick={() => { setShowAuth(true); }}
-              className="font-semibold underline hover:text-amber-900"
-            >
-              Sign in
-            </button>
-            <button
-              onClick={() => setWasAutoSignedOut(false)}
-              className="text-amber-400 hover:text-amber-700 text-base leading-none"
-              aria-label="Dismiss"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
+        <InactivitySignOutModal
+          onSignIn={() => { setWasAutoSignedOut(false); setShowAuth(true); }}
+          onCancel={() => setWasAutoSignedOut(false)}
+        />
       )}
 
       {/* ── Right panel: desktop only ── */}

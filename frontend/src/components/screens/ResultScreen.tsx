@@ -314,8 +314,6 @@ export function ResultScreen({ score, config, questionTypes, levelUps, noLongerS
           </div>
         )}
 
-        {(levelUps.length > 0 || noLongerStruggling.length > 0 || stillStruggling.length > 0) && <LevelUpSummary levelUps={levelUps} noLongerStruggling={noLongerStruggling} stillStruggling={stillStruggling} />}
-
         <div className="space-y-3">
           <button
             onClick={onRestart}
@@ -330,6 +328,8 @@ export function ResultScreen({ score, config, questionTypes, levelUps, noLongerS
             Home Screen
           </button>
         </div>
+
+        {(levelUps.length > 0 || noLongerStruggling.length > 0 || stillStruggling.length > 0) && <LevelUpSummary levelUps={levelUps} noLongerStruggling={noLongerStruggling} stillStruggling={stillStruggling} />}
       </div>
     </div>
   );

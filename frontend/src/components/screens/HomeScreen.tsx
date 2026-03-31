@@ -128,7 +128,7 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
           </div>
           <img src="/BurdyNotebook.png" alt="" className="h-16 w-auto mx-auto" />
           <h1 className="text-4xl font-bold text-forest-800">BurdyGurdy</h1>
-          <p className="text-slate-500 mt-2">Learn the birds that make sense</p>
+          <p className="text-slate-500 mt-2">Learn the birds you live with</p>
         </div>
 
         {/* Card — grows to fill remaining height; sections flex apart */}
