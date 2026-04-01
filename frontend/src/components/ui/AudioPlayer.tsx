@@ -10,11 +10,12 @@ interface Props {
   url: string;
   tracks?: Track[];  // paired audio+sono fallbacks; first entry should match url/sonoUrl
   sonoUrl?: string;
+  onAudioUnavailable?: () => void;
 }
 
 const toHttps = (u?: string) => u?.startsWith('//') ? `https:${u}` : u;
 
-export function AudioPlayer({ url, tracks, sonoUrl }: Props) {
+export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [audioError, setAudioError] = useState(false);
@@ -77,7 +78,19 @@ export function AudioPlayer({ url, tracks, sonoUrl }: Props) {
         console.warn(`[AudioPlayer] all ${allTracks.length} track(s) failed for question — showing "Audio unavailable"`, allTracks.map(t => t.audioUrl));
       }
       setAudioError(true);
+      onAudioUnavailable?.();
     }
+  };
+
+  const handleRetry = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    trackIndexRef.current = 0;
+    setAudioError(false);
+    setSonoLoaded(false);
+    audio.src = allTracks[0].audioUrl;
+    setActiveSonoUrl(allTracks[0].sonoUrl);
+    audio.play().catch(() => {});
   };
 
   const toggle = (e?: React.MouseEvent) => {
@@ -128,9 +141,15 @@ export function AudioPlayer({ url, tracks, sonoUrl }: Props) {
           }`}
         >
           {audioError ? (
-            <span className="text-white/80 text-sm bg-black/50 px-3 py-1 rounded-full">
-              Audio unavailable
-            </span>
+            <div className="flex flex-col items-center gap-2" onClick={e => e.stopPropagation()}>
+              <p className="text-white/80 text-sm">Unable to fetch audio</p>
+              <button
+                onClick={handleRetry}
+                className="text-white/90 text-sm bg-black/60 hover:bg-black/80 px-4 py-2 rounded-full transition-colors"
+              >
+                ↺ Retry audio
+              </button>
+            </div>
           ) : (
             <div className="w-14 h-14 rounded-full bg-white/90 flex items-center justify-center text-2xl shadow-lg">
               ▶
@@ -154,7 +173,19 @@ export function AudioPlayer({ url, tracks, sonoUrl }: Props) {
 
   // ── Fallback: no spectrogram (or still loading) ─────────────────────────
   if (audioError) {
-    return <p className="text-red-500 text-sm">Audio unavailable</p>;
+    return (
+      <>
+        <div className="w-full h-20 rounded-xl bg-slate-100 flex flex-col items-center justify-center text-slate-500">
+        Unable to fetch audio<br/>
+        <button
+          onClick={handleRetry}
+          className="px-4 py-2 rounded-full border border-slate-300 text-slate-500 hover:bg-slate-50 text-sm transition-colors"
+        >
+          ↺ Retry audio
+        </button>
+        </div>
+      </>
+    );
   }
 
   return (

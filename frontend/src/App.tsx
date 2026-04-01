@@ -631,6 +631,7 @@ export default function App() {
           onToggleFavourite={toggleFavourite}
           onToggleExcluded={toggleExcluded}
           onNext={handleNext}
+          onSkip={nextQuestion}
           onReportError={user ? (data) => handleReportError({ ...data, speciesCode: currentQuestion.speciesCode, comName: currentQuestion.comName }) : undefined}
         />
       )}

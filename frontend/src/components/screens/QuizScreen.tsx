@@ -34,6 +34,7 @@ interface Props {
   onToggleFavourite: () => void;
   onToggleExcluded: () => void;
   onNext: () => void;
+  onSkip?: () => void;
   onReportError?: (data: ReportErrorData & { mediaUrl: string; mediaType: 'photo' | 'audio' }) => void;
 }
 
@@ -100,6 +101,7 @@ export function QuizScreen({
   onToggleFavourite,
   onToggleExcluded,
   onNext,
+  onSkip,
   onReportError,
 }: Props) {
   const answered = selectedAnswer !== null;
@@ -108,6 +110,9 @@ export function QuizScreen({
 
   const [failedPhotoUrls, setFailedPhotoUrls] = useState<Set<string>>(new Set());
   const [showReportModal, setShowReportModal] = useState(false);
+  const [audioUnavailable, setAudioUnavailable] = useState(false);
+
+  useEffect(() => { setAudioUnavailable(false); }, [question.id]);
 
   // Derive the URL and type of the media that was shown as the question stimulus
   const reportMediaType: 'photo' | 'audio' = stimType === 'image' ? 'photo' : 'audio';
@@ -303,9 +308,20 @@ export function QuizScreen({
                   ✨ New bird!
                 </span>
               )}
-              <div className="flex-1 min-h-0 flex items-center justify-center px-5 pb-4">
+              <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-3 px-5 pb-4">
                 {stimType === 'song' && question.audioUrl && (
-                  <AudioPlayer url={question.audioUrl} tracks={question.audioTracks} sonoUrl={question.sonoUrl} />
+                  <AudioPlayer url={question.audioUrl} tracks={question.audioTracks} sonoUrl={question.sonoUrl} onAudioUnavailable={() => setAudioUnavailable(true)} />
+                )}
+                {audioUnavailable && !answered && onSkip && (
+                  <div className="flex flex-col items-center gap-2">
+                    <p className="text-sm text-slate-500">Audio is unavailable for this question.</p>
+                    <button
+                      onClick={onSkip}
+                      className="px-4 py-2 rounded-xl border border-slate-300 text-slate-500 hover:bg-slate-50 text-sm font-medium transition-colors"
+                    >
+                      Skip question
+                    </button>
+                  </div>
                 )}
                 {stimType === 'latin' && (
                   <span className="text-2xl italic text-slate-700 text-center px-2">
