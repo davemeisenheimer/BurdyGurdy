@@ -187,6 +187,7 @@ export function BirdInfoPanel({
             referenceSpecies={primarySpecies}
             regionCode={regionCode}
             autoScrollEnabled={autoScrollRelatedSpecies}
+            showReferencePhoto={!!browseResolved}
             onViewSpecies={setViewingSpecies}
             onWillPlay={() => mainAudioPauseRef.current?.()}
           />

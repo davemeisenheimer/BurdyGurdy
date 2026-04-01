@@ -1,3 +1,7 @@
+import type { BirderLevel } from '../types';
+
+export type { BirderLevel };
+
 export interface AppSettings {
   autoplayRevealAudio: boolean;
   includeLatinAnswerVariants: boolean;
@@ -8,6 +12,7 @@ export interface AppSettings {
   recentWindow: 'day' | 'week' | 'month';
   enableAdminFeatures: boolean;
   expireMasteredBirds: boolean;
+  birderLevel?: BirderLevel;
 }
 
 const DEFAULTS: AppSettings = {
@@ -19,7 +24,7 @@ const DEFAULTS: AppSettings = {
   autoScrollRelatedSpecies: true,
   recentWindow: 'day',
   enableAdminFeatures: false,
-  expireMasteredBirds: false,
+  expireMasteredBirds: true,
 };
 
 const KEY = 'birdygurdy_settings';

@@ -105,18 +105,20 @@ export function applyAnswer(
   speciesCode: string,
   comName: string,
   questionType: QuestionType,
+  initialMasteryLevel = 0,
 ): RecordAnswerResult & { newState: ExistingProgressState & { weight: number } } {
   // ── First encounter ───────────────────────────────────────────────────────
   if (!existing) {
     const correct   = answeredCorrect ? 1 : 0;
     const incorrect = answeredCorrect ? 0 : 1;
     const streak    = answeredCorrect ? 1 : 0;
+    const ml        = initialMasteryLevel;
     return {
-      newState:           { correct, incorrect, masteryLevel: 0, consecutiveCorrect: streak, isMastered: false, weight: PALETTE_WEIGHT, favourited: false },
+      newState:           { correct, incorrect, masteryLevel: ml, consecutiveCorrect: streak, isMastered: false, weight: PALETTE_WEIGHT, favourited: false },
       advancedFromLevel0: false,
       levelUp:            null,
       noLongerStruggling: null,
-      updatedMastery:     { masteryLevel: 0, consecutiveCorrect: streak, isMastered: false, correct, incorrect },
+      updatedMastery:     { masteryLevel: ml, consecutiveCorrect: streak, isMastered: false, correct, incorrect },
     };
   }
 
