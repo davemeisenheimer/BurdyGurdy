@@ -1,11 +1,16 @@
 import { useState } from 'react';
-import type { AppSettings } from '../../lib/settings';
+import type { AppSettings, BirderLevel } from '../../lib/settings';
 import type { QuestionType } from '../../types';
+import type { SupabaseUser } from '../../lib/supabase';
 import { RegionSearch } from '../ui/RegionSearch';
 import { MapRegionPicker } from '../ui/MapRegionPicker';
 import { TrimProgressDialog } from '../ui/TrimProgressDialog';
 import { FocusModeToggle } from '../ui/FocusModeToggle';
 import { HelpInfo } from '../ui/HelpInfo';
+
+const isIOS        = /iPad|iPhone|iPod/.test(navigator.userAgent);
+const isAndroid    = /Android/.test(navigator.userAgent);
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
 
 interface Props {
   initialSettings: AppSettings;
@@ -23,6 +28,8 @@ interface Props {
   showFocusModeToggle?: boolean;
   strugglingCount?: number;
   onToggleFocusStruggling?: () => void;
+  user?: SupabaseUser | null;
+  onInstallApp?: (() => Promise<void>) | null;
 }
 
 interface ToggleRowProps {
@@ -49,11 +56,18 @@ function ToggleRow({ label, infoId, checked, onChange }: ToggleRowProps) {
   );
 }
 
-export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, regionCode, onRegionChange, onClearBlockedPhotos, isAdmin, recentDays, questionTypes, onProgressTrimmed, focusStruggling, showFocusModeToggle, strugglingCount, onToggleFocusStruggling }: Props) {
+const BIRDER_LEVELS: { level: BirderLevel; label: string; desc: string }[] = [
+  { level: 'novice',       label: 'Novice',       desc: 'Progresses through easy, medium, then difficult questions.' },
+  { level: 'intermediate', label: 'Intermediate', desc: 'Skips the easy questions.' },
+  { level: 'advanced',     label: 'Advanced',     desc: 'Skips easy and medium difficulty questions.' },
+];
+
+export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, regionCode, onRegionChange, onClearBlockedPhotos, isAdmin, recentDays, questionTypes, onProgressTrimmed, focusStruggling, showFocusModeToggle, strugglingCount, onToggleFocusStruggling, user, onInstallApp }: Props) {
   const [settings, setSettings] = useState(initialSettings);
   const [regionDisplayName, setRegionDisplayName] = useState<string | undefined>(undefined);
   const [showMap, setShowMap] = useState(false);
   const [showTrimDialog, setShowTrimDialog] = useState(false);
+  const [pendingLevel, setPendingLevel] = useState<BirderLevel | null>(null);
 
   const update = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     const next = { ...settings, [key]: value };
@@ -183,6 +197,70 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
             </label>
           )}
         </div>
+
+        {/* Birder level — signed-in users only */}
+        {user && (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mt-4">
+            <div className="flex items-center gap-2 mb-3">
+              <HelpInfo id="birderLevel" />
+              <p className="font-medium text-slate-800 text-sm">Birder experience level</p>
+            </div>
+            <div className="space-y-2">
+              {BIRDER_LEVELS.map(({ level, label, desc }) => (
+                <button
+                  key={level}
+                  onClick={() => {
+                    if ((settings.birderLevel ?? 'novice') !== level) setPendingLevel(level);
+                  }}
+                  className={`w-full text-left px-3 py-2.5 rounded-xl border-2 transition-colors ${
+                    (settings.birderLevel ?? 'novice') === level
+                      ? 'border-forest-600 bg-forest-50'
+                      : 'border-slate-200 hover:border-forest-300 bg-white'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold text-sm text-slate-800">{label}</p>
+                    {(settings.birderLevel ?? 'novice') === level && <span className="text-forest-600 text-sm font-bold">✓</span>}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">{desc}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Birder level change confirmation dialog */}
+        {pendingLevel && (() => {
+          const newLevelInfo = BIRDER_LEVELS.find(l => l.level === pendingLevel)!;
+          const newBirdMsg =
+            pendingLevel === 'intermediate' ? 'New birds added to your quiz will skip easy questions and start at medium difficulty.' :
+            pendingLevel === 'advanced'     ? 'New birds added to your quiz will skip easy and medium questions and start at difficult questions.' :
+                                             'New birds added to your quiz will start from the beginning with easy questions.';
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+              <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-sm p-6">
+                <p className="font-semibold text-slate-800 text-base mb-3">Change to {newLevelInfo.label}?</p>
+                <p className="text-sm text-slate-600 mb-2">Your birds already in progress will not be affected — they'll continue from their current difficulty level.</p>
+                <p className="text-sm text-slate-600 mb-6">{newBirdMsg}</p>
+                <div className="flex gap-3 justify-end">
+                  <button
+                    onClick={() => setPendingLevel(null)}
+                    className="px-4 py-2 text-sm font-medium text-slate-600 border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => { update('birderLevel', pendingLevel); setPendingLevel(null); }}
+                    className="px-4 py-2 text-sm font-medium text-white bg-forest-600 rounded-xl hover:bg-forest-700 transition-colors"
+                  >
+                    Confirm
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+        
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mt-4">
           <div className="flex items-center gap-2 mb-3">
             <HelpInfo id="blockedPhotos" />
@@ -208,6 +286,38 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
             >
               Trim outdated progress…
             </button>
+          </div>
+        )}
+
+        {/* Home screen install — mobile only, not already standalone */}
+        {(isIOS || isAndroid) && !isStandalone && (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mt-4">
+            <p className="font-medium text-slate-800 text-sm mb-1">Add to home screen</p>
+            <p className="text-xs text-slate-500 mb-3">
+              Launching from your home screen gives a full-screen experience without the browser address bar.
+            </p>
+            {isAndroid && onInstallApp ? (
+              <button
+                onClick={onInstallApp}
+                className="text-xs px-3 py-1.5 border border-forest-300 text-forest-700 rounded-lg hover:bg-forest-50 transition-colors"
+              >
+                Add to Home Screen
+              </button>
+            ) : isIOS ? (
+              <div className="space-y-2">
+                {[
+                  'Tap the Share button ⬆️ at the bottom of Safari',
+                  'Tap "Add to Home Screen"',
+                  'Tap "Add" to confirm',
+                ].map((step, i) => (
+                  <p key={i} className="text-xs text-slate-600 flex gap-2">
+                    <span className="text-slate-400 shrink-0">{i + 1}.</span>{step}
+                  </p>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">Tap the browser menu ⋮ and select "Add to Home screen".</p>
+            )}
           </div>
         )}
 

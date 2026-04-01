@@ -23,6 +23,7 @@ export async function recordAnswer(
   questionType: QuestionType,
   correct: boolean,
   comName: string,
+  initialMasteryLevel = 0,
 ): Promise<RecordAnswerResult> {
   const existing = await db.progress.get([speciesCode, questionType]);
   const { newState, advancedFromLevel0, levelUp, noLongerStruggling, updatedMastery } = applyAnswer(
@@ -31,6 +32,7 @@ export async function recordAnswer(
     speciesCode,
     comName,
     questionType,
+    initialMasteryLevel,
   );
 
   const now = Date.now();
@@ -79,6 +81,7 @@ async function addToPaletteForType(
   speciesCode: string,
   comName: string,
   type: QuestionType,
+  initialMasteryLevel = 0,
 ): Promise<boolean> {
   const existing = await db.progress.get([speciesCode, type]);
   if (!existing) {
@@ -94,7 +97,7 @@ async function addToPaletteForType(
       weight: PALETTE_WEIGHT,
       favourited: sibling?.favourited ?? false,
       excluded:   sibling?.excluded   ?? false,
-      masteryLevel: 0, consecutiveCorrect: 0, isMastered: false,
+      masteryLevel: initialMasteryLevel, consecutiveCorrect: 0, isMastered: false,
     });
     return true;
   }
@@ -131,6 +134,7 @@ async function promoteNextForType(
   count: number,
   back = 30,
   seededCodes: Set<string>,
+  initialMasteryLevel = 0,
 ): Promise<void> {
   const cacheKey = `${regionCode}:${back}`;
   const cache = await db.regionSpecies.get(cacheKey);
@@ -138,7 +142,7 @@ async function promoteNextForType(
 
   const toSeed = selectSpeciesToPromote(cache.species, seededCodes, count);
   for (const s of toSeed) {
-    await addToPaletteForType(s.speciesCode, s.comName, type);
+    await addToPaletteForType(s.speciesCode, s.comName, type, initialMasteryLevel);
   }
 }
 
@@ -155,7 +159,7 @@ export function typeLevel0MaxSize(graduateCount: number): number {
 
 async function getTypePromotionCount(type: QuestionType, level0Count: number): Promise<number> {
   const graduateCount = await db.progress
-    .filter(record => record.questionType === type && record.masteryLevel !== 0)
+    .filter(record => record.questionType === type && (record.isMastered ?? false))
     .count();
   return typeLevel0MaxSize(graduateCount) - level0Count;
 }
@@ -168,18 +172,19 @@ export async function maintainLevel0Palette(
   regionCode: string,
   types: QuestionType[],
   back = 30,
+  initialMasteryLevel = 0,
 ): Promise<void> {
   await getRegionSpecies(regionCode, back);
   const records = await db.progress.toArray();
 
   for (const type of types) {
     const level0Count = records.filter(
-      r => r.questionType === type && (r.masteryLevel ?? 0) === 0 && !(r.isMastered ?? false) && !(r.excluded ?? false),
+      r => r.questionType === type && (r.masteryLevel ?? 0) === initialMasteryLevel && !(r.isMastered ?? false) && !(r.excluded ?? false),
     ).length;
     const promotionCount = await getTypePromotionCount(type, level0Count);
     if (promotionCount > 0) {
       const seededCodes = new Set(records.filter(r => r.questionType === type).map(r => r.speciesCode));
-      await promoteNextForType(regionCode, type, promotionCount, back, seededCodes);
+      await promoteNextForType(regionCode, type, promotionCount, back, seededCodes, initialMasteryLevel);
     }
   }
 }
@@ -306,7 +311,7 @@ export async function getExcluded(
 
 // ── Adaptive params ───────────────────────────────────────────────────────────
 
-export async function getAdaptiveParams(): Promise<AdaptiveParams> {
+export async function getAdaptiveParams(initialMasteryLevel = 0): Promise<AdaptiveParams> {
   const records = await db.progress.toArray();
 
   const masteryLevels: Record<string, number> = {};
@@ -337,7 +342,7 @@ export async function getAdaptiveParams(): Promise<AdaptiveParams> {
       const key    = `${speciesCode}:${record.questionType}`;
       weights[key] = calcWeight(record.isMastered ?? false, record.favourited ?? false, record.recentAnswers, record.correct ?? 0, record.incorrect ?? 0);
       if (record.isMastered) historyKeys.push(key);
-      if (!bannedSet.has(speciesCode) && (record.masteryLevel ?? 0) === 0 && !(record.isMastered ?? false)) {
+      if (!bannedSet.has(speciesCode) && (record.masteryLevel ?? 0) === initialMasteryLevel && !(record.isMastered ?? false)) {
         level0Keys.push(key);
       }
     }

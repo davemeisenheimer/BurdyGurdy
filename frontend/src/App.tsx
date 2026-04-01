@@ -7,6 +7,7 @@ import { ResultScreen } from './components/screens/ResultScreen';
 import { ProgressScreenLife } from './components/screens/ProgressScreenLife';
 import { ProgressScreenRecent } from './components/screens/ProgressScreenRecent';
 import { BirdInfoScreen } from './components/screens/BirdInfoScreen';
+import { OnboardingWizard } from './components/screens/OnboardingWizard';
 import { SettingsScreen } from './components/screens/SettingsScreen';
 import { VictoryScreen } from './components/screens/VictoryScreen';
 import { FriendsScreen } from './components/screens/FriendsScreen';
@@ -33,6 +34,11 @@ import { expandQuestionTypes } from './lib/questionTypes';
 import type { ReportErrorData } from './components/ui/ReportErrorModal';
 import { markNotificationsRead } from './lib/notifications';
 import { fetchFriendProgress, getReceivedPendingInvites } from './lib/friends';
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
 
 const RECENT_DAYS: Record<'day' | 'week' | 'month', number> = { day: 1, week: 7, month: 30 };
 const ACTIVITY_KEY = 'lastActivity';
@@ -81,6 +87,8 @@ export default function App() {
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
   const [expiryDialog, setExpiryDialog] = useState<Array<{ speciesCode: string; comName: string }> | null>(null);
   const pendingStartConfigRef = useRef<QuizConfig | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem('burdygurdy_onboarding_complete'));
+  const [installPromptEvent, setInstallPromptEvent] = useState<BeforeInstallPromptEvent | null>(null);
 
   const [screen, setScreen] = useState<'home' | 'quiz' | 'result' | 'progress' | 'settings' | 'victory' | 'recentprogress' | 'birdinfo' | 'friends' | 'notifications' | 'friendprogress' | 'friendrecentprogress'>(
     () => sessionStorage.getItem('pendingInvite') ? 'friends' : 'home',
@@ -110,13 +118,20 @@ export default function App() {
   } = useNotifications({ user, screen, onViewNotifications: () => setScreen('notifications') });
 
   const isAdmin = user?.user_metadata?.is_admin === true;
-  const { state, currentQuestion, isCorrect, currentFavourited, currentExcluded, revealPhotos, revealRangeMapUrl, revealSightings, questionPhoto, questionPhotoFetching, roundLevelUps, roundNoLongerStruggling, isFirstEncounter, currentMastery, startQuiz, submitAnswer, toggleFavourite, toggleExcluded, nextQuestion, removeOptionalPhoto } = useQuiz(config, settings.randomizeQuestionPhotos, user?.id);
+  const { state, currentQuestion, isCorrect, currentFavourited, currentExcluded, revealPhotos, revealRangeMapUrl, revealSightings, questionPhoto, questionPhotoFetching, roundLevelUps, roundNoLongerStruggling, isFirstEncounter, currentMastery, startQuiz, submitAnswer, toggleFavourite, toggleExcluded, nextQuestion, removeOptionalPhoto } = useQuiz(config, settings.randomizeQuestionPhotos, user?.id, settings.birderLevel);
 
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 1024px)');
     const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  // Capture the Android "Add to home screen" prompt so we can trigger it on demand
+  useEffect(() => {
+    const handler = (e: Event) => { e.preventDefault(); setInstallPromptEvent(e as BeforeInstallPromptEvent); };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
   // Recompute struggling count whenever question types or settings change (also runs on mount)
@@ -349,6 +364,16 @@ export default function App() {
     if (user) uploadSettings(user.id, s, loadQuizPrefs(), getVictorySeen()).catch(() => {});
   };
 
+  const handleUpdateSettings = (updates: Partial<AppSettings>) => {
+    handleSaveSettings({ ...settings, ...updates });
+  };
+
+  const handleInstallApp = installPromptEvent ? async () => {
+    await installPromptEvent.prompt();
+    const { outcome } = await installPromptEvent.userChoice;
+    if (outcome === 'accepted') setInstallPromptEvent(null);
+  } : null;
+
   function detectService(url: string): string {
     if (url.includes('inaturalist.org'))  return 'iNaturalist';
     if (url.includes('macaulaylibrary.org')) return 'Macaulay Library';
@@ -430,6 +455,17 @@ export default function App() {
   return (
     <div className="font-sans lg:flex lg:h-screen">
       <Toast toast={currentToast} onDismiss={() => setCurrentToast(null)} />
+
+      {showOnboarding && (
+        <OnboardingWizard
+          user={user}
+          settings={settings}
+          onUpdateSettings={handleUpdateSettings}
+          onRegionDetected={handleRegionChange}
+          onInstallApp={handleInstallApp}
+          onComplete={() => { localStorage.setItem('burdygurdy_onboarding_complete', '1'); setShowOnboarding(false); }}
+        />
+      )}
 
       {wasAutoSignedOut && !user && (
         <InactivitySignOutModal
@@ -542,6 +578,8 @@ export default function App() {
               uploadProgress(user.id).catch(() => {});
             }
           }}
+          user={user}
+          onInstallApp={handleInstallApp}
         />
       )}
 

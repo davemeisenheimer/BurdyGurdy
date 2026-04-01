@@ -1,3 +1,5 @@
+export type BirderLevel = 'novice' | 'intermediate' | 'advanced';
+
 export type QuestionType =
   | 'song' | 'image' | 'latin' | 'family' | 'order' | 'sono'
   | 'image-latin' | 'song-latin' | 'family-latin'
