@@ -8,17 +8,19 @@ import type { SlideSpecies } from './types';
 type CarouselSlide = SlideSpecies & { kind: 'title' | 'photo' };
 
 interface Props {
-  referenceSpecies:   SlideSpecies;
-  regionCode?:        string;
-  autoScrollEnabled?: boolean;
-  onViewSpecies:      (species: SlideSpecies) => void;
-  onWillPlay?:        () => void;
+  referenceSpecies:    SlideSpecies;
+  regionCode?:         string;
+  autoScrollEnabled?:  boolean;
+  showReferencePhoto?: boolean;
+  onViewSpecies:       (species: SlideSpecies) => void;
+  onWillPlay?:         () => void;
 }
 
 export function RelatedSpeciesCarousel({
   referenceSpecies,
   regionCode,
   autoScrollEnabled = true,
+  showReferencePhoto = false,
   onViewSpecies,
   onWillPlay,
 }: Props) {
@@ -32,6 +34,24 @@ export function RelatedSpeciesCarousel({
   const [animated, setAnimated]           = useState(true);
   const [autoScrolling, setAutoScrolling] = useState(false);
   const hasTriggeredRef  = useRef(false);
+
+  // Reference bird photo (browse mode only)
+  const [referencePhoto, setReferencePhoto] = useState<AttributedPhoto | null | undefined>(undefined);
+
+  useEffect(() => {
+    if (!showReferencePhoto) { setReferencePhoto(null); return; }
+    setReferencePhoto(undefined);
+    const { speciesCode, comName, sciName } = referenceSpecies;
+    Promise.all([
+      fetchBirdPhotos(speciesCode, comName, sciName),
+      db.blockedPhotos.toArray(),
+      db.adminBlockedMedia.filter(r => r.speciesCode === speciesCode).toArray(),
+    ]).then(([{ primary }, blocked, adminBlocked]) => {
+      const blockedUrls = new Set([...blocked.map(b => b.url), ...adminBlocked.map(b => b.url)]);
+      setReferencePhoto(primary && !blockedUrls.has(primary.url) ? primary : null);
+    }).catch(() => setReferencePhoto(null));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showReferencePhoto, referenceSpecies.speciesCode]);
 
   // Audio state
   const [recordings, setRecordings]  = useState<Map<string, CarouselRecording[] | null>>(new Map());
@@ -97,6 +117,7 @@ export function RelatedSpeciesCarousel({
     setPlayingCode(null);
     audioRef.current?.pause();
     setIdx(0);
+    if (showReferencePhoto) setReferencePhoto(undefined);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [referenceSpecies.speciesCode]);
 
@@ -243,6 +264,27 @@ export function RelatedSpeciesCarousel({
               style={{ width: `${100 / n}%` }}
             >
               {slide.kind === 'title' ? (
+                referencePhoto ? (
+                  <>
+                    <img
+                      src={referencePhoto.url}
+                      alt={slide.comName}
+                      className={`w-full h-full object-contain transition-opacity duration-500 ${imgLoadedUrls.has(referencePhoto.url) ? 'opacity-100' : 'opacity-0'}`}
+                      onLoad={() => setImgLoadedUrls(prev => new Set(prev).add(referencePhoto.url))}
+                    />
+                    <div className="absolute inset-x-0 top-0 flex items-center bg-black/60 px-2 py-1.5 gap-2">
+                      <span className="flex-1 min-w-0 text-xs text-white/80 font-semibold truncate">
+                        {slide.comName} ({slide.sciName})
+                      </span>
+                      <span className="shrink-0 text-xs text-slate-400 whitespace-nowrap">Related →</span>
+                    </div>
+                    {referencePhoto.credit && (
+                      <span className="absolute bottom-1 right-1 bg-black/50 text-white/50 text-[10px] px-1.5 py-0.5 rounded max-w-[60%] truncate">
+                        {referencePhoto.credit}
+                      </span>
+                    )}
+                  </>
+                ) : (
                 <div className="flex flex-col items-center justify-center h-full px-4 text-center gap-1">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Related Species</p>
                   <p className="text-base font-bold text-white leading-tight mt-1">{slide.comName}</p>
@@ -250,6 +292,7 @@ export function RelatedSpeciesCarousel({
                   <p className="text-xs text-slate-500">{slide.familyComName}</p>
                   <p className="text-xs text-slate-400 mt-4 leading-relaxed">Scroll to see and compare related species →</p>
                 </div>
+                )
               ) : (
                 <>
                   {photo && (

@@ -131,4 +131,13 @@ export const HELP_CONTENT: Record<string, HelpEntry> = {
       'Only visible to admin accounts.',
     ],
   },
+  birderLevel: {
+    title: 'Birder experience level',
+    body: [
+      'Sets the difficulty path for mastering new birds.',
+      'Novice: The path to mastery progresses through easy, then medium, and finally difficult questions.',
+      'Intermediate: The path to mastery will skip the easy questions.',
+      'Advanced: The path to mastery will skip easy and medium difficulty questions.',
+    ],
+  },
 };

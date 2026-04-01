@@ -91,6 +91,7 @@ export function BirdInfoScreen({
               referenceSpecies={primarySpecies}
               regionCode={regionCode}
               autoScrollEnabled={autoScrollRelatedSpecies}
+              showReferencePhoto
               onViewSpecies={setViewingSpecies}
               onWillPlay={() => audioPauseRef.current?.()}
             />

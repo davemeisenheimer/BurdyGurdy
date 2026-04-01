@@ -8,7 +8,7 @@ function weightedPick<T>(candidates: Array<{ item: T; weight: number }>): T | nu
   for (const c of candidates) { r -= c.weight; if (r <= 0) return c.item; }
   return candidates[candidates.length - 1].item;
 }
-import type { QuizQuestion, QuizConfig, AttributedPhoto, LevelUpEvent, NoLongerStrugglingEvent } from '../types';
+import type { QuizQuestion, QuizConfig, AttributedPhoto, LevelUpEvent, NoLongerStrugglingEvent, BirderLevel } from '../types';
 import { fetchQuizQuestions, fetchBirdPhotos, fetchBirdInfo, fetchRecentSightings } from '../services/remote/api';
 import type { RecentSighting } from '../services/remote/api';
 import { db } from '../lib/db';
@@ -32,7 +32,13 @@ export interface QuizState {
   error: string | null;
 }
 
-export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, userId?: string | null) {
+function birderLevelToInitialMastery(level?: BirderLevel): number {
+  if (level === 'intermediate') return 1;
+  if (level === 'advanced')     return 2;
+  return 0;
+}
+
+export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, userId?: string | null, birderLevel?: BirderLevel) {
   const [state, setState] = useState<QuizState>({
     status: 'idle',
     questions: [],
@@ -240,9 +246,9 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
           await getRegionSpecies(cfg.regionCode, back);
         } else {
           // Seed initial palette and warm cache first; both use the same regionCode
-          await maintainLevel0Palette(cfg.regionCode, cfg.questionTypes, back);
+          await maintainLevel0Palette(cfg.regionCode, cfg.questionTypes, back, birderLevelToInitialMastery(birderLevel));
         }
-        const params = await getAdaptiveParams();
+        const params = await getAdaptiveParams(birderLevelToInitialMastery(birderLevel));
         weights             = params.weights;
         masteryLevels       = params.masteryLevels;
         banned              = params.banned;
@@ -347,7 +353,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
         setRoundLevelUps(prev => [...prev, levelUp]);
         setCurrentMastery(updatedMastery);
       } else {
-        const { levelUp, noLongerStruggling, updatedMastery } = await recordAnswer(q.speciesCode, q.type, correct, q.comName);
+        const { levelUp, noLongerStruggling, updatedMastery } = await recordAnswer(q.speciesCode, q.type, correct, q.comName, birderLevelToInitialMastery(birderLevel));
         if (levelUp) setRoundLevelUps(prev => [...prev, levelUp]);
         if (noLongerStruggling) setRoundNoLongerStruggling(prev => [...prev, noLongerStruggling]);
         setCurrentMastery(updatedMastery);
