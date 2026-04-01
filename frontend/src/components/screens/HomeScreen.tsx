@@ -5,6 +5,7 @@ import { BIRD_GROUPS } from '../../lib/birdGroups';
 import { HelpModal } from '../ui/HelpModal';
 import { MapRegionPicker } from '../ui/MapRegionPicker';
 import { AccountPill } from '../ui/AccountPill';
+import { HelpInfo } from '../ui/HelpInfo';
 
 interface Props {
   initialConfig: QuizConfig;
@@ -40,6 +41,7 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
   const [regionDisplayName, setRegionDisplayName] = useState<string | undefined>(undefined);
   const [showHelp, setShowHelp] = useState(false);
   const [showMap, setShowMap] = useState(false);
+  const [showRandomWarning, setShowRandomWarning] = useState(false);
 
   // Sync local state when config is updated externally (e.g. cloud download on sign-in)
   useEffect(() => {
@@ -137,7 +139,10 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
           {/* Region — desktop only; mobile sets region in Settings */}
           {isDesktop && (<>
           <div className="shrink-0">
-            <label className="block text-sm font-semibold text-slate-700 mb-1">Region</label>
+            <div className="flex items-center gap-2 mb-1">
+              <HelpInfo id="region" />
+              <label className="text-sm font-semibold text-slate-700">Region</label>
+            </div>
             <div className="flex gap-2">
               <div className="flex-1">
                 <RegionSearch value={regionCode} onChange={c => { setRegionCode(c); setRegionDisplayName(undefined); notify({ regionCode: c }); }} displayName={regionDisplayName} />
@@ -150,7 +155,6 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
                 🗺 Map
               </button>
             </div>
-            <p className="text-xs text-slate-400 mt-1">Search by place name, enter an eBird code directly (e.g. CA-ON, CA-ON-OT, US-WA, or CR), or pick on the map.</p>
           </div>
           <div className="flex-1 min-h-4" />
           </>)}
@@ -174,9 +178,12 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
 
           {/* Questions per round */}
           <div className="shrink-0 mt-3">
-            <label className="block text-sm font-semibold text-slate-700 mb-1">
-              Questions per Round: <span className="text-forest-700">{questionsPerRound}</span>
-            </label>
+            <div className="flex items-center gap-2 mb-1">
+              <HelpInfo id="questionsPerRound" />
+              <label className="text-sm font-semibold text-slate-700">
+                Questions per Round: <span className="text-forest-700">{questionsPerRound}</span>
+              </label>
+            </div>
             <input
               type="range"
               min={5}
@@ -191,7 +198,10 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
 
           {/* Question types */}
           <div className="shrink-0">
-            <label className="block text-sm font-semibold text-slate-700 mb-2">Question Types</label>
+            <div className="flex items-center gap-2 mb-2">
+              <HelpInfo id="questionTypes" />
+              <label className="text-sm font-semibold text-slate-700">Question Types</label>
+            </div>
             <div className="grid grid-cols-3 gap-2">
               {QUESTION_TYPES.map(({ value, label }) => (
                 <button
@@ -212,7 +222,10 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
 
           {/* Bird group */}
           <div className="shrink-0">
-            <label className="block text-sm font-semibold text-slate-700 mb-2">Bird Group</label>
+            <div className="flex items-center gap-2 mb-2">
+              <HelpInfo id="birdGroup" />
+              <label className="text-sm font-semibold text-slate-700">Bird Group</label>
+            </div>
             <div className="grid grid-cols-3 gap-2">
               {BIRD_GROUPS.map(g => (
                 <button
@@ -233,12 +246,21 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
 
           {/* Mode */}
           <div className="shrink-0">
-            <label className="block text-sm font-semibold text-slate-700 mb-2">Learning Mode</label>
+            <div className="flex items-center gap-2 mb-2">
+              <HelpInfo id="learningMode" />
+              <label className="text-sm font-semibold text-slate-700">Learning Mode</label>
+            </div>
             <div className="flex gap-2">
               {(['adaptive', 'random'] as GameMode[]).map(m => (
                 <button
                   key={m}
-                  onClick={() => { setMode(m); notify({ mode: m }); }}
+                  onClick={() => {
+                    if (m === 'random' && mode !== 'random') {
+                      setShowRandomWarning(true);
+                    } else {
+                      setMode(m); notify({ mode: m });
+                    }
+                  }}
                   className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors capitalize ${
                     mode === m
                       ? 'bg-sky-600 border-sky-600 text-white'
@@ -249,9 +271,6 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
                 </button>
               ))}
             </div>
-            <p className="text-xs text-slate-400 mt-1">
-              Adaptive focuses on birds you find difficult. Random picks evenly.
-            </p>
           </div>
 
           <p className="text-center text-xs text-slate-400 pt-4">
@@ -266,6 +285,35 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
           onSelect={(code, name) => { setRegionCode(code); setRegionDisplayName(name); notify({ regionCode: code }); }}
           onClose={() => setShowMap(false)}
         />
+      )}
+      {showRandomWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 flex flex-col gap-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-800 mb-2">Random mode</h2>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                In random mode your progress is <span className="font-semibold">not tracked</span>. Birds you answer correctly won't advance in your adaptive learning history, and nothing will be added to your Life List.
+              </p>
+              <p className="text-sm text-slate-600 leading-relaxed mt-2">
+                Switch back to Adaptive at any time to resume tracking.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowRandomWarning(false)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-300 text-slate-600 font-medium text-sm hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { setMode('random'); notify({ mode: 'random' }); setShowRandomWarning(false); }}
+                className="flex-1 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-semibold text-sm transition-colors"
+              >
+                OK, got it
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

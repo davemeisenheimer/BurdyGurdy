@@ -105,6 +105,7 @@ export interface BirdProgress {
   masteryLevel: number;        // 0=easy distractors, 1=same-family, 2=same-genus
   consecutiveCorrect: number;  // streak at the current mastery level
   isMastered?: boolean;        // graduated from learning palette — appears only occasionally for review
+  masteredAt?: number;         // timestamp (ms) when isMastered first became true
   noAudio?: boolean;           // graduated automatically because no recordings exist for this question type
   recentAnswers?: boolean[];   // rolling window of last STRUGGLING_WINDOW answers (mastered birds only)
 }

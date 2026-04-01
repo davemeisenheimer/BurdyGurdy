@@ -125,6 +125,18 @@ class BirdyGurdyDB extends Dexie {
         r => r.lastAsked === 0 && (r.masteryLevel ?? 0) === 0 && !(r.isMastered ?? false),
       ).delete(),
     );
+    // v12: backfill masteredAt for existing mastered records — best approximation is lastAsked,
+    //      which is the most recent time the bird was seen in adaptive review.
+    this.version(12).stores({
+      progress: '[speciesCode+questionType], speciesCode, weight, lastAsked',
+      regionSpecies: 'regionCode',
+      blockedPhotos: 'url',
+      adminBlockedMedia: '[url+speciesCode]',
+    }).upgrade(tx =>
+      tx.table('progress').filter(r => (r.isMastered ?? false) && r.masteredAt === undefined).modify(r => {
+        r.masteredAt = r.lastAsked;
+      }),
+    );
   }
 }
 

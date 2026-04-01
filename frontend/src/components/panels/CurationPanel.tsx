@@ -309,14 +309,16 @@ function ReportsTab({ onBlocked }: { onBlocked: () => void }) {
 // ── Blocked media tab ─────────────────────────────────────────────────────────
 
 function BlockedMediaTab({ refreshKey }: { refreshKey: number }) {
-  const [reports, setReports] = useState<MediaReport[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [detail, setDetail]   = useState<MediaReport | null>(null);
+  const [reports, setReports]         = useState<MediaReport[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [detail, setDetail]           = useState<MediaReport | null>(null);
+  const [mediaFilter, setMediaFilter] = useState<'all' | 'photo' | 'audio'>('all');
+  const [search, setSearch]           = useState('');
 
   const load = () => {
     setLoading(true);
     fetchBlockedReports()
-      .then(setReports)
+      .then(data => setReports([...data].sort((a, b) => a.comName.localeCompare(b.comName))))
       .finally(() => setLoading(false));
   };
 
@@ -337,20 +339,55 @@ function BlockedMediaTab({ refreshKey }: { refreshKey: number }) {
     question: 'bg-amber-100 text-amber-700',
   };
 
+  const q = search.trim().toLowerCase();
+  const visible = reports.filter(r =>
+    (mediaFilter === 'all' || r.mediaType === mediaFilter) &&
+    (!q || r.comName.toLowerCase().includes(q)),
+  );
+
   return (
     <div className="flex flex-col h-full">
-      <div className="shrink-0 px-3 py-2 border-b border-slate-200 bg-white">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Blocked media</p>
+      <div className="shrink-0 px-3 pt-2 pb-2 border-b border-slate-200 bg-white space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Blocked media</p>
+          <span className="text-xs text-slate-400">{visible.length} item{visible.length !== 1 ? 's' : ''}</span>
+        </div>
+        {/* Media type filter */}
+        <div className="flex gap-1">
+          {(['all', 'photo', 'audio'] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setMediaFilter(f)}
+              className={`flex-1 py-1 rounded-lg text-xs font-medium border transition-colors capitalize ${
+                mediaFilter === f
+                  ? 'bg-forest-600 border-forest-600 text-white'
+                  : 'bg-white border-slate-200 text-slate-600 hover:border-forest-400'
+              }`}
+            >
+              {f === 'all' ? 'All' : f === 'photo' ? 'Photos' : 'Audio'}
+            </button>
+          ))}
+        </div>
+        {/* Search */}
+        <input
+          type="search"
+          placeholder="Search by bird name…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-full text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg text-slate-700 placeholder-slate-400 focus:outline-none focus:border-forest-400"
+        />
       </div>
 
       <div className="flex-1 overflow-y-auto">
         {loading && (
           <p className="text-sm text-slate-400 text-center mt-8">Loading…</p>
         )}
-        {!loading && reports.length === 0 && (
-          <p className="text-sm text-slate-400 text-center mt-8">Nothing blocked yet</p>
+        {!loading && visible.length === 0 && (
+          <p className="text-sm text-slate-400 text-center mt-8">
+            {reports.length === 0 ? 'Nothing blocked yet' : 'No matches'}
+          </p>
         )}
-        {!loading && reports.map(r => (
+        {!loading && visible.map(r => (
           <button
             key={r.id}
             onClick={() => setDetail(r)}
@@ -362,6 +399,7 @@ function BlockedMediaTab({ refreshKey }: { refreshKey: number }) {
               <p className="text-xs text-slate-400 truncate">{r.service ?? detectService(r.url)}</p>
             </div>
             <div className="shrink-0 flex flex-col items-end gap-1">
+              <span className="text-xs text-slate-400 capitalize">{r.mediaType}</span>
               <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${SCOPE_BADGE[r.blockScope ?? 'full']}`}>
                 {r.blockScope === 'question' ? 'questions only' : 'everywhere'}
               </span>

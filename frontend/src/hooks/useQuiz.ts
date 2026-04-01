@@ -341,15 +341,17 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
       },
     }));
 
-    if (q.noAudio) {
-      const { levelUp, updatedMastery } = await graduateNoAudio(q.speciesCode, q.type, q.comName);
-      setRoundLevelUps(prev => [...prev, levelUp]);
-      setCurrentMastery(updatedMastery);
-    } else {
-      const { levelUp, noLongerStruggling, updatedMastery } = await recordAnswer(q.speciesCode, q.type, correct, q.comName);
-      if (levelUp) setRoundLevelUps(prev => [...prev, levelUp]);
-      if (noLongerStruggling) setRoundNoLongerStruggling(prev => [...prev, noLongerStruggling]);
-      setCurrentMastery(updatedMastery);
+    if (config.mode !== 'random') {
+      if (q.noAudio) {
+        const { levelUp, updatedMastery } = await graduateNoAudio(q.speciesCode, q.type, q.comName);
+        setRoundLevelUps(prev => [...prev, levelUp]);
+        setCurrentMastery(updatedMastery);
+      } else {
+        const { levelUp, noLongerStruggling, updatedMastery } = await recordAnswer(q.speciesCode, q.type, correct, q.comName);
+        if (levelUp) setRoundLevelUps(prev => [...prev, levelUp]);
+        if (noLongerStruggling) setRoundNoLongerStruggling(prev => [...prev, noLongerStruggling]);
+        setCurrentMastery(updatedMastery);
+      }
     }
   }, [state.questions, state.currentIndex, state.status, config]);
 

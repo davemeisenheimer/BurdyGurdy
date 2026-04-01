@@ -33,17 +33,21 @@ export async function recordAnswer(
     questionType,
   );
 
+  const now = Date.now();
+  const justMastered = newState.isMastered && !(existing?.isMastered ?? false);
+
   if (existing) {
     await db.progress.put({
       ...existing,
       comName,
       correct:            newState.correct,
       incorrect:          newState.incorrect,
-      lastAsked:          Date.now(),
+      lastAsked:          now,
       weight:             newState.weight,
       masteryLevel:       newState.masteryLevel,
       consecutiveCorrect: newState.consecutiveCorrect,
-      isMastered:          newState.isMastered,
+      isMastered:         newState.isMastered,
+      masteredAt:         justMastered ? now : existing.masteredAt,
       recentAnswers:      newState.recentAnswers,
     });
   } else {
@@ -53,13 +57,14 @@ export async function recordAnswer(
       comName,
       correct:            newState.correct,
       incorrect:          newState.incorrect,
-      lastAsked:          Date.now(),
+      lastAsked:          now,
       weight:             newState.weight,
       favourited:         false,
       excluded:           false,
       masteryLevel:       newState.masteryLevel,
       consecutiveCorrect: newState.consecutiveCorrect,
-      isMastered:          newState.isMastered,
+      isMastered:         newState.isMastered,
+      masteredAt:         justMastered ? now : undefined,
       recentAnswers:      newState.recentAnswers,
     });
   }
@@ -218,6 +223,7 @@ export function buildNoAudioGraduation(
     masteryLevel:       existing?.masteryLevel       ?? 0,
     consecutiveCorrect: existing?.consecutiveCorrect ?? 0,
     isMastered:         true,
+    masteredAt:         existing?.masteredAt         ?? now,
     noAudio:            true,
     recentAnswers:      existing?.recentAnswers      ?? [],
   };
@@ -355,6 +361,55 @@ export async function getWeights(
     .anyOf(speciesCodes.map(code => [code, questionType]))
     .toArray();
   return new Map(records.map(r => [r.speciesCode, r.weight]));
+}
+
+// ── Mastery expiry ────────────────────────────────────────────────────────────
+
+const EXPIRY_DAYS = 90;
+const EXPIRY_MS   = EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+
+function isExpired(r: { isMastered?: boolean; masteredAt?: number; lastAsked: number }): boolean {
+  if (!(r.isMastered ?? false)) return false;
+  const since = r.masteredAt ?? r.lastAsked; // masteredAt backfilled by v12 migration for existing records
+  return Date.now() - since > EXPIRY_MS;
+}
+
+/**
+ * Returns a deduplicated list of birds (one entry per species) whose mastery
+ * has elapsed EXPIRY_DAYS since they were first mastered. Used to populate the
+ * confirmation dialog before any records are modified.
+ */
+export async function checkBirdsToExpire(): Promise<Array<{ speciesCode: string; comName: string }>> {
+  const records = await db.progress.filter(isExpired).toArray();
+  const seen = new Set<string>();
+  const result: Array<{ speciesCode: string; comName: string }> = [];
+  for (const r of records) {
+    if (!seen.has(r.speciesCode)) {
+      seen.add(r.speciesCode);
+      result.push({ speciesCode: r.speciesCode, comName: r.comName });
+    }
+  }
+  return result.sort((a, b) => a.comName.localeCompare(b.comName));
+}
+
+/**
+ * Resets all mastered records past the expiry threshold back into the active
+ * learning palette at level 2 (one step from re-mastery). Call only after the
+ * user confirms the expiry dialog.
+ */
+export async function expireOldMasteredBirds(): Promise<void> {
+  const expired = await db.progress.filter(isExpired).toArray();
+  if (!expired.length) return;
+  await db.progress.bulkPut(
+    expired.map(r => ({
+      ...r,
+      isMastered:         false,
+      masteredAt:         undefined,
+      masteryLevel:       2,
+      consecutiveCorrect: 0,
+      weight:             PALETTE_WEIGHT,
+    })),
+  );
 }
 
 // ── Re-export weight constants for callers that need them ─────────────────────

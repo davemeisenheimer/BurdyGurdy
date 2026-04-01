@@ -7,6 +7,7 @@ export interface AppSettings {
   autoScrollRelatedSpecies: boolean;
   recentWindow: 'day' | 'week' | 'month';
   enableAdminFeatures: boolean;
+  expireMasteredBirds: boolean;
 }
 
 const DEFAULTS: AppSettings = {
@@ -18,6 +19,7 @@ const DEFAULTS: AppSettings = {
   autoScrollRelatedSpecies: true,
   recentWindow: 'day',
   enableAdminFeatures: false,
+  expireMasteredBirds: false,
 };
 
 const KEY = 'birdygurdy_settings';

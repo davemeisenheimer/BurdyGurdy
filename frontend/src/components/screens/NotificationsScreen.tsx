@@ -37,19 +37,15 @@ export function NotificationsScreen({ notifications, onBack, onNotificationsRead
         map.set(n.senderUserId, { displayName: n.senderDisplayName, items: [n] });
       }
     }
-    // Sort groups by most recent notification
+    // Sort each group's items newest-first, then sort groups by their most recent item
     return [...map.entries()]
-      .sort((a, b) =>
-        new Date(b[1].items[0].createdAt).getTime() - new Date(a[1].items[0].createdAt).getTime(),
-      )
-      .map(([userId, { displayName, items }]) => ({
-        userId,
-        displayName,
-        // Items already in desc order from fetch
-        items,
-        hasUnread: items.some(n => !n.read),
-        latest: items[0],
-      }));
+      .map(([userId, { displayName, items }]) => {
+        const sorted = [...items].sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        );
+        return { userId, displayName, items: sorted, hasUnread: sorted.some(n => !n.read), latest: sorted[0] };
+      })
+      .sort((a, b) => new Date(b.latest.createdAt).getTime() - new Date(a.latest.createdAt).getTime());
   }, [notifications]);
 
   // Mark all as read when the screen mounts
@@ -115,7 +111,7 @@ export function NotificationsScreen({ notifications, onBack, onNotificationsRead
               {/* Expanded: all notifications chronologically */}
               {expandedSender === group.userId && (
                 <ul className="border-t border-slate-100 divide-y divide-slate-100">
-                  {[...group.items].reverse().map(n => (
+                  {group.items.map(n => (
                     <li key={n.id} className="px-4 py-3 flex items-start gap-2">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-slate-700">{formatNotificationMessage(n)}</p>

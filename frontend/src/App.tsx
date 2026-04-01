@@ -27,6 +27,7 @@ import { db, switchToUserDb } from './lib/db';
 import { supabase } from './lib/supabase';
 import type { SupabaseUser } from './lib/supabase';
 import { uploadProgress, downloadAndMerge, uploadSettings, downloadSettings, downloadUserBlockedPhotos, deleteAllUserBlockedPhotos, uploadUserBlockedPhoto, submitMediaReport, fetchAdminBlockedMedia, deleteCloudProgressRecords } from './services/remote/sync';
+import { checkBirdsToExpire, expireOldMasteredBirds } from './services/local/progress';
 import { computeStrugglingCount } from './lib/struggling';
 import { expandQuestionTypes } from './lib/questionTypes';
 import type { ReportErrorData } from './components/ui/ReportErrorModal';
@@ -78,6 +79,8 @@ export default function App() {
   const userRef = useRef<SupabaseUser | null>(null);
   const [showUploadPrompt, setShowUploadPrompt] = useState(false);
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
+  const [expiryDialog, setExpiryDialog] = useState<Array<{ speciesCode: string; comName: string }> | null>(null);
+  const pendingStartConfigRef = useRef<QuizConfig | null>(null);
 
   const [screen, setScreen] = useState<'home' | 'quiz' | 'result' | 'progress' | 'settings' | 'victory' | 'recentprogress' | 'birdinfo' | 'friends' | 'notifications' | 'friendprogress' | 'friendrecentprogress'>(
     () => sessionStorage.getItem('pendingInvite') ? 'friends' : 'home',
@@ -291,9 +294,19 @@ export default function App() {
       })
       .catch(() => {});
     sessionRoundsRef.current += 1;
-    if (user) uploadProgress(user.id).catch(() => {});
+    if (user && config.mode !== 'random') uploadProgress(user.id).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.status]);
+
+  const doStart = async (fullConfig: QuizConfig) => {
+    setConfig(fullConfig);
+    setScreen('quiz');
+    await startQuiz({
+      ...fullConfig,
+      questionTypes: expandQuestionTypes(fullConfig.questionTypes, settings),
+      onlyStruggling: focusStruggling,
+    });
+  };
 
   const handleStart = async (newConfig: QuizConfig) => {
     const newPrefs = {
@@ -305,15 +318,18 @@ export default function App() {
     };
     saveQuizPrefs(newPrefs);
     if (user) uploadSettings(user.id, settings, newPrefs, getVictorySeen()).catch(() => {});
-    const recentDays = RECENT_DAYS[settings.recentWindow];
-    const fullConfig = { ...newConfig, recentDays };
-    setConfig(fullConfig);
-    setScreen('quiz');
-    await startQuiz({
-      ...fullConfig,
-      questionTypes: expandQuestionTypes(fullConfig.questionTypes, settings),
-      onlyStruggling: focusStruggling,
-    });
+    const fullConfig = { ...newConfig, recentDays: RECENT_DAYS[settings.recentWindow] };
+
+    if (settings.expireMasteredBirds && newConfig.mode === 'adaptive') {
+      const birds = await checkBirdsToExpire();
+      if (birds.length > 0) {
+        pendingStartConfigRef.current = fullConfig;
+        setExpiryDialog(birds);
+        return;
+      }
+    }
+
+    await doStart(fullConfig);
   };
 
   const handleNext = () => {
@@ -725,6 +741,56 @@ export default function App() {
                 className="px-5 py-2 border border-slate-300 text-slate-600 rounded-xl text-sm hover:bg-slate-50"
               >
                 Start fresh
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mastery expiry confirmation dialog */}
+      {expiryDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 flex flex-col gap-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-800 mb-2">Mastered birds expiring</h2>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                In your settings, you have chosen to expire mastered birds after 90 days. The following birds will be expired today:
+              </p>
+              <ul className="mt-2 mb-2 max-h-48 overflow-y-auto space-y-0.5">
+                {expiryDialog.map(b => (
+                  <li key={b.speciesCode} className="text-sm text-slate-700 font-medium">{b.comName}</li>
+                ))}
+              </ul>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                This lets you be re-exposed to these birds at a higher frequency when they return to your region, and gives you the opportunity to stay on top of who is passing through or settling in for the season.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  const newSettings = { ...settings, expireMasteredBirds: false };
+                  setSettings(newSettings);
+                  saveSettings(newSettings);
+                  const cfg = pendingStartConfigRef.current!;
+                  pendingStartConfigRef.current = null;
+                  setExpiryDialog(null);
+                  doStart(cfg);
+                }}
+                className="flex-1 py-2.5 rounded-xl border border-slate-300 text-slate-600 font-medium text-sm hover:bg-slate-50 transition-colors"
+              >
+                Cancel — turn off expiry
+              </button>
+              <button
+                onClick={async () => {
+                  await expireOldMasteredBirds();
+                  const cfg = pendingStartConfigRef.current!;
+                  pendingStartConfigRef.current = null;
+                  setExpiryDialog(null);
+                  doStart(cfg);
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-forest-600 hover:bg-forest-700 text-white font-semibold text-sm transition-colors"
+              >
+                OK, expire them
               </button>
             </div>
           </div>
