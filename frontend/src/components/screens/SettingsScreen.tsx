@@ -5,6 +5,7 @@ import { RegionSearch } from '../ui/RegionSearch';
 import { MapRegionPicker } from '../ui/MapRegionPicker';
 import { TrimProgressDialog } from '../ui/TrimProgressDialog';
 import { FocusModeToggle } from '../ui/FocusModeToggle';
+import { HelpInfo } from '../ui/HelpInfo';
 
 interface Props {
   initialSettings: AppSettings;
@@ -26,23 +27,23 @@ interface Props {
 
 interface ToggleRowProps {
   label: string;
-  description: string;
+  infoId: string;
   checked: boolean;
   onChange: (v: boolean) => void;
 }
 
-function ToggleRow({ label, description, checked, onChange }: ToggleRowProps) {
+function ToggleRow({ label, infoId, checked, onChange }: ToggleRowProps) {
   return (
-    <label className="flex items-start justify-between gap-4 px-5 py-4 cursor-pointer">
-      <div>
+    <label className="flex items-center justify-between gap-4 px-5 py-4 cursor-pointer">
+      <div className="flex items-center gap-2 min-w-0">
+        <HelpInfo id={infoId} />
         <p className="font-medium text-slate-800 text-sm">{label}</p>
-        <p className="text-xs text-slate-500 mt-0.5">{description}</p>
       </div>
       <input
         type="checkbox"
         checked={checked}
         onChange={e => onChange(e.target.checked)}
-        className="mt-0.5 w-5 h-5 accent-forest-600 cursor-pointer shrink-0"
+        className="w-5 h-5 accent-forest-600 cursor-pointer shrink-0"
       />
     </label>
   );
@@ -71,6 +72,12 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
       <div className="px-3 sm:px-6 pt-5 pb-6">
       <div className="w-full max-w-md mx-auto">
 
+        {showFocusModeToggle && onToggleFocusStruggling && (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mt-4">
+            <FocusModeToggle enabled={focusStruggling ?? false} onToggle={onToggleFocusStruggling} strugglingCount={strugglingCount ?? 0} />
+          </div>
+        )}
+
         {/* Region — mobile only; desktop sets region on the home screen */}
         {!isDesktop && regionCode !== undefined && onRegionChange && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mb-4">
@@ -98,8 +105,10 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 divide-y divide-slate-100 mb-4">
           <div className="px-5 py-4">
-            <p className="font-medium text-slate-800 text-sm mb-1">Recent sightings window</p>
-            <p className="text-xs text-slate-500 mb-3">Which birds are included in your local pool — only those spotted very recently, or a broader window?</p>
+            <div className="flex items-center gap-2 mb-1">
+              <HelpInfo id="recentWindow" />
+              <p className="font-medium text-slate-800 text-sm">Recent sightings window</p>
+            </div>
             <div className="flex gap-2">
               {(['day', 'week', 'month'] as const).map(w => (
                 <label key={w} className={`flex-1 flex items-center justify-center gap-2 border rounded-lg px-3 py-2 cursor-pointer text-sm transition-colors ${settings.recentWindow === w ? 'border-forest-600 bg-forest-50 text-forest-700 font-medium' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
@@ -121,41 +130,47 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 divide-y divide-slate-100">
           <ToggleRow
             label="Autoplay bird song on reveal"
-            description="Automatically play the bird's song when the answer is revealed"
+            infoId="autoplayRevealAudio"
             checked={settings.autoplayRevealAudio}
             onChange={v => update('autoplayRevealAudio', v)}
           />
           <ToggleRow
             label="Latin-answer questions"
-            description="Include questions where you choose the correct Latin name as the answer (works with Photo, Song, & Family questions — progress badges get an L suffix)"
+            infoId="latinAnswerQuestions"
             checked={settings.includeLatinAnswerVariants}
             onChange={v => update('includeLatinAnswerVariants', v)}
           />
           <ToggleRow
             label="Song-answer questions"
-            description="Include questions where you pick the right bird song (works with Photo, Spectrogram, & Latin questions — progress badges get an S suffix)"
+            infoId="songAnswerQuestions"
             checked={settings.includeSongAnswerVariants}
             onChange={v => update('includeSongAnswerVariants', v)}
           />
           <ToggleRow
             label="Randomize question photos"
-            description="Pick a random photo each time instead of always using the primary photo"
+            infoId="randomizeQuestionPhotos"
             checked={settings.randomizeQuestionPhotos}
             onChange={v => update('randomizeQuestionPhotos', v)}
+          />
+          <ToggleRow
+            label="Expire mastered birds after 90 days"
+            infoId="expireMasteredBirds"
+            checked={settings.expireMasteredBirds ?? false}
+            onChange={v => update('expireMasteredBirds', v)}
           />
           {isDesktop && (
             <ToggleRow
               label="Auto-scroll related species"
-              description="When the info panel opens, the related species carousel scrolls through once to show you what's there, then stops"
+              infoId="autoScrollRelatedSpecies"
               checked={settings.autoScrollRelatedSpecies ?? true}
               onChange={v => update('autoScrollRelatedSpecies', v)}
             />
           )}
           {isDesktop && (
-            <label className="flex items-start justify-between gap-4 px-5 py-4">
-              <div>
+            <label className="flex items-center justify-between gap-4 px-5 py-4">
+              <div className="flex items-center gap-2">
+                <HelpInfo id="maxRecentSightings" />
                 <p className="font-medium text-slate-800 text-sm">Max recent sightings</p>
-                <p className="text-xs text-slate-500 mt-0.5">Number of recent eBird sightings shown in the info panel. Set to 0 to hide.</p>
               </div>
               <input
                 type="number"
@@ -163,14 +178,16 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
                 max={10}
                 value={settings.maxRecentSightings ?? 4}
                 onChange={e => update('maxRecentSightings', Math.min(10, Math.max(0, parseInt(e.target.value) || 0)))}
-                className="mt-0.5 w-14 text-center border border-slate-300 rounded-lg px-2 py-1 text-sm text-slate-800 shrink-0"
+                className="w-14 text-center border border-slate-300 rounded-lg px-2 py-1 text-sm text-slate-800 shrink-0"
               />
             </label>
           )}
         </div>
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mt-4">
-          <p className="font-medium text-slate-800 text-sm mb-1">Blocked photos</p>
-          <p className="text-xs text-slate-500 mb-3">Photos you've removed during quizzes won't appear again. Clear this list to allow them back.</p>
+          <div className="flex items-center gap-2 mb-3">
+            <HelpInfo id="blockedPhotos" />
+            <p className="font-medium text-slate-800 text-sm">Blocked photos</p>
+          </div>
           <button
             onClick={onClearBlockedPhotos}
             className="text-xs px-3 py-1.5 border border-red-300 text-red-500 rounded-lg hover:bg-red-50 transition-colors"
@@ -181,20 +198,16 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
 
         {regionCode && recentDays != null && questionTypes && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mt-4">
-            <p className="font-medium text-slate-800 text-sm mb-1">Outdated progress</p>
-            <p className="text-xs text-slate-500 mb-3">Remove progress for birds that are no longer seen in your region within your current sightings window.</p>
+            <div className="flex items-center gap-2 mb-3">
+              <HelpInfo id="outdatedProgress" />
+              <p className="font-medium text-slate-800 text-sm">Outdated progress</p>
+            </div>
             <button
               onClick={() => setShowTrimDialog(true)}
               className="text-xs px-3 py-1.5 border border-red-300 text-red-500 rounded-lg hover:bg-red-50 transition-colors"
             >
               Trim outdated progress…
             </button>
-          </div>
-        )}
-
-        {showFocusModeToggle && onToggleFocusStruggling && (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mt-4">
-            <FocusModeToggle enabled={focusStruggling ?? false} onToggle={onToggleFocusStruggling} strugglingCount={strugglingCount ?? 0} />
           </div>
         )}
 
@@ -206,7 +219,7 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
             </div>
             <ToggleRow
               label="Enable admin features"
-              description="Show the curation panel and report management tools in the right panel"
+              infoId="enableAdminFeatures"
               checked={settings.enableAdminFeatures ?? false}
               onChange={v => update('enableAdminFeatures', v)}
             />

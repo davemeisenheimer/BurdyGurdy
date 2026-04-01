@@ -1,0 +1,134 @@
+export interface HelpEntry {
+  title: string;
+  body: string[];
+  imageUrl?: string;
+}
+
+export const HELP_CONTENT: Record<string, HelpEntry> = {
+  // ── Home screen ────────────────────────────────────────────────────────────
+  region: {
+    title: 'Region',
+    body: [
+      'Your region determines which birds appear in your quiz. BirdyGurdy uses recent eBird sightings from your chosen area to build a pool of locally-occurring birds.',
+      'You can type a place name, enter an eBird region code directly (e.g. CA-ON, US-WA, CR), or pick a region using the map.',
+    ],
+  },
+  questionsPerRound: {
+    title: 'Questions per Round',
+    body: [
+      'How many questions you answer before seeing your results summary.',
+      'Shorter rounds are great for quick sessions; longer rounds give more variety and practice in one go.',
+      'Another benefit of short rounds is that you might see birds you are attempting to master, or birds that you are struggling with, more often.'
+    ],
+  },
+  questionTypes: {
+    title: 'Question Types',
+    body: [
+      'Choose which kinds of questions appear in your quiz. You can enable any combination. Be aware that if you have only one question type set and you wish to switch to another, you must first select the new question type and then deselect the old one.',
+      'Song/Call: listen to a recording and name the bird. Photo: identify from a picture. Latin Name: choose the correct scientific name. Bird Family and Bird Order test taxonomic knowledge. Spectrogram: identify the bird from a visual frequency graph of its call.',
+      'Pro Tip: Using one question type at a time can allow you to focus and get to local legend victory quicker!'
+    ],
+  },
+  birdGroup: {
+    title: 'Bird Group',
+    body: [
+      'Filter the quiz to a specific group of birds. "All" includes every bird seen in your region.',
+      'Other groups let you focus on a particular family — useful if you want to drill waterfowl, raptors, or another category you\'re working on.',
+    ],
+  },
+  learningMode: {
+    title: 'Learning Mode',
+    body: [
+      'Adaptive mode tracks your progress and focuses on birds you find difficult, while mastered birds get only occasional review to keep them fresh. '
+      + 'In this mode a pedogogical algrorithm is applied to optimize your learning. For exampe, the game will: a) progress from more common backyard '
+      + 'birds to less common species, b) increase the frequency of exposure to birds you are struggling with, c) only introduce new birds to the '
+      + '"learning palette" as other birds are graduated through the palette levels.',
+      'Random mode picks birds and question types with equal probability, ignoring your history. Your progress is not tracked in random mode. For example, '
+      + 'birds you are quizzed on in random mode will not appear in your life list.',
+    ],
+  },
+
+  // ── Settings screen ────────────────────────────────────────────────────────
+  recentWindow: {
+    title: 'Recent sightings window',
+    body: [
+      'Controls which birds are included in your local pool. Playing with a 1 day window is a nice way to stay on top of birds moving into '
+      + 'your area as you sip your morning coffee.',
+      '"Today" uses only birds reported in the last 24 hours for a hyper-local experience. "Past week" and "Past month" cast a wider net and '
+      + 'include birds are seen less frequently or may have moved out of your area already.',
+      'If you are in an area where there are a lot of reported sightings, the 1d window is the way to go. If you are in an area where there '
+      + 'are\'t so many people reporting, then a longer window might give you the right experience.'
+    ],
+  },
+  autoplayRevealAudio: {
+    title: 'Autoplay bird song on reveal',
+    body: [
+      'Automatically plays the bird\'s song when the answer is revealed, so you can associate the sound with the species even on photo questions.',
+    ],
+  },
+  latinAnswerQuestions: {
+    title: 'Latin-answer questions',
+    body: [
+      'Adds question variants where you choose the correct Latin (scientific) name as the answer.',
+      'Works alongside Photo, Song, and Family questions. Progress badges for these variants show an "L" suffix in your life list.',
+    ],
+  },
+  songAnswerQuestions: {
+    title: 'Song-answer questions',
+    body: [
+      'Adds question variants where you pick the correct bird song from multiple audio clips.',
+      'Works alongside Photo, Spectrogram, and Latin questions. Progress badges for these variants show an "S" suffix.',
+    ],
+  },
+  randomizeQuestionPhotos: {
+    title: 'Randomize question photos',
+    body: [
+      'Picks a different photo each time a species appears as a question, rather than always using the primary photo.',
+      'This helps you recognise birds across different poses, ages, and lighting conditions.',
+    ],
+  },
+  expireMasteredBirds: {
+    title: 'Expire mastered birds after 90 days',
+    body: [
+      'Ninety days after you master a bird, it re-enters the quiz question pool at level 2 — one step from re-mastery.',
+      'This ensures long-term retention for birds you haven\'t seen in a while, without making you start from scratch. It also ensures '
+      + 'that you will be alerted when these birds are next in your area as you will be presented with questions about these birds at '
+      + 'a higher frequency and will see the recent sighting reports in the answer reveal screen.',
+    ],
+  },
+  outdatedProgress: {
+    title: 'Outdated progress',
+    body: [
+      'If you change your region or tighten your sightings window, some birds in your quiz history may no longer appear in your area.',
+      'This removes their progress records so your quiz stays focused on birds you\'re likely to actually see today.',
+    ],
+  },
+  autoScrollRelatedSpecies: {
+    title: 'Auto-scroll related species',
+    body: [
+      'When the bird info panel opens, the related species carousel automatically scrolls through once to show you what\'s there, then stops.',
+      'Turn this off if you find the motion distracting.',
+    ],
+  },
+  maxRecentSightings: {
+    title: 'Max recent sightings',
+    body: [
+      'How many recent eBird sightings are shown in the bird info panel when you reveal an answer.',
+      'Set to 0 to hide the sightings section entirely.',
+    ],
+  },
+  blockedPhotos: {
+    title: 'Blocked photos',
+    body: [
+      'When you tap the remove button on a photo during a quiz, that photo is added to your personal block list and won\'t appear again.',
+      'Use this button to clear the list and allow all previously blocked photos back.',
+    ],
+  },
+  enableAdminFeatures: {
+    title: 'Enable admin features',
+    body: [
+      'Shows the curation panel and report management tools in the right panel.',
+      'Only visible to admin accounts.',
+    ],
+  },
+};

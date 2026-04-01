@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { SupabaseUser } from '../lib/supabase';
 import { supabase } from '../lib/supabase';
 import type { AppNotification } from '../lib/notifications';
-import { fetchNotifications, formatNotificationMessage, mapNotificationRow } from '../lib/notifications';
+import { fetchNotifications, formatNotificationMessage, mapNotificationRow, deleteNotifications } from '../lib/notifications';
 import { notifyFriends } from '../lib/friends';
 import type { ToastData } from '../components/ui/Toast';
 
@@ -56,7 +56,16 @@ export function useNotifications({
   }
 
   function handleNewNotification(n: AppNotification) {
-    setNotifications(prev => [n, ...prev]);
+    setNotifications(prev => {
+      if (n.type === 'login') {
+        const mostRecentFromSender = prev.find(x => x.senderUserId === n.senderUserId);
+        if (mostRecentFromSender?.type === 'login') {
+          deleteNotifications([mostRecentFromSender.id]).catch(() => {});
+          return prev.map(x => x.id === mostRecentFromSender.id ? n : x);
+        }
+      }
+      return [n, ...prev];
+    });
     setHasUnread(true);
     if (screenRef.current === 'notifications') return;
 
