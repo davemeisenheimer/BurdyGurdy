@@ -128,6 +128,7 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
           alt="Song spectrogram"
           className="w-full block"
           draggable={false}
+          referrerPolicy="no-referrer"
           onError={() => {
             if (DEV_LOG_AUDIO_ERRORS) console.warn(`[AudioPlayer] spectrogram failed to load: ${activeSonoUrl}`);
             setActiveSonoUrl(undefined);
@@ -198,6 +199,7 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
           src={activeSonoUrl}
           alt=""
           className="hidden"
+          referrerPolicy="no-referrer"
           onLoad={() => setSonoLoaded(true)}
           onError={() => {
             if (DEV_LOG_AUDIO_ERRORS) console.warn(`[AudioPlayer] spectrogram failed to load: ${activeSonoUrl}`);

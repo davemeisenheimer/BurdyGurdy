@@ -29,21 +29,30 @@ export function InfoButton({ title, body, imageUrl }: Props) {
             className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6"
             onClick={e => e.stopPropagation()}
           >
-            <h3 className="font-bold text-slate-800 mb-3">{title}</h3>
-            {imageUrl && (
-              <img src={imageUrl} alt={title} className="w-full rounded-lg mb-3 object-cover" />
-            )}
+            <div className="flex items-start justify-between mb-3">
+              <h3 className="font-bold text-slate-800">{title}</h3>
+              <button
+                onClick={() => setOpen(false)}
+                className="ml-4 shrink-0 w-7 h-7 rounded-full border border-sky-500 bg-slate-100 hover:bg-sky-50 text-sky-600 hover:text-sky-700 flex items-center justify-center text-base leading-[0] transition-colors"
+                aria-label="Close"
+              >
+                <span className="-translate-y-px">×</span>
+              </button>
+            </div>
             <div className="space-y-2">
+              <img
+                src="/BurdyNotebook.png"
+                alt="BurdyGurdy"
+                className="float-left w-16 h-auto mr-3 mb-1 rounded-lg"
+              />
+              {imageUrl && (
+                <img src={imageUrl} alt={title} className="w-full rounded-lg mb-3 object-cover" />
+              )}
               {body.map((para, i) => (
                 <p key={i} className="text-sm text-slate-600 leading-relaxed">{para}</p>
               ))}
+              <div className="clear-both" />
             </div>
-            <button
-              onClick={() => setOpen(false)}
-              className="mt-5 text-sm text-slate-500 hover:text-slate-700"
-            >
-              Close
-            </button>
           </div>
         </div>
       )}

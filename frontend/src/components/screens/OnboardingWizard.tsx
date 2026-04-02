@@ -103,7 +103,11 @@ export function OnboardingWizard({ user, settings, onUpdateSettings, onRegionDet
   };
 
   const detectLocation = () => {
-    if (!navigator.geolocation) { setGeoPhase('error'); return; }
+    if (!navigator.geolocation) {
+      console.warn('[OnboardingWizard] navigator.geolocation not available');
+      setGeoPhase('error');
+      return;
+    }
     setGeoPhase('loading');
     navigator.geolocation.getCurrentPosition(
       async pos => {
@@ -111,9 +115,15 @@ export function OnboardingWizard({ user, settings, onUpdateSettings, onRegionDet
           const result = await locateRegion(pos.coords.latitude, pos.coords.longitude, 10);
           setGeoResult(result);
           setGeoPhase('result');
-        } catch { setGeoPhase('error'); }
+        } catch (err) {
+          console.error('[OnboardingWizard] locateRegion API call failed:', err);
+          setGeoPhase('error');
+        }
       },
-      () => setGeoPhase('error'),
+      (err) => {
+        console.warn('[OnboardingWizard] geolocation error — code:', err.code, 'message:', err.message);
+        setGeoPhase('error');
+      },
     );
   };
 
