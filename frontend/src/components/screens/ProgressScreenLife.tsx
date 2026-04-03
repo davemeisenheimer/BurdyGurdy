@@ -37,6 +37,7 @@ interface BirdSummary {
   comName: string;
   records: BirdProgress[];
   overallAccuracy: number;
+  recentAccuracy: number | null; // rolling-window accuracy across mastered records; null when no window data
   totalAttempts: number;
   favourited: boolean;
   excluded: boolean;
@@ -44,6 +45,8 @@ interface BirdSummary {
   isMastered: boolean;
   isInProgress: boolean;
 }
+
+type AccuracyMode = 'lifetime' | 'last10';
 
 type Filter = 'learning' | 'favourites' | 'struggling' | 'mastered' | 'excluded';
 type TypeFilter = 'all' | QuestionType;
@@ -75,6 +78,7 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
   const [typeFilter, setTypeFilter]     = useState<TypeFilter>(() =>
     questionTypes?.length === 1 ? questionTypes[0] : 'all',
   );
+  const [accuracyMode, setAccuracyMode] = useState<AccuracyMode>('last10');
   const [loading, setLoading]           = useState(true);
   const [confirmClear, setConfirmClear] = useState(false);
   const [masteryStats, setMasteryStats] = useState<{ mastered: number; total: number } | null>(null);
@@ -120,11 +124,18 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
 
         const totalCorrect  = askedRecs.reduce((s, r) => s + r.correct, 0);
         const totalAttempts = askedRecs.reduce((s, r) => s + r.correct + r.incorrect, 0);
+        const recentWindows = askedRecs
+          .filter(r => (r.isMastered ?? false) && r.recentAnswers && r.recentAnswers.length > 0)
+          .flatMap(r => r.recentAnswers!);
+        const recentAccuracy = recentWindows.length > 0
+          ? recentWindows.filter(Boolean).length / recentWindows.length
+          : null;
         summaries.push({
           speciesCode,
           comName: askedRecs[0].comName ?? speciesCode,
           records: askedRecs,
           overallAccuracy: totalAttempts > 0 ? totalCorrect / totalAttempts : 0,
+          recentAccuracy,
           totalAttempts,
           favourited: askedRecs.some(r => r.favourited),
           excluded:   recs.some(r => r.excluded),
@@ -255,6 +266,11 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
   ];
   if (excludedCount > 0) filterTabs.push({ key: 'excluded', count: excludedCount, label: 'Hidden', color: 'text-slate-500', border: 'border-slate-400' });
 
+  const recentWindowAccuracy = (r: BirdProgress): number | null => {
+    if (!(r.isMastered ?? false) || !r.recentAnswers || r.recentAnswers.length === 0) return null;
+    return r.recentAnswers.filter(Boolean).length / r.recentAnswers.length;
+  };
+
   const masteryColor = (accuracy: number) => {
     if (accuracy >= 0.85) return 'bg-green-500';
     if (accuracy >= 0.6)  return 'bg-amber-400';
@@ -263,7 +279,9 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
 
   const progressBadge = (r: BirdProgress) => {
     const total = r.correct + r.incorrect;
-    const pct   = total > 0 ? Math.round((r.correct / total) * 100) : null;
+    const lifetimePct = total > 0 ? Math.round((r.correct / total) * 100) : null;
+    const recentPct = (() => { const a = recentWindowAccuracy(r); return a !== null ? Math.round(a * 100) : null; })();
+    const pct = accuracyMode === 'last10' ? (recentPct ?? lifetimePct) : lifetimePct;
     const struggling = (r.isMastered ?? false) && isStrugglingByWindow(r.recentAnswers ?? []);
     return (
       <span
@@ -364,7 +382,7 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
 
         {/* Recent mastery summary */}
         {masteryStats !== null && (
-          <p className="text-xs text-slate-500 mb-3">
+          <p className="ml-5 text-xs text-slate-500 mb-3">
             {masteryStats.mastered}/{masteryStats.total} birds seen in the past {recentDays === 1 ? '1 day' : `${recentDays ?? 30} days`} are mastered.{' '}
             {onRecentProgress && (
               <button onClick={onRecentProgress} className="text-forest-600 hover:underline font-medium">
@@ -374,29 +392,48 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
           </p>
         )}
         {masteryStats === null && onRecentProgress && (
-          <p className="text-xs text-slate-500 mb-3">
+          <p className="ml-5 text-xs text-slate-500 mb-3">
             <button onClick={onRecentProgress} className="text-forest-600 hover:underline font-medium">
               View recent progress →
             </button>
           </p>
         )}
 
-        {/* Type filter dropdown */}
-        {availableTypes.length > 1 && (
-          <div className="flex items-center gap-2 mb-3">
-            <label className="text-xs text-slate-500 font-medium shrink-0">Question type:</label>
-            <select
-              value={typeFilter}
-              onChange={e => setTypeFilter(e.target.value as TypeFilter)}
-              className="text-xs border border-slate-300 rounded-lg px-2 py-1 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-forest-500"
-            >
-              <option value="all">All</option>
-              {availableTypes.map(t => (
-                <option key={t} value={t}>{TYPE_LABELS[t] ?? t}</option>
-              ))}
-            </select>
+        {/* Type filter + accuracy mode row */}
+        <div className="flex justify-between ml-5 mr-5 items-center gap-3 mb-3 flex-wrap">
+          {availableTypes.length > 1 && (
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-slate-500 font-medium shrink-0">Question type:</label>
+              <select
+                value={typeFilter}
+                onChange={e => setTypeFilter(e.target.value as TypeFilter)}
+                className="text-xs border border-slate-300 rounded-lg px-2 py-1 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-forest-500"
+              >
+                <option value="all">All</option>
+                {availableTypes.map(t => (
+                  <option key={t} value={t}>{TYPE_LABELS[t] ?? t}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-500 font-medium shrink-0">Accuracy:</label>
+            <div className="flex rounded-lg border border-slate-300 overflow-hidden text-xs font-medium">
+              <button
+                onClick={() => setAccuracyMode('last10')}
+                className={`px-2.5 py-1 transition-colors ${accuracyMode === 'last10' ? 'bg-forest-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+              >
+                Last 10
+              </button>
+              <button
+                onClick={() => setAccuracyMode('lifetime')}
+                className={`px-2.5 py-1 transition-colors border-l border-slate-300 ${accuracyMode === 'lifetime' ? 'bg-forest-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+              >
+                Lifetime
+              </button>
+            </div>
           </div>
-        )}
+        </div>
         
         {/* Tab strip — combines stats summary and filter selection */}
         {birds.length > 0 && (
@@ -458,11 +495,15 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
               : null;
 
             // Display accuracy: per-type record when filtered, overall when All
-            const displayAccuracy = typeFilter !== 'all' && viewRecord
+            const lifetimeAcc = typeFilter !== 'all' && viewRecord
               ? (viewRecord.correct + viewRecord.incorrect > 0
                   ? viewRecord.correct / (viewRecord.correct + viewRecord.incorrect)
                   : 0)
               : bird.overallAccuracy;
+            const last10Acc = typeFilter !== 'all' && viewRecord
+              ? (recentWindowAccuracy(viewRecord) ?? lifetimeAcc)
+              : (bird.recentAccuracy ?? bird.overallAccuracy);
+            const displayAccuracy = accuracyMode === 'last10' ? last10Acc : lifetimeAcc;
 
             return (<Fragment key={bird.speciesCode}>
               {groupHeader}
@@ -504,7 +545,9 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
                       {Math.round(displayAccuracy * 100)}%
                     </span>
                     <span className="text-xs text-slate-400 ml-1">
-                      {typeFilter !== 'all' ? TYPE_LABELS[typeFilter] ?? typeFilter : 'overall'}
+                      {typeFilter !== 'all'
+                        ? TYPE_LABELS[typeFilter] ?? typeFilter
+                        : accuracyMode === 'last10' ? 'last 10' : 'overall'}
                     </span>
                   </div>
                   {bird.excluded && !readOnly && (

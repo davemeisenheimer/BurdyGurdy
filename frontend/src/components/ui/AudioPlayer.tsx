@@ -54,7 +54,6 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
     audio.play().catch(() => { /* autoplay blocked — user can tap to start */ });
     return () => {
       audio.pause();
-      audio.src = '';
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url]);
@@ -89,6 +88,7 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
     setAudioError(false);
     setSonoLoaded(false);
     audio.src = allTracks[0].audioUrl;
+    audio.load();
     setActiveSonoUrl(allTracks[0].sonoUrl);
     audio.play().catch(() => {});
   };
@@ -146,7 +146,7 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
               <p className="text-white/80 text-sm">Unable to fetch audio</p>
               <button
                 onClick={handleRetry}
-                className="text-white/90 text-sm bg-black/60 hover:bg-black/80 px-4 py-2 rounded-full transition-colors"
+                className="text-white/90 text-sm bg-black/60 hover:bg-black/80 active:bg-black/90 px-4 py-2 rounded-full transition-colors"
               >
                 ↺ Retry audio
               </button>
@@ -180,7 +180,7 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
         Unable to fetch audio<br/>
         <button
           onClick={handleRetry}
-          className="px-4 py-2 rounded-full border border-slate-300 text-slate-500 hover:bg-slate-50 text-sm transition-colors"
+          className="px-4 py-2 rounded-full border border-slate-300 text-slate-500 hover:bg-slate-50 active:bg-slate-100 text-sm transition-colors"
         >
           ↺ Retry audio
         </button>

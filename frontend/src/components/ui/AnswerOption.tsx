@@ -10,7 +10,7 @@ interface Props {
 }
 
 const statusStyles: Record<Props['status'], string> = {
-  default: 'bg-white border-slate-200 hover:border-forest-500 hover:bg-forest-50 cursor-pointer',
+  default: 'bg-white border-slate-200 hover:border-sky-500 hover:bg-sky-50 active:bg-sky-50 cursor-pointer',
   correct: 'bg-green-50 border-green-500 text-green-800',
   incorrect: 'bg-red-50 border-red-400 text-red-800',
   disabled: 'bg-white border-slate-200 text-slate-400 cursor-not-allowed opacity-60',

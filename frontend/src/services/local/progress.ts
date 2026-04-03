@@ -311,7 +311,7 @@ export async function getExcluded(
 
 // ── Adaptive params ───────────────────────────────────────────────────────────
 
-export async function getAdaptiveParams(initialMasteryLevel = 0): Promise<AdaptiveParams> {
+export async function getAdaptiveParams(): Promise<AdaptiveParams> {
   const records = await db.progress.toArray();
 
   const masteryLevels: Record<string, number> = {};
@@ -342,7 +342,7 @@ export async function getAdaptiveParams(initialMasteryLevel = 0): Promise<Adapti
       const key    = `${speciesCode}:${record.questionType}`;
       weights[key] = calcWeight(record.isMastered ?? false, record.favourited ?? false, record.recentAnswers, record.correct ?? 0, record.incorrect ?? 0);
       if (record.isMastered) historyKeys.push(key);
-      if (!bannedSet.has(speciesCode) && (record.masteryLevel ?? 0) === initialMasteryLevel && !(record.isMastered ?? false)) {
+      if (!bannedSet.has(speciesCode) && !(record.isMastered ?? false)) {
         level0Keys.push(key);
       }
     }

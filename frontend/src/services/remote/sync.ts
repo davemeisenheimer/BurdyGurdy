@@ -32,6 +32,7 @@ export async function uploadProgress(userId: string): Promise<void> {
     mastery_level:       r.masteryLevel       ?? 0,
     consecutive_correct: r.consecutiveCorrect ?? 0,
     in_history:          r.isMastered  ?? false,
+    recent_answers:      r.recentAnswers      ?? null,
   }));
 
   const { error } = await supabase
@@ -97,6 +98,7 @@ export async function downloadAndMerge(userId: string): Promise<number> {
           masteryLevel:       remote.mastery_level,
           consecutiveCorrect: remote.consecutive_correct,
           isMastered:         remote.in_history,
+          recentAnswers:      remote.recent_answers ?? local?.recentAnswers,
         };
         await db.progress.put(record);
       }
@@ -215,6 +217,27 @@ export async function fetchAdminBlockedMedia(): Promise<void> {
         blockScope:  (r.block_scope ?? 'full') as 'full' | 'question',
       })),
   );
+}
+
+// ── Region snapshot ───────────────────────────────────────────────────────────
+
+import type { RegionSnapshot } from '../local/regionSnapshot';
+
+export async function uploadRegionSnapshot(userId: string, snapshot: RegionSnapshot): Promise<void> {
+  const { error } = await supabase
+    .from('user_settings')
+    .upsert({ user_id: userId, region_snapshot: snapshot, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+  if (error) console.warn('sync: region snapshot upload failed:', error.message);
+}
+
+export async function downloadRegionSnapshot(userId: string): Promise<RegionSnapshot | null> {
+  const { data, error } = await supabase
+    .from('user_settings')
+    .select('region_snapshot')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return (data.region_snapshot as RegionSnapshot) ?? null;
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────

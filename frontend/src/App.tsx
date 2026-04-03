@@ -22,13 +22,17 @@ import { useNotifications } from './hooks/useNotifications';
 import { loadSettings, saveSettings, loadQuizPrefs, saveQuizPrefs } from './lib/settings';
 import type { AppSettings } from './lib/settings';
 import { checkVictoryCondition, getVictorySeen, mergeVictorySeen, describeMastery, describeWindow } from './lib/victory';
-import { locateRegion, fetchBlockedPhotos } from './services/remote/api';
+import { locateRegion } from './services/remote/api';
 import type { LocateResult } from './services/remote/api';
 import { db, switchToUserDb } from './lib/db';
 import { supabase } from './lib/supabase';
 import type { SupabaseUser } from './lib/supabase';
-import { uploadProgress, downloadAndMerge, uploadSettings, downloadSettings, downloadUserBlockedPhotos, deleteAllUserBlockedPhotos, uploadUserBlockedPhoto, submitMediaReport, fetchAdminBlockedMedia, deleteCloudProgressRecords } from './services/remote/sync';
+import { uploadProgress, downloadAndMerge, uploadSettings, downloadSettings, downloadUserBlockedPhotos, deleteAllUserBlockedPhotos, uploadUserBlockedPhoto, submitMediaReport, fetchAdminBlockedMedia, deleteCloudProgressRecords, uploadRegionSnapshot, downloadRegionSnapshot } from './services/remote/sync';
 import { checkBirdsToExpire, expireOldMasteredBirds } from './services/local/progress';
+import { getRegionSpecies } from './services/local/region';
+import { loadSnapshot, saveSnapshot, buildSnapshot, computeRegionUpdate } from './services/local/regionSnapshot';
+import type { RegionUpdateInfo } from './services/local/regionSnapshot';
+import { RegionUpdateDialog } from './components/ui/RegionUpdateDialog';
 import { computeStrugglingCount } from './lib/struggling';
 import { expandQuestionTypes } from './lib/questionTypes';
 import type { ReportErrorData } from './components/ui/ReportErrorModal';
@@ -86,6 +90,11 @@ export default function App() {
   const [showUploadPrompt, setShowUploadPrompt] = useState(false);
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
   const [expiryDialog, setExpiryDialog] = useState<Array<{ speciesCode: string; comName: string }> | null>(null);
+  const [pendingRegionUpdate, setPendingRegionUpdate] = useState<{
+    info: RegionUpdateInfo;
+    records: BirdProgress[];
+    pendingConfig: QuizConfig;
+  } | null>(null);
   const pendingStartConfigRef = useRef<QuizConfig | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem('burdygurdy_onboarding_complete'));
   const [installPromptEvent, setInstallPromptEvent] = useState<BeforeInstallPromptEvent | null>(null);
@@ -197,11 +206,9 @@ export default function App() {
     if (user) uploadSettings(user.id, settings, prefs, getVictorySeen()).catch(() => {});
   };
 
-  // On load, fetch server-side blocked photos and merge into local IndexedDB
+  // On load, fetch admin-blocked media for all users (including guests)
   useEffect(() => {
-    fetchBlockedPhotos()
-      .then(urls => Promise.all(urls.map(url => db.blockedPhotos.put({ url }))))
-      .catch(() => { /* non-fatal */ });
+    fetchAdminBlockedMedia().catch(() => { /* non-fatal */ });
   }, []);
 
   // Auth: restore session on load and listen for changes
@@ -240,6 +247,9 @@ export default function App() {
         }).catch(() => {});
         downloadSettings(userId).then(remote => {
           if (!remote) return;
+          // User has cloud settings — they've been through onboarding on another device
+          localStorage.setItem('burdygurdy_onboarding_complete', '1');
+          setShowOnboarding(false);
           const mergedSettings = { ...loadSettings(), ...remote.appSettings };
           setSettings(mergedSettings);
           saveSettings(mergedSettings);
@@ -257,6 +267,7 @@ export default function App() {
         }).catch(() => {});
         downloadUserBlockedPhotos(userId).catch(() => {});
         fetchAdminBlockedMedia().catch(() => {});
+        downloadRegionSnapshot(userId).then(snap => { if (snap) saveSnapshot(snap); }).catch(() => {});
         // Send login notification only on a genuine new sign-in — i.e. the user
         // was previously signed out.  Supabase also fires SIGNED_IN on silent
         // token refreshes (~hourly); checking prevAuthUserIdRef filters those out.
@@ -344,7 +355,40 @@ export default function App() {
       }
     }
 
+    // Check whether the region sightings window has changed since the last quiz
+    if (newConfig.mode === 'adaptive') {
+      const back = fullConfig.recentDays ?? 30;
+      const currentSpecies = await getRegionSpecies(fullConfig.regionCode, back);
+      const snapshot = loadSnapshot();
+      const snapshotMatches = snapshot?.regionCode === fullConfig.regionCode && snapshot?.back === back;
+      if (!snapshotMatches) {
+        // First run or region/back changed — save baseline silently
+        const newSnap = buildSnapshot(fullConfig.regionCode, back, currentSpecies);
+        saveSnapshot(newSnap);
+        if (user) uploadRegionSnapshot(user.id, newSnap).catch(() => {});
+      } else {
+        const updateInfo = computeRegionUpdate(currentSpecies, snapshot!);
+        if (updateInfo) {
+          const allRecords = await db.progress.toArray();
+          setPendingRegionUpdate({ info: updateInfo, records: allRecords, pendingConfig: fullConfig });
+          return;
+        }
+      }
+    }
+
     await doStart(fullConfig);
+  };
+
+  const handleRegionUpdateDismiss = async () => {
+    if (!pendingRegionUpdate) return;
+    const { pendingConfig } = pendingRegionUpdate;
+    const back = pendingConfig.recentDays ?? 30;
+    const currentSpecies = await getRegionSpecies(pendingConfig.regionCode, back);
+    const newSnap = buildSnapshot(pendingConfig.regionCode, back, currentSpecies);
+    saveSnapshot(newSnap);
+    if (user) uploadRegionSnapshot(user.id, newSnap).catch(() => {});
+    setPendingRegionUpdate(null);
+    await doStart(pendingConfig);
   };
 
   const handleNext = () => {
@@ -784,6 +828,16 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Region sightings window update dialog */}
+      {pendingRegionUpdate && (
+        <RegionUpdateDialog
+          info={pendingRegionUpdate.info}
+          progressRecords={pendingRegionUpdate.records}
+          questionTypes={expandQuestionTypes(pendingRegionUpdate.pendingConfig.questionTypes, settings)}
+          onDismiss={handleRegionUpdateDismiss}
+        />
       )}
 
       {/* Mastery expiry confirmation dialog */}

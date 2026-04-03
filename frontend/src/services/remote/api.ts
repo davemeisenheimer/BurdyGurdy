@@ -34,23 +34,6 @@ export async function fetchQuizQuestions(
   return res.data;
 }
 
-/** Fetches the server-side blocked photo URL list (no auth required). */
-export async function fetchBlockedPhotos(): Promise<string[]> {
-  const res = await api.get<string[]>('/blocked-photos');
-  return res.data;
-}
-
-/**
- * Publishes a blocked photo URL to the server.
- * Only fires if `curationToken` is set in localStorage — silently skips for regular users.
- */
-export async function blockPhoto(url: string): Promise<void> {
-  const token = localStorage.getItem('curationToken');
-  if (!token) return;
-  await api.post('/blocked-photos', { url }, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-}
 
 export interface LocateResult {
   regionCode: string;

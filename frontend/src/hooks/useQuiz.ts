@@ -248,7 +248,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
           // Seed initial palette and warm cache first; both use the same regionCode
           await maintainLevel0Palette(cfg.regionCode, cfg.questionTypes, back, birderLevelToInitialMastery(birderLevel));
         }
-        const params = await getAdaptiveParams(birderLevelToInitialMastery(birderLevel));
+        const params = await getAdaptiveParams();
         weights             = params.weights;
         masteryLevels       = params.masteryLevels;
         banned              = params.banned;
