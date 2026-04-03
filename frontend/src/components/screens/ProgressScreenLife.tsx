@@ -382,7 +382,7 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
 
         {/* Recent mastery summary */}
         {masteryStats !== null && (
-          <p className="ml-5 text-xs text-slate-500 mb-3">
+          <p className="text-xs text-slate-500 mb-3 mx-[clamp(0px,calc(50vw_-_195px),5px)]">
             {masteryStats.mastered}/{masteryStats.total} birds seen in the past {recentDays === 1 ? '1 day' : `${recentDays ?? 30} days`} are mastered.{' '}
             {onRecentProgress && (
               <button onClick={onRecentProgress} className="text-forest-600 hover:underline font-medium">
@@ -392,7 +392,7 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
           </p>
         )}
         {masteryStats === null && onRecentProgress && (
-          <p className="ml-5 text-xs text-slate-500 mb-3">
+          <p className="text-xs text-slate-500 mb-3 mx-[clamp(0px,calc(50vw_-_195px),5px)]">
             <button onClick={onRecentProgress} className="text-forest-600 hover:underline font-medium">
               View recent progress →
             </button>
@@ -400,7 +400,7 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
         )}
 
         {/* Type filter + accuracy mode row */}
-        <div className="flex justify-between ml-5 mr-5 items-center gap-3 mb-3 flex-wrap">
+        <div className="flex justify-between items-center gap-3 mb-3 flex-wrap mx-[clamp(0px,calc(50vw_-_195px),5px)]">
           {availableTypes.length > 1 && (
             <div className="flex items-center gap-2">
               <label className="text-xs text-slate-500 font-medium shrink-0">Question type:</label>

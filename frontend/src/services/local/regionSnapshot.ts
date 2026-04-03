@@ -11,12 +11,16 @@ export interface SnapshotSpecies {
 export interface RegionSnapshot {
   regionCode: string;
   back: number;
+  savedAt?: string;
   species: SnapshotSpecies[];
 }
 
 export interface RegionUpdateInfo {
   added: CachedSpecies[];
   dropped: SnapshotSpecies[];
+  unchanged: CachedSpecies[];
+  back: number;
+  savedAt?: string;
 }
 
 export function loadSnapshot(): RegionSnapshot | null {
@@ -40,6 +44,7 @@ export function buildSnapshot(
   return {
     regionCode,
     back,
+    savedAt: new Date().toISOString(),
     species: currentSpecies
       .filter(s => !s.isHistorical)
       .map(s => ({ speciesCode: s.speciesCode, comName: s.comName, sciName: s.sciName })),
@@ -58,9 +63,10 @@ export function computeRegionUpdate(
   const currentCodes  = new Set(currentNonHistorical.map(s => s.speciesCode));
   const snapshotCodes = new Set(snapshot.species.map(s => s.speciesCode));
 
-  const added   = currentNonHistorical.filter(s => !snapshotCodes.has(s.speciesCode));
-  const dropped = snapshot.species.filter(s => !currentCodes.has(s.speciesCode));
+  const added     = currentNonHistorical.filter(s => !snapshotCodes.has(s.speciesCode));
+  const dropped   = snapshot.species.filter(s => !currentCodes.has(s.speciesCode));
+  const unchanged = currentNonHistorical.filter(s => snapshotCodes.has(s.speciesCode));
 
   if (added.length === 0 && dropped.length === 0) return null;
-  return { added, dropped };
+  return { added, dropped, unchanged, back: snapshot.back, savedAt: snapshot.savedAt };
 }

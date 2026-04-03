@@ -371,6 +371,13 @@ export default function App() {
         if (updateInfo) {
           const allRecords = await db.progress.toArray();
           setPendingRegionUpdate({ info: updateInfo, records: allRecords, pendingConfig: fullConfig });
+          // Preload quiz questions while the dialog is open
+          setConfig(fullConfig);
+          startQuiz({
+            ...fullConfig,
+            questionTypes: expandQuestionTypes(fullConfig.questionTypes, settings),
+            onlyStruggling: focusStruggling,
+          });
           return;
         }
       }
@@ -379,16 +386,18 @@ export default function App() {
     await doStart(fullConfig);
   };
 
-  const handleRegionUpdateDismiss = async () => {
+  const handleRegionUpdateDismiss = () => {
     if (!pendingRegionUpdate) return;
     const { pendingConfig } = pendingRegionUpdate;
     const back = pendingConfig.recentDays ?? 30;
-    const currentSpecies = await getRegionSpecies(pendingConfig.regionCode, back);
-    const newSnap = buildSnapshot(pendingConfig.regionCode, back, currentSpecies);
-    saveSnapshot(newSnap);
-    if (user) uploadRegionSnapshot(user.id, newSnap).catch(() => {});
+    // currentSpecies is already cached in memory from handleStart; rebuild snapshot from it
+    getRegionSpecies(pendingConfig.regionCode, back).then(currentSpecies => {
+      const newSnap = buildSnapshot(pendingConfig.regionCode, back, currentSpecies);
+      saveSnapshot(newSnap);
+      if (user) uploadRegionSnapshot(user.id, newSnap).catch(() => {});
+    }).catch(() => {});
     setPendingRegionUpdate(null);
-    await doStart(pendingConfig);
+    setScreen('quiz');
   };
 
   const handleNext = () => {
