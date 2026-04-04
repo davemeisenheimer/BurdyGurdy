@@ -21,7 +21,7 @@ import { useQuiz } from './hooks/useQuiz';
 import { useNotifications } from './hooks/useNotifications';
 import { loadSettings, saveSettings, loadQuizPrefs, saveQuizPrefs } from './lib/settings';
 import type { AppSettings } from './lib/settings';
-import { checkVictoryCondition, getVictorySeen, mergeVictorySeen, describeMastery, describeWindow } from './lib/victory';
+import { checkVictoryCondition, hasSeenVictory, markVictorySeen, getVictorySeen, mergeVictorySeen, describeMastery, describeWindow } from './lib/victory';
 import { locateRegion } from './services/remote/api';
 import type { LocateResult } from './services/remote/api';
 import { db, switchToUserDb } from './lib/db';
@@ -70,8 +70,10 @@ const DEFAULT_CONFIG: QuizConfig = {
 export default function App() {
   const [config, setConfig] = useState<QuizConfig>(() => {
     const prefs = loadQuizPrefs();
+    const s = loadSettings();
     return {
       ...DEFAULT_CONFIG,
+      recentDays: RECENT_DAYS[s.recentWindow ?? 'month'],
       ...(prefs.questionTypes ? { questionTypes: prefs.questionTypes as QuizConfig['questionTypes'] } : {}),
       ...(prefs.mode          ? { mode: prefs.mode as QuizConfig['mode'] }                          : {}),
       ...(prefs.questionsPerRound != null ? { questionsPerRound: prefs.questionsPerRound }           : {}),
@@ -289,6 +291,28 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Upload on hide, download on return — bridges activity on other devices/tabs.
+  // Only re-downloads if the tab was hidden for at least 60 seconds.
+  useEffect(() => {
+    if (!user) return;
+    const userId = user.id;
+    const REDOWNLOAD_AFTER_MS = 60_000;
+    let hiddenAt = 0;
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+        uploadProgress(userId).catch(() => {});
+      } else if (hiddenAt > 0 && Date.now() - hiddenAt >= REDOWNLOAD_AFTER_MS) {
+        hiddenAt = 0;
+        downloadAndMerge(userId).catch(() => {});
+      } else {
+        hiddenAt = 0;
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [user]);
+
   // On load, try to detect location and offer a region update if it differs from saved
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -453,9 +477,12 @@ export default function App() {
   useEffect(() => {
     if (state.status !== 'complete' || screen !== 'quiz') return;
     const expandedTypes = expandQuestionTypes(config.questionTypes, settings);
+    const snapshot = loadSnapshot();
+    const snapshotKey = snapshot?.savedAt ?? new Date().toISOString();
     checkVictoryCondition(config.regionCode, config.recentDays ?? 30, expandedTypes)
       .then(won => {
-        if (won && roundLevelUps.some(e => e.graduated)) {
+        if (won && roundLevelUps.some(e => e.graduated) && !hasSeenVictory(snapshotKey, expandedTypes)) {
+          markVictorySeen(snapshotKey, expandedTypes);
           sendFriendNotification('victory', {
             masteryDesc: describeMastery(expandedTypes),
             windowDesc: describeWindow(settings.recentWindow),

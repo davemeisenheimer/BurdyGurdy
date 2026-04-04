@@ -3,6 +3,9 @@ import { getTaxonomy, getRegionalSpecies, getCommonSpeciesCodes, getBackyardSpec
 import { getRecordings } from '../services/xenocanto';
 import { getSpeciesPhotoUrl } from '../services/macaulay';
 import { BACKYARD_FAMILIES, GROUP_ORDERS } from '../constants';
+import {
+  PALETTE_DISTRACTOR_WEIGHT, RECENT_UNMASTERED_RATIO, XC_FETCH_BATCH_SIZE,
+} from '@birdygurdy/shared';
 import { buildCandidates, applyRecentUnmasteredGuarantee } from '../lib/candidateLogic';
 import { filterRecordings } from '../lib/recordingFilter';
 import type { PoolSpecies, Candidate } from '../lib/candidateLogic';
@@ -40,8 +43,7 @@ function pickRandom<T>(arr: T[], n: number): T[] {
   return [...arr].sort(() => Math.random() - 0.5).slice(0, n);
 }
 
-/** Weighted sampling without replacement. palette species are PALETTE_DISTRACTOR_WEIGHT× more likely. */
-const PALETTE_DISTRACTOR_WEIGHT = 10;
+// PALETTE_DISTRACTOR_WEIGHT imported from @birdygurdy/shared above.
 
 function pickWithPalettePreference<T extends { speciesCode: string }>(
   arr: T[],
@@ -380,7 +382,7 @@ router.post('/questions', async (req, res) => {
       questionPool, filteredPool, recentCodes, weightsMap, types as QuestionType[], adaptiveMode, level0KeySet, paletteCodes,
     );
 
-    const recentUnmasteredMin = adaptiveMode ? Math.ceil(count * 0.67) : 0;
+    const recentUnmasteredMin = adaptiveMode ? Math.ceil(count * RECENT_UNMASTERED_RATIO) : 0;
 
     let picked: Candidate[];
     if (adaptiveMode && recentUnmasteredMin > 0) {
@@ -408,9 +410,8 @@ router.post('/questions', async (req, res) => {
     // On a warm cache this loop completes instantly (all cache hits).
     // On a cold start it serialises requests in small batches instead of firing ~40+ at once.
     const xcUnique = [...new Set(picked.map(c => c.species.sciName))];
-    const XC_BATCH = 6;
-    for (let i = 0; i < xcUnique.length; i += XC_BATCH) {
-      await Promise.all(xcUnique.slice(i, i + XC_BATCH).map(n => getRecordings(n)));
+    for (let i = 0; i < xcUnique.length; i += XC_FETCH_BATCH_SIZE) {
+      await Promise.all(xcUnique.slice(i, i + XC_FETCH_BATCH_SIZE).map(n => getRecordings(n)));
     }
 
     const questions: QuizQuestion[] = await Promise.all(
@@ -467,7 +468,12 @@ router.post('/questions', async (req, res) => {
           // Shuffle and take up to 3 paired tracks so the frontend can fall back if a URL fails.
           // Each track keeps its audio and spectrogram together to avoid a mismatch on fallback.
           const shuffledRecs = [...availableRecordings].sort(() => Math.random() - 0.5).slice(0, 3);
-          const toHttps = (u?: string) => u?.startsWith('//') ? `https:${u}` : u;
+          const toHttps = (u?: string) => {
+            if (!u) return u;
+            if (u.startsWith('//')) return `https:${u}`;
+            if (u.startsWith('http://')) return `https://${u.slice(7)}`;
+            return u;
+          };
           q.audioUrl    = shuffledRecs[0].file;
           q.sonoUrl     = toHttps(shuffledRecs[0].sono?.med ?? shuffledRecs[0].sono?.small);
           q.audioTracks = shuffledRecs.map(r => ({

@@ -6,6 +6,10 @@
  */
 
 import type { QuestionType } from '../routes/quiz';
+import {
+  NON_RECENT_MULTIPLIER, NEW_ENCOUNTER_WEIGHT, MASTERED_FLOOR_WEIGHT,
+  ACTIVE_PALETTE_MIN_WEIGHT, UNMASTERED_FLOOR_RATIO,
+} from '@birdygurdy/shared';
 
 export interface PoolSpecies {
   speciesCode: string;
@@ -20,9 +24,8 @@ export interface Candidate {
   weight: number;
 }
 
-const NON_RECENT_MULTIPLIER = 0.05;
-const NEW_ENCOUNTER_WEIGHT  = 20;
-const MASTERED_FLOOR_WEIGHT = 3;
+// NON_RECENT_MULTIPLIER, NEW_ENCOUNTER_WEIGHT, MASTERED_FLOOR_WEIGHT,
+// ACTIVE_PALETTE_MIN_WEIGHT imported from @birdygurdy/shared above.
 
 /**
  * Builds the weighted candidate list for question selection.
@@ -58,10 +61,12 @@ export function buildCandidates(
       if (!adaptiveMode) {
         weight = 1;
       } else if (w === undefined) {
-        // In adaptive mode only palette birds can be question subjects.
-        // Birds present in eBird's recent window but not yet seeded into the
-        // learning palette are excluded here — they can still appear as distractors.
-        if (!paletteCodes.has(species.speciesCode)) continue;
+        // Only introduce a new encounter for this specific type if
+        // maintainLevel0Palette has explicitly seeded it (putting its key in
+        // level0Keys). The old paletteCodes check was too broad — a bird with
+        // an active family/song record could bypass palette ordering and be
+        // introduced as a new image question before the queue reached it.
+        if (!level0Keys.has(key)) continue;
         weight = NEW_ENCOUNTER_WEIGHT;
       } else {
         weight = Math.max(w, MASTERED_FLOOR_WEIGHT);
@@ -116,7 +121,7 @@ export function applyRecentUnmasteredGuarantee<T extends { speciesCode: string; 
   const w   = (q: T) => weightsMap[key(q)] ?? NEW_ENCOUNTER_WEIGHT;
 
   const needsPractice = (q: T) =>
-    (recentCodes.has(q.speciesCode) && w(q) >= 5) || level0Keys.has(key(q));
+    (recentCodes.has(q.speciesCode) && w(q) >= ACTIVE_PALETTE_MIN_WEIGHT) || level0Keys.has(key(q));
 
   // Unmastered: needs practice AND not yet graduated
   const isUnmastered = (q: T) => needsPractice(q) && !historyKeySet.has(key(q));
@@ -128,7 +133,7 @@ export function applyRecentUnmasteredGuarantee<T extends { speciesCode: string; 
   const otherValid = allValid.filter(q => !needsPractice(q));
 
   const total   = recentUnmasteredMin;
-  const ruFloor = Math.ceil(total / 2);
+  const ruFloor = Math.ceil(total * UNMASTERED_FLOOR_RATIO);
   const smFloor = total - ruFloor;
 
   let ruTake = Math.min(ruValid.length, ruFloor);

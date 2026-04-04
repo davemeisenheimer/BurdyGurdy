@@ -4,41 +4,29 @@ import type { QuestionType } from '../types';
 
 const VICTORY_KEY = 'birdygurdy_victories';
 
-/** Returns a string representing the current period for a given window (resets each day/week/month). */
-function currentPeriod(recentWindow: string): string {
-  const now = new Date();
-  if (recentWindow === 'day') {
-    return now.toISOString().slice(0, 10); // "2026-03-18"
-  }
-  if (recentWindow === 'week') {
-    // ISO week: Monday-aligned week number
-    const d = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-    const week = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-    return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
-  }
-  // month
-  return now.toISOString().slice(0, 7); // "2026-03"
+/**
+ * Victory is suppressed per snapshot, not per time period. The snapshotKey is
+ * derived from the region snapshot's savedAt timestamp so that each RegionUpdate
+ * naturally produces a new key, resetting the suppression without any explicit
+ * clearing step.
+ */
+function victoryId(snapshotKey: string, types: QuestionType[]): string {
+  return `${snapshotKey}:${[...types].sort().join(',')}`;
 }
 
-function victoryId(recentWindow: string, types: QuestionType[]): string {
-  return `${recentWindow}:${currentPeriod(recentWindow)}:${[...types].sort().join(',')}`;
-}
-
-export function hasSeenVictory(recentWindow: string, types: QuestionType[]): boolean {
+export function hasSeenVictory(snapshotKey: string, types: QuestionType[]): boolean {
   try {
     const raw = localStorage.getItem(VICTORY_KEY);
     const seen: string[] = raw ? JSON.parse(raw) : [];
-    return seen.includes(victoryId(recentWindow, types));
+    return seen.includes(victoryId(snapshotKey, types));
   } catch { return false; }
 }
 
-export function markVictorySeen(recentWindow: string, types: QuestionType[]): void {
+export function markVictorySeen(snapshotKey: string, types: QuestionType[]): void {
   try {
     const raw = localStorage.getItem(VICTORY_KEY);
     const seen: string[] = raw ? JSON.parse(raw) : [];
-    const id = victoryId(recentWindow, types);
+    const id = victoryId(snapshotKey, types);
     if (!seen.includes(id)) {
       seen.push(id);
       localStorage.setItem(VICTORY_KEY, JSON.stringify(seen));

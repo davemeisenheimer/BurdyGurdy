@@ -134,8 +134,8 @@ export function OnboardingWizard({ user, settings, onUpdateSettings, onRegionDet
 
       {/* ── Step 0: Welcome ── */}
       {step === 0 && (
-        <div className="flex flex-col flex-1 items-center justify-center px-6 py-10 overflow-y-auto">
-          <div className="w-full max-w-md flex flex-col items-center">
+        <div className="flex-1 overflow-y-auto">
+          <div className="w-full max-w-md flex flex-col items-center min-h-full justify-center mx-auto px-6 py-6">
             <img src="/favicon.png" alt="BurdyGurdy" className="w-20 h-20 rounded-2xl mb-4 shadow-md" />
             <h1 className="text-2xl font-bold text-slate-800 mb-1">Welcome to BurdyGurdy</h1>
             <p className="text-sm text-slate-500 text-center mb-6">Learn to identify birds by their songs, photos, and more.</p>
@@ -170,7 +170,7 @@ export function OnboardingWizard({ user, settings, onUpdateSettings, onRegionDet
             >
               Get started →
             </button>
-          </div>
+        </div>
         </div>
       )}
 
@@ -191,7 +191,7 @@ export function OnboardingWizard({ user, settings, onUpdateSettings, onRegionDet
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            <div className="max-w-md mx-auto px-4 pb-10">
+            <div className="max-w-md mx-auto px-4 pb-6">
 
               {/* ── Step 1: Account ── */}
               {step === 1 && (

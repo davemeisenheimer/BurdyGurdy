@@ -2,10 +2,11 @@
   "name": "birdygurdy",
   "version": "1.0.0",
   "private": true,
-  "workspaces": ["backend", "frontend"],
+  "workspaces": ["backend", "frontend", "shared"],
   "scripts": {
-    "dev": "concurrently \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\"",
-    "build": "npm run build --workspace=backend && npm run build --workspace=frontend",
+    "dev": "npm run build --workspace=shared && concurrently \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\"",
+    "build": "npm run build --workspace=shared && npm run build --workspace=backend && npm run build --workspace=frontend",
+    "build:shared": "npm run build --workspace=shared",
     "start": "npm run start --workspace=backend"
   },
   "devDependencies": {

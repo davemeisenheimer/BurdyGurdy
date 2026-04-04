@@ -1,14 +1,10 @@
 import type { BirdProgress, QuestionType } from '../types';
+import { STRUGGLING_WINDOW, STRUGGLING_MIN_CORRECT } from '@birdygurdy/shared';
 
-/** Rolling window size for mastered-bird accuracy tracking. */
-export const STRUGGLING_WINDOW = 10;
-/** Minimum correct answers in the window to be "not struggling" (80%). */
-export const STRUGGLING_MIN_CORRECT = 8;
-/**
- * Derived threshold — kept as a named constant for documentation.
- * The effective rule is: correct count in window < STRUGGLING_MIN_CORRECT.
- */
-export const STRUGGLING_THRESHOLD = STRUGGLING_MIN_CORRECT / STRUGGLING_WINDOW; // 0.80
+export { STRUGGLING_WINDOW, STRUGGLING_MIN_CORRECT };
+
+/** Derived accuracy threshold (80%) — for use in non-mastered struggling check. */
+export const STRUGGLING_THRESHOLD = STRUGGLING_MIN_CORRECT / STRUGGLING_WINDOW;
 
 /**
  * Returns true when a mastered bird's rolling recent-answers window shows

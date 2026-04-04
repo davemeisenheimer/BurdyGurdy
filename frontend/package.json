@@ -1,6 +1,6 @@
 {
   "name": "birdygurdy-frontend",
-  "version": "1.0.0",
+  "version": "0.5.01",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,6 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@birdygurdy/shared": "*",
     "@supabase/supabase-js": "^2.99.3",
     "axios": "1.13.6",
     "dexie": "^4.0.0",

@@ -1,25 +1,17 @@
 import { MASTERY_ADVANCE_STREAK, GRADUATION_STREAK } from './mastery';
 import type { QuestionType, LevelUpEvent, NoLongerStrugglingEvent } from '../types';
 import { isStrugglingByWindow, isNonMasteredStruggling, STRUGGLING_WINDOW } from './struggling';
+import {
+  MAX_LEVEL_0_SIZE_FIRST, MAX_LEVEL_0_SIZE_SECOND,
+  MAX_LEVEL_0_SIZE_THIRD, MAX_LEVEL_0_SIZE,
+  PALETTE_WEIGHT, HISTORY_WEIGHT, NON_MASTERED_STRUGGLE_BOOST,
+} from '@birdygurdy/shared';
 
-// ── Learning palette size limits ──────────────────────────────────────────────
-
-export const MAX_LEVEL_0_SIZE_FIRST  = 6;
-export const MAX_LEVEL_0_SIZE_SECOND = 8;
-export const MAX_LEVEL_0_SIZE_THIRD  = 10;
-export const MAX_LEVEL_0_SIZE        = 12;
-
-// ── Internal weight constants ─────────────────────────────────────────────────
-
-/** Weight for birds actively in the learning palette (levels 0, 1, 2). */
-export const PALETTE_WEIGHT = 20.0;
-/** Weight for mastered birds that are no longer in the learning palette. */
-export const HISTORY_WEIGHT = 1.0;
-
-// ── Weight calculation ────────────────────────────────────────────────────────
-
-/** Weight multiplier applied to non-mastered birds that are struggling by all-time accuracy. */
-export const NON_MASTERED_STRUGGLE_BOOST = 1.5;
+export {
+  MAX_LEVEL_0_SIZE_FIRST, MAX_LEVEL_0_SIZE_SECOND,
+  MAX_LEVEL_0_SIZE_THIRD, MAX_LEVEL_0_SIZE,
+  PALETTE_WEIGHT, HISTORY_WEIGHT, NON_MASTERED_STRUGGLE_BOOST,
+};
 
 /**
  * Returns the quiz selection weight for a bird based on its current state.

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { DEV_LOG_AUDIO_ERRORS } from '../../lib/devFlags';
 
 interface Track {
@@ -13,7 +13,12 @@ interface Props {
   onAudioUnavailable?: () => void;
 }
 
-const toHttps = (u?: string) => u?.startsWith('//') ? `https:${u}` : u;
+const toHttps = (u?: string) => {
+  if (!u) return u;
+  if (u.startsWith('//')) return `https:${u}`;
+  if (u.startsWith('http://')) return `https://${u.slice(7)}`;
+  return u;
+};
 
 export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props) {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -21,7 +26,6 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
   const [audioError, setAudioError] = useState(false);
   const [activeSonoUrl, setActiveSonoUrl] = useState<string | undefined>(toHttps(sonoUrl));
   const [sonoLoaded, setSonoLoaded] = useState(false);
-  const preloadImgRef = useRef<HTMLImageElement>(null);
 
   // Normalise: if tracks provided use them, otherwise wrap the single url/sonoUrl
   const allTracks: Track[] = (tracks && tracks.length > 0
@@ -30,29 +34,43 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
   ).map(t => ({ ...t, sonoUrl: toHttps(t.sonoUrl) }));
 
   const trackIndexRef = useRef(0);
+  // Held in a ref so JavaScriptCore can't GC the Image before it fires onload.
+  const preloadImgRef = useRef<HTMLImageElement | null>(null);
 
-  useEffect(() => { setSonoLoaded(false); }, [activeSonoUrl]);
-
-  // If the image was already in the browser cache when the preload img mounted,
-  // onLoad fires before React can attach the handler and sonoLoaded stays false.
-  // This layout effect catches that: it runs synchronously after every render and
-  // sets sonoLoaded=true whenever the img is already complete.
-  useLayoutEffect(() => {
-    if (!sonoLoaded && preloadImgRef.current?.complete && preloadImgRef.current.naturalWidth > 0) {
-      setSonoLoaded(true);
-    }
-  });
+  // Preload the spectrogram image off-DOM so iOS Safari's display:none restriction
+  // doesn't prevent naturalWidth from being reported.
+  useEffect(() => {
+    if (!activeSonoUrl) { setSonoLoaded(false); return; }
+    setSonoLoaded(false);
+    let cancelled = false;
+    const img = new Image();
+    preloadImgRef.current = img;
+    img.referrerPolicy = 'no-referrer';
+    img.onload = () => { if (!cancelled) setSonoLoaded(true); };
+    img.onerror = () => {
+      if (cancelled) return;
+      if (DEV_LOG_AUDIO_ERRORS) console.warn(`[AudioPlayer] spectrogram failed to load: ${activeSonoUrl}`);
+      setActiveSonoUrl(undefined);
+    };
+    img.src = activeSonoUrl;
+    return () => { cancelled = true; preloadImgRef.current = null; };
+  }, [activeSonoUrl]);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
     trackIndexRef.current = 0;
     audio.src = allTracks[0].audioUrl;
+    audio.load(); // resets iOS error state
     setActiveSonoUrl(allTracks[0].sonoUrl);
     setSonoLoaded(false);
     setAudioError(false);
-    audio.play().catch(() => { /* autoplay blocked — user can tap to start */ });
+    // Defer play by one tick so load() fully processes before play() is attempted.
+    // Calling play() synchronously after load() on iOS can silently fail and
+    // cascade into the next question's audio session.
+    const playTimer = setTimeout(() => { audio.play().catch(() => {}); }, 0);
     return () => {
+      clearTimeout(playTimer);
       audio.pause();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -90,7 +108,7 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
     audio.src = allTracks[0].audioUrl;
     audio.load();
     setActiveSonoUrl(allTracks[0].sonoUrl);
-    audio.play().catch(() => {});
+    setTimeout(() => { audio.play().catch(() => {}); }, 0);
   };
 
   const toggle = (e?: React.MouseEvent) => {
@@ -192,21 +210,6 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
   return (
     <div className="flex flex-col items-center gap-3">
       {audioEl}
-      {/* Preload spectrogram silently; switches layout to spectrogram once loaded */}
-      {activeSonoUrl && (
-        <img
-          ref={preloadImgRef}
-          src={activeSonoUrl}
-          alt=""
-          className="hidden"
-          referrerPolicy="no-referrer"
-          onLoad={() => setSonoLoaded(true)}
-          onError={() => {
-            if (DEV_LOG_AUDIO_ERRORS) console.warn(`[AudioPlayer] spectrogram failed to load: ${activeSonoUrl}`);
-            setActiveSonoUrl(undefined);
-          }}
-        />
-      )}
       <button
         onClick={toggle}
         className="w-20 h-20 rounded-full bg-forest-600 hover:bg-forest-700 text-white flex items-center justify-center text-3xl shadow-lg transition-colors"

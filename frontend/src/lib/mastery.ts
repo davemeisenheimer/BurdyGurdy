@@ -1,9 +1,7 @@
 import { isStrugglingByWindow } from './struggling';
+import { MASTERY_ADVANCE_STREAK, GRADUATION_STREAK } from '@birdygurdy/shared';
 
-/** Consecutive-correct streak needed to advance from level 0→1 and 1→2. */
-export const MASTERY_ADVANCE_STREAK = 3;
-/** Consecutive-correct streak needed to graduate from level 2 to mastered. */
-export const GRADUATION_STREAK = 5;
+export { MASTERY_ADVANCE_STREAK, GRADUATION_STREAK };
 
 /** Returns the streak threshold for a given mastery level. */
 export function masteryThreshold(level: number): number {

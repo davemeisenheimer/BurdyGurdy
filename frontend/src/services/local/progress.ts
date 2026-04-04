@@ -370,8 +370,8 @@ export async function getWeights(
 
 // ── Mastery expiry ────────────────────────────────────────────────────────────
 
-const EXPIRY_DAYS = 90;
-const EXPIRY_MS   = EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+import { EXPIRY_DAYS } from '@birdygurdy/shared';
+const EXPIRY_MS = EXPIRY_DAYS * 24 * 60 * 60 * 1000;
 
 function isExpired(r: { isMastered?: boolean; masteredAt?: number; lastAsked: number }): boolean {
   if (!(r.isMastered ?? false)) return false;

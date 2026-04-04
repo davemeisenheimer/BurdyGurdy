@@ -336,6 +336,7 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
           </div>
         )}
       </div>
+      <p className="text-center text-xs text-slate-400 pt-2 pb-4">v{__APP_VERSION__}</p>
       </div>
       {showMap && onRegionChange && (
         <MapRegionPicker
