@@ -11,6 +11,7 @@ import { RecentSightings }       from '../bird/RecentSightings';
 import { DescriptionText }       from '../bird/DescriptionText';
 import { RangeMap }              from '../bird/RangeMap';
 import { QuickLinks }            from '../bird/QuickLinks';
+import { BirdSearchInput }       from '../bird/BirdSearchInput';
 import type { SlideSpecies }     from '../bird/types';
 
 interface Props {
@@ -123,6 +124,7 @@ export function BirdInfoPanel({
         userEmail={userEmail}
         onAuthClick={onAuthClick}
         onSignOut={onSignOut}
+        onSelectBird={s => setBrowseResolved(s)}
       />
     );
   }
@@ -156,8 +158,8 @@ export function BirdInfoPanel({
       <AnswerBanner
         label={bannerLabel}
         variant={bannerVariant}
-        backLabel={viewingSpecies ? `← Back to ${primaryName}` : undefined}
-        onBack={viewingSpecies ? () => setViewingSpecies(null) : undefined}
+        backLabel={viewingSpecies ? `← Back to ${primaryName}` : (!browseSpecies && browseResolved) ? '← Search results' : undefined}
+        onBack={viewingSpecies ? () => setViewingSpecies(null) : (!browseSpecies && browseResolved) ? () => setBrowseResolved(null) : undefined}
       />
 
       {/* ── Triptych ── */}
@@ -236,7 +238,10 @@ export function BirdInfoPanel({
 
             {/* Quick links */}
             <div className="shrink-0 px-5 py-3 border-t border-stone-100">
-              <QuickLinks sp={sp} wikiUrl={info?.wikipedia?.url} />
+              <div className="flex flex-wrap gap-2 items-start">
+                <QuickLinks sp={sp} wikiUrl={info?.wikipedia?.url} />
+                <BirdSearchInput onSelect={setViewingSpecies} className="flex-1 min-w-[160px]" />
+              </div>
             </div>
           </>
         )}

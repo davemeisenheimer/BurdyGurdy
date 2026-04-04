@@ -224,6 +224,33 @@ router.get('/audio/:sciName', async (req, res) => {
   }
 });
 
+// GET /api/birds/suggest?q=robin
+// Filters the cached eBird taxonomy (24h TTL) by common or scientific name.
+// Returns up to 10 matches, prioritising starts-with over contains.
+router.get('/suggest', async (req, res) => {
+  const q = String(req.query.q ?? '').trim().toLowerCase();
+  if (q.length < 3) return res.json([]);
+  try {
+    const taxonomy = await getTaxonomy();
+    const matches = taxonomy.filter(s =>
+      s.comName.toLowerCase().includes(q) || s.sciName.toLowerCase().includes(q),
+    );
+    matches.sort((a, b) => {
+      const aName = a.comName.toLowerCase();
+      const bName = b.comName.toLowerCase();
+      const aStarts = aName.startsWith(q) ? 0 : 1;
+      const bStarts = bName.startsWith(q) ? 0 : 1;
+      return aStarts - bStarts || aName.localeCompare(bName);
+    });
+    res.json(matches.slice(0, 10).map(s => ({
+      speciesCode: s.speciesCode, comName: s.comName, sciName: s.sciName,
+    })));
+  } catch (err) {
+    console.error('suggest error:', err);
+    res.status(500).json({ error: 'Suggest failed' });
+  }
+});
+
 // GET /api/birds/regions/search?q=Ottawa
 router.get('/regions/search', async (req, res) => {
   try {

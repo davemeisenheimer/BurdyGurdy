@@ -146,6 +146,21 @@ export async function fetchBirdAudio(sciName: string): Promise<CarouselRecording
   }
 }
 
+export interface BirdSuggestion {
+  speciesCode: string;
+  comName: string;
+  sciName: string;
+}
+
+export async function fetchBirdSuggestions(q: string): Promise<BirdSuggestion[]> {
+  try {
+    const res = await api.get<BirdSuggestion[]>('/birds/suggest', { params: { q } });
+    return res.data;
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchBirdPhotos(speciesCode: string, comName?: string, sciName?: string, forQuestion = false): Promise<{ primary: AttributedPhoto | null; optional: AttributedPhoto[] }> {
   const params: Record<string, string> = {};
   if (comName) params.comName = comName;

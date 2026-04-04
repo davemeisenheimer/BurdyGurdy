@@ -1,13 +1,16 @@
-import { AccountPill } from '../ui/AccountPill';
+import { AccountPill }     from '../ui/AccountPill';
+import { BirdSearchInput } from './BirdSearchInput';
+import type { SlideSpecies } from './types';
 
 interface Props {
   hasActiveQuestion: boolean;
-  userEmail?:  string | null;
-  onAuthClick?: () => void;
-  onSignOut?:   () => void;
+  userEmail?:        string | null;
+  onAuthClick?:      () => void;
+  onSignOut?:        () => void;
+  onSelectBird?:     (species: SlideSpecies) => void;
 }
 
-export function WelcomePanel({ hasActiveQuestion, userEmail, onAuthClick, onSignOut }: Props) {
+export function WelcomePanel({ hasActiveQuestion, userEmail, onAuthClick, onSignOut, onSelectBird }: Props) {
   if (hasActiveQuestion) {
     return (
       <div className="flex flex-col h-full items-center justify-center bg-slate-50 text-center px-8">
@@ -68,6 +71,13 @@ export function WelcomePanel({ hasActiveQuestion, userEmail, onAuthClick, onSign
             <img src="/BurdySinging.png" alt="" className="h-16 w-auto mb-3" />
             <p className="text-slate-500 text-sm">Start a quiz on the left to begin identifying birds.</p>
           </div>
+
+          {onSelectBird && (
+            <div className="mt-6 pt-6 border-t border-slate-200">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Browse any bird</h2>
+              <BirdSearchInput onSelect={onSelectBird} />
+            </div>
+          )}
 
         </div>
       </div>

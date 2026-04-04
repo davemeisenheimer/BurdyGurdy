@@ -8,6 +8,7 @@ import { RecentSightings }        from '../bird/RecentSightings';
 import { DescriptionText }        from '../bird/DescriptionText';
 import { RangeMap }               from '../bird/RangeMap';
 import { QuickLinks }             from '../bird/QuickLinks';
+import { BirdSearchInput }        from '../bird/BirdSearchInput';
 import type { SlideSpecies }      from '../bird/types';
 
 interface Props {
@@ -150,7 +151,10 @@ export function BirdInfoScreen({
             )}
 
             <div className="pt-1">
-              <QuickLinks sp={displaySpecies!} wikiUrl={info?.wikipedia?.url} />
+              <div className="flex flex-wrap gap-2 items-start">
+                <QuickLinks sp={displaySpecies!} wikiUrl={info?.wikipedia?.url} />
+                <BirdSearchInput onSelect={setViewingSpecies} className="flex-1 min-w-[160px]" />
+              </div>
             </div>
 
           </div>
