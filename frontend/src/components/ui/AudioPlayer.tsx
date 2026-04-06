@@ -26,6 +26,7 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
   const [audioError, setAudioError] = useState(false);
   const [activeSonoUrl, setActiveSonoUrl] = useState<string | undefined>(toHttps(sonoUrl));
   const [sonoLoaded, setSonoLoaded] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
 
   // Normalise: if tracks provided use them, otherwise wrap the single url/sonoUrl
   const allTracks: Track[] = (tracks && tracks.length > 0
@@ -45,7 +46,6 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
     let cancelled = false;
     const img = new Image();
     preloadImgRef.current = img;
-    img.referrerPolicy = 'no-referrer';
     img.onload = () => { if (!cancelled) setSonoLoaded(true); };
     img.onerror = () => {
       if (cancelled) return;
@@ -76,6 +76,20 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url]);
 
+  // When retryKey increments the <audio> element is remounted (new DOM node, cleared iOS
+  // session state).  Wire it up here, after the ref is refreshed by React.
+  useEffect(() => {
+    if (retryKey === 0) return; // skip initial mount — the url effect handles that
+    const audio = audioRef.current;
+    if (!audio) return;
+    trackIndexRef.current = 0;
+    audio.src = allTracks[0].audioUrl;
+    audio.load();
+    const playTimer = setTimeout(() => { audio.play().catch(() => {}); }, 0);
+    return () => { clearTimeout(playTimer); audio.pause(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retryKey]);
+
   const handleError = () => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -100,15 +114,13 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
   };
 
   const handleRetry = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    trackIndexRef.current = 0;
+    // Increment retryKey to unmount/remount the <audio> element, clearing any stuck
+    // iOS audio session state.  The retryKey useEffect re-wires src + play after mount.
     setAudioError(false);
+    setPlaying(false);
     setSonoLoaded(false);
-    audio.src = allTracks[0].audioUrl;
-    audio.load();
     setActiveSonoUrl(allTracks[0].sonoUrl);
-    setTimeout(() => { audio.play().catch(() => {}); }, 0);
+    setRetryKey(k => k + 1);
   };
 
   const toggle = (e?: React.MouseEvent) => {
@@ -118,13 +130,15 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
     if (playing) {
       audio.pause();
     } else {
-      audio.play().catch(() => setAudioError(true));
+      audio.play().catch(() => { setAudioError(true); onAudioUnavailable?.(); });
     }
   };
 
-  // Always render the audio element so the ref stays valid
+  // Always render the audio element so the ref stays valid.
+  // key={retryKey} forces a genuine DOM remount on retry, clearing stuck iOS session state.
   const audioEl = (
     <audio
+      key={retryKey}
       ref={audioRef}
       loop
       onPlay={() => setPlaying(true)}
@@ -146,7 +160,6 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
           alt="Song spectrogram"
           className="w-full block"
           draggable={false}
-          referrerPolicy="no-referrer"
           onError={() => {
             if (DEV_LOG_AUDIO_ERRORS) console.warn(`[AudioPlayer] spectrogram failed to load: ${activeSonoUrl}`);
             setActiveSonoUrl(undefined);
@@ -162,12 +175,14 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
           {audioError ? (
             <div className="flex flex-col items-center gap-2" onClick={e => e.stopPropagation()}>
               <p className="text-white/80 text-sm">Unable to fetch audio</p>
-              <button
-                onClick={handleRetry}
-                className="text-white/90 text-sm bg-black/60 hover:bg-black/80 active:bg-black/90 px-4 py-2 rounded-full transition-colors"
-              >
-                ↺ Retry audio
-              </button>
+              {retryKey === 0 && (
+                <button
+                  onClick={handleRetry}
+                  className="text-white/90 text-sm bg-black/60 hover:bg-black/80 active:bg-black/90 px-4 py-2 rounded-full transition-colors"
+                >
+                  ↺ Retry audio
+                </button>
+              )}
             </div>
           ) : (
             <div className="w-14 h-14 rounded-full bg-white/90 flex items-center justify-center text-2xl shadow-lg">
@@ -176,7 +191,7 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
           )}
         </div>
 
-        {/* Pause pill while playing */}
+        {/* Pause pill while playing audio */}
         {playing && (
           <button
             onClick={toggle}
@@ -194,14 +209,16 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
   if (audioError) {
     return (
       <>
-        <div className="w-full h-20 rounded-xl bg-slate-100 flex flex-col items-center justify-center text-slate-500">
-        Unable to fetch audio<br/>
-        <button
-          onClick={handleRetry}
-          className="px-4 py-2 rounded-full border border-slate-300 text-slate-500 hover:bg-slate-50 active:bg-slate-100 text-sm transition-colors"
-        >
-          ↺ Retry audio
-        </button>
+        <div className="w-full h-20 rounded-xl bg-slate-100 flex flex-col items-center justify-center gap-1 text-slate-500">
+          <span>Unable to fetch audio</span>
+          {retryKey === 0 && (
+            <button
+              onClick={handleRetry}
+              className="px-4 py-2 rounded-full border border-slate-300 text-slate-500 hover:bg-slate-50 active:bg-slate-100 text-sm transition-colors"
+            >
+              ↺ Retry audio
+            </button>
+          )}
         </div>
       </>
     );

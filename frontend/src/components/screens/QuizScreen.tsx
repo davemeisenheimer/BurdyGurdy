@@ -312,17 +312,6 @@ export function QuizScreen({
                 {stimType === 'song' && question.audioUrl && (
                   <AudioPlayer url={question.audioUrl} tracks={question.audioTracks} sonoUrl={question.sonoUrl} onAudioUnavailable={() => setAudioUnavailable(true)} />
                 )}
-                {audioUnavailable && !answered && onSkip && (
-                  <div className="flex flex-col items-center gap-2">
-                    <p className="text-sm text-slate-500">Audio is unavailable for this question.</p>
-                    <button
-                      onClick={onSkip}
-                      className="px-4 py-2 rounded-xl border border-slate-300 text-slate-500 hover:bg-slate-50 text-sm font-medium transition-colors"
-                    >
-                      Skip question
-                    </button>
-                  </div>
-                )}
                 {stimType === 'latin' && (
                   <span className="text-2xl italic text-slate-700 text-center px-2">
                     {question.sciName}
@@ -579,6 +568,13 @@ export function QuizScreen({
           className="shrink-0 w-full py-3 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-semibold text-lg cursor-pointer"
         >
           {answered ? (currentIndex + 1 >= totalQuestions ? 'See Results' : 'Next Question') : 'Got it →'}
+        </button>
+      ) : audioUnavailable && !answered && onSkip ? (
+        <button
+          onClick={onSkip}
+          className="shrink-0 w-full py-3 rounded-xl border border-slate-300 text-slate-500 hover:bg-slate-50 active:bg-slate-100 font-semibold text-lg transition-colors"
+        >
+          Skip question
         </button>
       ) : (
         /* Always occupies space; invisible until answered to prevent layout shift */

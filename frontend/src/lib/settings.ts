@@ -65,3 +65,11 @@ export function loadQuizPrefs(): QuizConfigPrefs {
 export function saveQuizPrefs(prefs: QuizConfigPrefs): void {
   localStorage.setItem(CONFIG_KEY, JSON.stringify(prefs));
 }
+
+/** Wipes user-specific settings back to factory defaults and returns them.
+ *  Call when a brand-new user signs in so they don't inherit a previous user's prefs. */
+export function resetUserSettings(): AppSettings {
+  const fresh = { ...DEFAULTS };
+  saveSettings(fresh);
+  return fresh;
+}

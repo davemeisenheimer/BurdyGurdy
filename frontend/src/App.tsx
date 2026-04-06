@@ -19,7 +19,7 @@ import { Toast } from './components/ui/Toast';
 import { InactivitySignOutModal } from './components/ui/InactivitySignOutModal';
 import { useQuiz } from './hooks/useQuiz';
 import { useNotifications } from './hooks/useNotifications';
-import { loadSettings, saveSettings, loadQuizPrefs, saveQuizPrefs } from './lib/settings';
+import { loadSettings, saveSettings, loadQuizPrefs, saveQuizPrefs, resetUserSettings } from './lib/settings';
 import type { AppSettings } from './lib/settings';
 import { checkVictoryCondition, hasSeenVictory, markVictorySeen, getVictorySeen, mergeVictorySeen, describeMastery, describeWindow } from './lib/victory';
 import { locateRegion } from './services/remote/api';
@@ -247,25 +247,34 @@ export default function App() {
             if (localCount > 0) setShowUploadPrompt(true);
           }
         }).catch(() => {});
+        // Capture now — prevAuthUserIdRef will be updated before the promise resolves.
+        const isNewSignIn = event === 'SIGNED_IN' && prevAuthUserIdRef.current === null;
         downloadSettings(userId).then(remote => {
-          if (!remote) return;
-          // User has cloud settings — they've been through onboarding on another device
-          localStorage.setItem('burdygurdy_onboarding_complete', '1');
-          setShowOnboarding(false);
-          const mergedSettings = { ...loadSettings(), ...remote.appSettings };
-          setSettings(mergedSettings);
-          saveSettings(mergedSettings);
-          const mergedPrefs = { ...loadQuizPrefs(), ...remote.quizPrefs };
-          saveQuizPrefs(mergedPrefs);
-          setConfig(c => ({
-            ...c,
-            ...(mergedPrefs.questionTypes     ? { questionTypes: mergedPrefs.questionTypes as QuizConfig['questionTypes'] } : {}),
-            ...(mergedPrefs.mode              ? { mode: mergedPrefs.mode as QuizConfig['mode'] }                           : {}),
-            ...(mergedPrefs.questionsPerRound != null ? { questionsPerRound: mergedPrefs.questionsPerRound }                : {}),
-            ...(mergedPrefs.regionCode        ? { regionCode: mergedPrefs.regionCode }                                     : {}),
-            ...(mergedPrefs.groupId           ? { groupId: mergedPrefs.groupId }                                           : {}),
-          }));
-          mergeVictorySeen(remote.victorySeen);
+          if (remote) {
+            // Returning user with cloud settings — import prefs and skip the wizard.
+            localStorage.setItem('burdygurdy_onboarding_complete', '1');
+            setShowOnboarding(false);
+            const mergedSettings = { ...loadSettings(), ...remote.appSettings };
+            setSettings(mergedSettings);
+            saveSettings(mergedSettings);
+            const mergedPrefs = { ...loadQuizPrefs(), ...remote.quizPrefs };
+            saveQuizPrefs(mergedPrefs);
+            setConfig(c => ({
+              ...c,
+              ...(mergedPrefs.questionTypes     ? { questionTypes: mergedPrefs.questionTypes as QuizConfig['questionTypes'] } : {}),
+              ...(mergedPrefs.mode              ? { mode: mergedPrefs.mode as QuizConfig['mode'] }                           : {}),
+              ...(mergedPrefs.questionsPerRound != null ? { questionsPerRound: mergedPrefs.questionsPerRound }                : {}),
+              ...(mergedPrefs.regionCode        ? { regionCode: mergedPrefs.regionCode }                                     : {}),
+              ...(mergedPrefs.groupId           ? { groupId: mergedPrefs.groupId }                                           : {}),
+            }));
+            mergeVictorySeen(remote.victorySeen);
+          } else if (isNewSignIn) {
+            // Brand-new user, no cloud settings anywhere — reset stale local prefs
+            // (which may belong to a previous user on this device) and run the wizard.
+            const freshSettings = resetUserSettings();
+            setSettings(freshSettings);
+            setShowOnboarding(true);
+          }
         }).catch(() => {});
         downloadUserBlockedPhotos(userId).catch(() => {});
         fetchAdminBlockedMedia().catch(() => {});
