@@ -6,11 +6,65 @@
 import { supabase } from './supabase';
 import { db } from './db';
 
+// ── Bird facts ────────────────────────────────────────────────────────────────
+
+export interface BirdFact {
+  id:           string;
+  factText:     string;
+  sourceUrl:    string | null;
+  speciesCodes: string[];
+  familyNames:  string[];
+  isActive:     boolean;
+  createdAt:    string;
+}
+
+function mapFact(r: Record<string, unknown>): BirdFact {
+  return {
+    id:           r.id           as string,
+    factText:     r.fact_text    as string,
+    sourceUrl:    r.source_url   as string | null,
+    speciesCodes: (r.species_codes as string[] | null) ?? [],
+    familyNames:  (r.family_names  as string[] | null) ?? [],
+    isActive:     r.is_active    as boolean,
+    createdAt:    r.created_at   as string,
+  };
+}
+
+export async function fetchBirdFacts(): Promise<BirdFact[]> {
+  const { data, error } = await supabase
+    .from('bird_facts')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error || !data) return [];
+  return (data as Record<string, unknown>[]).map(mapFact);
+}
+
+export async function saveBirdFact(fact: Omit<BirdFact, 'createdAt'>): Promise<void> {
+  const row = {
+    fact_text:    fact.factText,
+    source_url:   fact.sourceUrl   || null,
+    species_codes: fact.speciesCodes.length ? fact.speciesCodes : null,
+    family_names:  fact.familyNames.length  ? fact.familyNames  : null,
+    is_active:    fact.isActive,
+  };
+  const { error } = fact.id
+    ? await supabase.from('bird_facts').update(row).eq('id', fact.id)
+    : await supabase.from('bird_facts').insert(row);
+  if (error) throw error;
+}
+
+export async function deleteBirdFact(id: string): Promise<void> {
+  const { error } = await supabase.from('bird_facts').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ── Media reports ─────────────────────────────────────────────────────────────
+
 export interface MediaReportSubmission {
   id:            string;
   reporterId:    string;
   reporterEmail: string | null;
-  issueType:     'wrong_bird' | 'poor_quality' | 'confusing' | 'other';
+  issueType:     'wrong_bird' | 'poor_quality' | 'confusing' | 'nest' | 'egg' | 'other';
   wrongBird:     string | null;
   description:   string | null;
   createdAt:     string;

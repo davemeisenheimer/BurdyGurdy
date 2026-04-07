@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { PhotoCurationPanel } from './PhotoCurationPanel';
 import { AudioCurationPanel } from './AudioCurationPanel';
+import { FactsCurationPanel } from './FactsCurationPanel';
 import {
   fetchPendingReports, fetchBlockedReports,
   blockReport, invalidateReport, deleteReport, unblockReport,
@@ -415,7 +416,7 @@ function BlockedMediaTab({ refreshKey }: { refreshKey: number }) {
 
 // ── CurationPanel (tabbed) ────────────────────────────────────────────────────
 
-type Tab = 'photos' | 'audio' | 'reports' | 'blocked';
+type Tab = 'photos' | 'audio' | 'reports' | 'blocked' | 'facts';
 
 function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
@@ -448,6 +449,7 @@ export function CurationPanel() {
         <TabBtn active={tab === 'audio'}   onClick={() => setTab('audio')}>Audio</TabBtn>
         <TabBtn active={tab === 'reports'} onClick={() => setTab('reports')}>Reports</TabBtn>
         <TabBtn active={tab === 'blocked'} onClick={() => setTab('blocked')}>Blocked</TabBtn>
+        <TabBtn active={tab === 'facts'}   onClick={() => setTab('facts')}>Facts</TabBtn>
       </div>
 
       <div className="flex-1 min-h-0 overflow-hidden">
@@ -455,6 +457,7 @@ export function CurationPanel() {
         {tab === 'audio'   && <AudioCurationPanel />}
         {tab === 'reports' && <ReportsTab onBlocked={handleBlocked} />}
         {tab === 'blocked' && <BlockedMediaTab refreshKey={blockedRefresh} />}
+        {tab === 'facts'   && <FactsCurationPanel />}
       </div>
     </div>
   );

@@ -36,6 +36,8 @@ import { RegionUpdateDialog } from './components/ui/RegionUpdateDialog';
 import { computeStrugglingCount } from './lib/struggling';
 import { expandQuestionTypes } from './lib/questionTypes';
 import type { ReportErrorData } from './components/ui/ReportErrorModal';
+import { MasteryFactDialog } from './components/ui/MasteryFactDialog';
+import type { LevelUpEvent } from './types';
 import { markNotificationsRead } from './lib/notifications';
 import { fetchFriendProgress, getReceivedPendingInvites } from './lib/friends';
 
@@ -112,6 +114,9 @@ export default function App() {
   const [friendProgressRecords, setFriendProgressRecords] = useState<BirdProgress[]>([]);
   const [friendProgressName, setFriendProgressName]       = useState('');
   const [hasPendingInvites, setHasPendingInvites]         = useState(false);
+  const [masteryFactEvent, setMasteryFactEvent] = useState<LevelUpEvent | null>(null);
+  const hasShownFactThisRoundRef = useRef(false);
+  const prevGraduatedCountRef    = useRef(0);
 
   const {
     notifications,
@@ -130,6 +135,24 @@ export default function App() {
 
   const isAdmin = user?.user_metadata?.is_admin === true;
   const { state, currentQuestion, isCorrect, currentFavourited, currentExcluded, revealPhotos, revealRangeMapUrl, revealSightings, questionPhoto, questionPhotoFetching, roundLevelUps, roundNoLongerStruggling, isFirstEncounter, currentMastery, startQuiz, submitAnswer, toggleFavourite, toggleExcluded, nextQuestion, removeOptionalPhoto } = useQuiz(config, settings.randomizeQuestionPhotos, user?.id, settings.birderLevel);
+
+  // Reset mastery-fact tracking at the start of each new round
+  useEffect(() => {
+    if (state.status === 'loading') {
+      hasShownFactThisRoundRef.current = false;
+      prevGraduatedCountRef.current    = 0;
+    }
+  }, [state.status]);
+
+  // Show mastery fact dialog the first time a bird graduates in a round
+  useEffect(() => {
+    const graduated = roundLevelUps.filter(e => e.graduated);
+    if (graduated.length > prevGraduatedCountRef.current && !hasShownFactThisRoundRef.current) {
+      setMasteryFactEvent(graduated[graduated.length - 1]);
+      hasShownFactThisRoundRef.current = true;
+    }
+    prevGraduatedCountRef.current = graduated.length;
+  }, [roundLevelUps]);
 
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 1024px)');
@@ -873,6 +896,14 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Mastery fact dialog — shown mid-quiz the first time a bird graduates in a round */}
+      {masteryFactEvent && (
+        <MasteryFactDialog
+          event={masteryFactEvent}
+          onClose={() => setMasteryFactEvent(null)}
+        />
       )}
 
       {/* Region sightings window update dialog */}
