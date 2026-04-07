@@ -293,7 +293,7 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
           : 'bg-red-100 text-red-700'
         }`}
       >
-        {TYPE_LABELS[r.questionType]}: {pct !== null ? `${pct}%` : '—'}
+        {TYPE_LABELS[r.questionType]}: {pct !== null ? `${pct}%` : '-'}
         {struggling && (
           <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 text-white text-[9px] leading-none rounded-full flex items-center justify-center font-bold pointer-events-none select-none">
             !
@@ -435,7 +435,7 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
           </div>
         </div>
         
-        {/* Tab strip — combines stats summary and filter selection */}
+        {/* Tab strip - combines stats summary and filter selection */}
         {birds.length > 0 && (
           <div className="flex border-b border-slate-200 mb-4">
             {filterTabs.map(tab => (
@@ -465,7 +465,7 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
         {!loading && birds.length === 0 && (
           <div className="text-center py-16">
             <div className="text-5xl mb-4">🐦</div>
-            <p className="text-slate-500">No progress yet — play a round to get started!</p>
+            <p className="text-slate-500">No progress yet - play a round to get started!</p>
           </div>
         )}
 
@@ -473,7 +473,7 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
           <p className="text-slate-400 text-center py-8">No birds match this filter.</p>
         )}
 
-        {/* Focus mode toggle — shown at top of struggling tab */}
+        {/* Focus mode toggle - shown at top of struggling tab */}
         {filter === 'struggling' && showFocusModeToggle && onToggleFocusStruggling && (
           <div className="bg-white rounded-xl border border-slate-200 p-4 mb-3">
             <FocusModeToggle enabled={focusStruggling ?? false} onToggle={onToggleFocusStruggling} strugglingCount={strugglingCount} />

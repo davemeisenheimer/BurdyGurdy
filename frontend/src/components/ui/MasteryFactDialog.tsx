@@ -66,7 +66,7 @@ export function MasteryFactDialog({ event, onClose }: Props) {
             </>
           ) : (
             <p className="text-sm text-slate-500 text-center py-4">
-              Well done — keep it up!
+              Well done - keep it up!
             </p>
           )}
         </div>

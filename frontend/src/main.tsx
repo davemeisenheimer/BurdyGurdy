@@ -4,7 +4,7 @@ import App from './App';
 import './index.css';
 import { db } from './lib/db';
 
-// Developer utility — run in browser console: __bg_clearAll()
+// Developer utility - run in browser console: __bg_clearAll()
 (window as unknown as Record<string, unknown>).__bg_clearAll = async () => {
   await Promise.all([
     db.progress.clear(),

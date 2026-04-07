@@ -9,7 +9,7 @@ interface Props {
 /**
  * A mastery-level pill badge with an optional red "!" indicator for struggling birds.
  * The indicator overlaps the top-right border of the pill.
- * Wrap in a flex/inline-flex parent — the outer element is `inline-flex relative`.
+ * Wrap in a flex/inline-flex parent - the outer element is `inline-flex relative`.
  */
 export function MasteryBadge({ className, isStruggling = false, children }: Props) {
   return (

@@ -71,7 +71,7 @@ describe('masteryLabel', () => {
 });
 
 // ── isStruggling ──────────────────────────────────────────────────────────────
-// Delegates to isStrugglingByWindow — only mastered birds have a recentAnswers window.
+// Delegates to isStrugglingByWindow - only mastered birds have a recentAnswers window.
 
 describe('isStruggling', () => {
   it('is false when the window is not yet full', () => {

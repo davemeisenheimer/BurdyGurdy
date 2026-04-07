@@ -133,7 +133,7 @@ export function QuizScreen({
     ...(question.sonoUrl && showMediaInCarousel ? [{ url: question.sonoUrl, credit: '', isOptional: false, isSono: true, isRangeMap: false }] : []),
   ].filter(p => !failedPhotoUrls.has(p.url));
 
-  // The question photo — pre-selected in useQuiz (with pre-fetch) to avoid mid-render switches.
+  // The question photo - pre-selected in useQuiz (with pre-fetch) to avoid mid-render switches.
   // While the fetch is in-flight (questionPhotoFetching), show nothing rather than falling back
   // to the base photo, which would cause a visible swap when the selected photo arrives.
   const basePhoto: AttributedPhoto | null = question.imageUrl ? { url: question.imageUrl, credit: question.imageCredit ?? '' } : null;
@@ -221,7 +221,7 @@ export function QuizScreen({
         />
       )}
 
-      {/* Progress bar — fixed, never moves */}
+      {/* Progress bar - fixed, never moves */}
       <div className="shrink-0 flex items-center gap-3">
         <ProgressBar current={currentIndex + 1} total={totalQuestions} />
         <span className="text-sm font-semibold text-slate-500 whitespace-nowrap">
@@ -229,13 +229,13 @@ export function QuizScreen({
         </span>
       </div>
 
-      {/* Question / Reveal zone — fills all remaining space, content swaps on answer */}
+      {/* Question / Reveal zone - fills all remaining space, content swaps on answer */}
       <div className="flex-1 min-h-0 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
 
         {!answered ? (
           /* ── QUESTION STATE ── */
           question.noAudio ? (
-            /* No recordings available — inform the user and award a free correct answer */
+            /* No recordings available - inform the user and award a free correct answer */
             <div className="h-full flex flex-col items-center justify-center px-6 gap-5 text-center">
               <div className="text-5xl">🔇</div>
               <div>
@@ -334,7 +334,7 @@ export function QuizScreen({
           /* ── REVEAL STATE ── */
           <div className="h-full flex flex-col">
 
-            {/* Audio — mounts on reveal, autoPlays the bird song */}
+            {/* Audio - mounts on reveal, autoPlays the bird song */}
             {showMediaInCarousel && question.audioUrl && (
               <audio
                 ref={revealAudioRef}
@@ -349,7 +349,7 @@ export function QuizScreen({
             {/* Status strip */}
             {question.noAudio ? (
               <div className="shrink-0 px-5 py-3 border-b border-sky-100 flex items-center justify-between gap-3 bg-sky-50">
-                <p className="font-semibold text-sky-700">No audio available — automatically mastered</p>
+                <p className="font-semibold text-sky-700">No audio available - automatically mastered</p>
                 {currentMastery && (
                   <MasteryBadge
                     className={`text-xs px-2 py-1 rounded-full font-medium ${masteryBadgeClass(currentMastery.masteryLevel, currentMastery.isMastered)}`}
@@ -391,7 +391,7 @@ export function QuizScreen({
                   }}
                   onClick={() => { if (showMediaInCarousel) setLightboxOpen(true); }}
                 />
-                {/* Slide type label — top-right for sono and range map (never dismissable, so no conflict with ✕) */}
+                {/* Slide type label - top-right for sono and range map (never dismissable, so no conflict with ✕) */}
                 {currentRevealPhoto.isSono && (
                   <span className="absolute top-2 right-2 bg-black/60 text-white text-xs font-semibold px-2 py-0.5 rounded-full">
                     Spectrogram
@@ -446,9 +446,9 @@ export function QuizScreen({
               </div>
             )}
 
-            {/* Bird details — fixed height below photo */}
+            {/* Bird details - fixed height below photo */}
             <div className="shrink-0 px-4 pt-2.5 pb-2 border-t border-slate-100">
-              {/* Name row — eBird link shown inline on mobile only */}
+              {/* Name row - eBird link shown inline on mobile only */}
               <div className="flex items-baseline justify-between gap-2">
                 <p className="font-semibold text-slate-800 leading-tight">{question.comName}</p>
                 {showMediaInCarousel && (
@@ -539,7 +539,7 @@ export function QuizScreen({
         )}
       </div>
 
-      {/* Answer options — hidden for noAudio questions */}
+      {/* Answer options - hidden for noAudio questions */}
       {!question.noAudio && (
         <div className="shrink-0 space-y-2">
           {question.options.map((opt, idx) => {
@@ -602,7 +602,7 @@ export function QuizScreen({
         />
       )}
 
-      {/* Lightbox — fullscreen photo viewer (mobile only) */}
+      {/* Lightbox - fullscreen photo viewer (mobile only) */}
       {lightboxOpen && currentRevealPhoto && (
         <div
           className="fixed inset-0 z-50 bg-black flex items-center justify-center"

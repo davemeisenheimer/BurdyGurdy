@@ -46,11 +46,11 @@ router.post('/send-invite-email', async (req, res) => {
       from: `BurdyGurdy <${fromEmail}>`,
       to: toEmail,
       subject: `${fromDisplayName} invited you to be friends on BurdyGurdy`,
-      text: `${fromDisplayName} has invited you to be friends on BurdyGurdy — the bird identification quiz app.\n\nAccept the invite here:\n${inviteUrl}\n\nThis invite expires in 7 days. If you don't have a BurdyGurdy account yet, you'll be able to create one when you click the link above.\n\nIf you didn't expect this email, you can safely ignore it.`,
+      text: `${fromDisplayName} has invited you to be friends on BurdyGurdy - the bird identification quiz app.\n\nAccept the invite here:\n${inviteUrl}\n\nThis invite expires in 7 days. If you don't have a BurdyGurdy account yet, you'll be able to create one when you click the link above.\n\nIf you didn't expect this email, you can safely ignore it.`,
       html: `
         <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
           <h2 style="color: #2d6a4f;">You've been invited to BurdyGurdy!</h2>
-          <p><strong>${fromDisplayName}</strong> wants to be friends with you on BurdyGurdy — the bird identification quiz app.</p>
+          <p><strong>${fromDisplayName}</strong> wants to be friends with you on BurdyGurdy - the bird identification quiz app.</p>
           <p style="margin: 24px 0;">
             <a href="${inviteUrl}"
                style="background: #2d6a4f; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">

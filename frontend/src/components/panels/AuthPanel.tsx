@@ -53,7 +53,7 @@ export function AuthPanel({ onClose, onSignIn, onSignUp }: Props) {
       options: { redirectTo: window.location.origin },
     });
     if (error) { setError(error.message); setLoading(false); }
-    // On success the page redirects — no further action needed here
+    // On success the page redirects - no further action needed here
   };
 
   return (

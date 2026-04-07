@@ -259,7 +259,7 @@ export function FriendsScreen({ userId, userEmail, onBack, onViewFriendLifeList 
                 Friends {friends.length > 0 && `(${friends.length})`}
               </p>
               {friends.length === 0 ? (
-                <p className="text-sm text-slate-400">No friends yet — send an invite above!</p>
+                <p className="text-sm text-slate-400">No friends yet - send an invite above!</p>
               ) : (
                 <ul className="space-y-2">
                   {friends.map(f => (

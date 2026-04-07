@@ -1,5 +1,5 @@
 /**
- * Development flags — flip these to enable extra UI detail useful for testing.
+ * Development flags - flip these to enable extra UI detail useful for testing.
  * Should never be committed as `true` in production.
  */
 

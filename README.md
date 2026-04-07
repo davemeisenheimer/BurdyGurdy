@@ -8,10 +8,10 @@ A bird identification quiz app that teaches you to recognise birds by their song
 
 Each question presents one of four challenge types:
 
-- **Song / Call** — Listen to a recording and identify the bird
-- **Photo** — Look at a photo and identify the bird
-- **Latin Name** — Match a scientific name to the common name
-- **Bird Family** — Identify which bird family a species belongs to
+- **Song / Call** - Listen to a recording and identify the bird
+- **Photo** - Look at a photo and identify the bird
+- **Latin Name** - Match a scientific name to the common name
+- **Bird Family** - Identify which bird family a species belongs to
 
 You choose which question types to include before starting a round.
 
@@ -39,11 +39,11 @@ When you first play in adaptive mode, the app picks a small set of common backya
 
 ### Distractor difficulty
 
-Wrong-answer options (distractors) start easy — birds from completely different families that look and sound nothing alike. As you consistently get a bird right, the distractors get harder:
+Wrong-answer options (distractors) start easy - birds from completely different families that look and sound nothing alike. As you consistently get a bird right, the distractors get harder:
 
-1. **Easy** — birds from different families entirely
-2. **Medium** — birds from the same family, different genus
-3. **Hard** — birds from the same genus (easily confused species)
+1. **Easy** - birds from different families entirely
+2. **Medium** - birds from the same family, different genus
+3. **Hard** - birds from the same genus (easily confused species)
 
 You need three consecutive correct answers at a given level to advance to the next.
 
@@ -53,11 +53,11 @@ As you get comfortable with your current set of birds, new species are gradually
 
 ### Occasional wild cards
 
-A very small fraction of questions (about 1 in 100) may feature a bird you've never been quizzed on before — just to keep things interesting. Getting this question right or wrong has no effect on whether that bird is formally introduced.
+A very small fraction of questions (about 1 in 100) may feature a bird you've never been quizzed on before - just to keep things interesting. Getting this question right or wrong has no effect on whether that bird is formally introduced.
 
 ### Well-known birds
 
-Birds you've thoroughly mastered still appear occasionally so you don't forget them. The better your track record with a species, the less frequently it appears — it makes way for birds you still need to learn. A species you can identify correctly almost every time will appear rarely; one you got right 95% of the time or less stays at normal frequency.
+Birds you've thoroughly mastered still appear occasionally so you don't forget them. The better your track record with a species, the less frequently it appears - it makes way for birds you still need to learn. A species you can identify correctly almost every time will appear rarely; one you got right 95% of the time or less stays at normal frequency.
 
 ### Question probabilities
 It's a bit more complicated than this with edge cases and such, but these are the basic probabilities for picking question for a round:2
@@ -93,7 +93,7 @@ BurdyGurdy works best when installed to your home screen. This removes the brows
 
 ### iPhone (Safari)
 
-1. Open the app in **Safari** (must be Safari — Chrome on iOS does not support this)
+1. Open the app in **Safari** (must be Safari - Chrome on iOS does not support this)
 2. Tap the **Share** button (the box with an arrow pointing up, in the bottom toolbar)
 3. Scroll down and tap **"Add to Home Screen"**
 4. Tap **"Add"** in the top-right corner
@@ -107,7 +107,7 @@ BurdyGurdy works best when installed to your home screen. This removes the brows
 4. Tap **"Add"** or **"Install"** to confirm
 5. Launch the app from your home screen or app drawer
 
-> Chrome may also show an automatic install banner at the bottom of the screen after a couple of visits — you can use that too.
+> Chrome may also show an automatic install banner at the bottom of the screen after a couple of visits - you can use that too.
 
 ---
 

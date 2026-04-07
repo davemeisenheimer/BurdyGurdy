@@ -31,12 +31,12 @@ export interface Candidate {
  * Builds the weighted candidate list for question selection.
  *
  * Three tiers (adaptive mode only):
- *  1. Recent window birds — always candidates.
+ *  1. Recent window birds - always candidates.
  *     - New encounters (not in weightsMap): weight = NEW_ENCOUNTER_WEIGHT
  *     - Unmastered (w ≥ 5): weight = w
  *     - Mastered (w < 5): weight = max(w, MASTERED_FLOOR_WEIGHT)
- *  2. Non-recent birds in weightsMap — heavily discounted (× NON_RECENT_MULTIPLIER).
- *  3. Non-recent birds not in weightsMap — excluded.
+ *  2. Non-recent birds in weightsMap - heavily discounted (× NON_RECENT_MULTIPLIER).
+ *  3. Non-recent birds not in weightsMap - excluded.
  *
  * Non-adaptive mode: all questionPool birds at weight = 1, no non-recent birds.
  */
@@ -63,7 +63,7 @@ export function buildCandidates(
       } else if (w === undefined) {
         // Only introduce a new encounter for this specific type if
         // maintainLevel0Palette has explicitly seeded it (putting its key in
-        // level0Keys). The old paletteCodes check was too broad — a bird with
+        // level0Keys). The old paletteCodes check was too broad - a bird with
         // an active family/song record could bypass palette ordering and be
         // introduced as a new image question before the queue reached it.
         if (!level0Keys.has(key)) continue;
@@ -77,7 +77,7 @@ export function buildCandidates(
 
   // Pass 2: Non-recent palette birds (long-term retention, rarely asked)
   // Exception: level-0 question-type keys keep their full learning weight even
-  // outside the recent window — active learning trumps the observation window.
+  // outside the recent window - active learning trumps the observation window.
   if (adaptiveMode) {
     for (const species of filteredPool) {
       if (recentCodes.has(species.speciesCode)) continue;
@@ -102,8 +102,8 @@ export function buildCandidates(
  *   - Struggling mastered (graduated but accuracy below threshold)
  *
  * total    = recentUnmasteredMin  (≈ 67% of count)
- * ruFloor  = ceil(total / 2)      — minimum unmastered
- * smFloor  = total − ruFloor      — minimum struggling-mastered
+ * ruFloor  = ceil(total / 2)      - minimum unmastered
+ * smFloor  = total − ruFloor      - minimum struggling-mastered
  *
  * Each bucket backfills for the other's shortfall, then regular mastered
  * birds fill any remaining slots. Shuffles the final result.

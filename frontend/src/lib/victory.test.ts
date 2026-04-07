@@ -18,7 +18,7 @@ describe('describeMastery', () => {
   });
 
   it('deduplicates types that map to the same category', () => {
-    // image and image-latin both map to "visual appearance" — expect one mention
+    // image and image-latin both map to "visual appearance" - expect one mention
     expect(describeMastery(['image', 'image-latin'])).toBe('visual appearance');
   });
 

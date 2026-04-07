@@ -7,11 +7,11 @@ function species(code: string, priorityGroup: PriorityGroup, isHistorical = fals
 }
 
 // The backend returns species pre-sorted into five promotion groups:
-//   Group 0: recentCommon   — recent + backyard family
-//   Group 1: recentUncommon — recent + non-backyard family
-//   Group 2: regionCommon   — historical + backyard + in common ranking
-//   Group 3: regionUncommon — historical + non-backyard
-//   Group 4: rareUncommon   — historical + backyard + NOT in common ranking (rare visitors/vagrants)
+//   Group 0: recentCommon   - recent + backyard family
+//   Group 1: recentUncommon - recent + non-backyard family
+//   Group 2: regionCommon   - historical + backyard + in common ranking
+//   Group 3: regionUncommon - historical + non-backyard
+//   Group 4: rareUncommon   - historical + backyard + NOT in common ranking (rare visitors/vagrants)
 //
 // buildSpeciesCache must preserve all five groups and their order so the
 // promotion queue correctly prioritises common birds before rare vagrants.

@@ -79,7 +79,7 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
   // When retryKey increments the <audio> element is remounted (new DOM node, cleared iOS
   // session state).  Wire it up here, after the ref is refreshed by React.
   useEffect(() => {
-    if (retryKey === 0) return; // skip initial mount — the url effect handles that
+    if (retryKey === 0) return; // skip initial mount - the url effect handles that
     const audio = audioRef.current;
     if (!audio) return;
     trackIndexRef.current = 0;
@@ -106,9 +106,9 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
       setActiveSonoUrl(next.sonoUrl);
       audio.play().catch(() => {});
     } else {
-      console.warn(`[AudioPlayer] all ${allTracks.length} track(s) failed — showing "Audio unavailable"`, allTracks.map(t => t.audioUrl));
+      console.warn(`[AudioPlayer] all ${allTracks.length} track(s) failed - showing "Audio unavailable"`, allTracks.map(t => t.audioUrl));
       if (DEV_LOG_AUDIO_ERRORS) {
-        console.warn(`[AudioPlayer] all ${allTracks.length} track(s) failed for question — showing "Audio unavailable"`, allTracks.map(t => t.audioUrl));
+        console.warn(`[AudioPlayer] all ${allTracks.length} track(s) failed for question - showing "Audio unavailable"`, allTracks.map(t => t.audioUrl));
       }
       setAudioError(true);
       onAudioUnavailable?.();
@@ -118,7 +118,7 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
   const handleRetry = () => {
     // Increment retryKey to unmount/remount the <audio> element, clearing any stuck
     // iOS audio session state.  The retryKey useEffect re-wires src + play after mount.
-    console.warn(`[AudioPlayer] retry #${retryKey + 1} — urls:`, allTracks.map(t => t.audioUrl));
+    console.warn(`[AudioPlayer] retry #${retryKey + 1} - urls:`, allTracks.map(t => t.audioUrl));
     setAudioError(false);
     setPlaying(false);
     setSonoLoaded(false);
@@ -150,7 +150,7 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
     />
   );
 
-  // ── Spectrogram layout — only shown once the image has loaded ───────────
+  // ── Spectrogram layout - only shown once the image has loaded ───────────
   if (activeSonoUrl && sonoLoaded) {
     return (
       <div

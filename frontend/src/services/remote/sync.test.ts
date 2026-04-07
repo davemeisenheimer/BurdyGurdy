@@ -39,7 +39,7 @@ describe('decideTakeRemote', () => {
 
   // ── Case 3: graduation status ───────────────────────────────────────────────
   // Once a bird is graduated (isMastered=true) it should never be "downgraded"
-  // back to an active palette bird — but remote graduation always wins over
+  // back to an active palette bird - but remote graduation always wins over
   // a local non-graduated record.
 
   it('takes remote when remote is graduated and local is not', () => {
@@ -68,7 +68,7 @@ describe('decideTakeRemote', () => {
     expect(decideTakeRemote(local, remote)).toBe(false);
   });
 
-  // ── Case 5: same level & history — fall back to recency ─────────────────────
+  // ── Case 5: same level & history - fall back to recency ─────────────────────
 
   it('takes remote when same level and remote is more recent', () => {
     const local  = { lastAsked: 1000, isMastered: false, masteryLevel: 1 };

@@ -1,6 +1,6 @@
 /**
  * Pure helpers for filtering xeno-canto recordings against a banned-URL set.
- * Extracted for unit testability — no I/O or randomness.
+ * Extracted for unit testability - no I/O or randomness.
  */
 
 import type { XCRecording } from '../services/xenocanto';

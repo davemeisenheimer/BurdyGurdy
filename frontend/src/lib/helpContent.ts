@@ -33,7 +33,7 @@ export const HELP_CONTENT: Record<string, HelpEntry> = {
     title: 'Bird Group',
     body: [
       'Filter the quiz to a specific group of birds. "All" includes every bird seen in your region.',
-      'Other groups let you focus on a particular family — useful if you want to drill waterfowl, raptors, or another category you\'re working on.',
+      'Other groups let you focus on a particular family - useful if you want to drill waterfowl, raptors, or another category you\'re working on.',
     ],
   },
   learningMode: {
@@ -90,7 +90,7 @@ export const HELP_CONTENT: Record<string, HelpEntry> = {
   expireMasteredBirds: {
     title: 'Expire mastered birds after 90 days',
     body: [
-      'Ninety days after you master a bird, it re-enters the quiz question pool at level 2 — one step from re-mastery.',
+      'Ninety days after you master a bird, it re-enters the quiz question pool at level 2 - one step from re-mastery.',
       'This ensures long-term retention for birds you haven\'t seen in a while, without making you start from scratch. It also ensures '
       + 'that you will be alerted when these birds are next in your area as you will be presented with questions about these birds at '
       + 'a higher frequency and will see the recent sighting reports in the answer reveal screen.',

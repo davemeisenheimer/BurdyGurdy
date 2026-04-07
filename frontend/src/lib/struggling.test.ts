@@ -51,7 +51,7 @@ describe('computeStrugglingCount', () => {
   });
 
   it('returns 0 when the window is not yet full', () => {
-    // Fewer than STRUGGLING_WINDOW answers — not enough data.
+    // Fewer than STRUGGLING_WINDOW answers - not enough data.
     const records = [makeRecord('amero', 'song', [false, false, false])];
     expect(computeStrugglingCount(records, SONG)).toBe(0);
   });

@@ -102,7 +102,7 @@ export function BirdSearchInput({ onSelect, className = 'mt-3' }: Props) {
         )}
       </div>
 
-      {/* Results list — floats upward */}
+      {/* Results list - floats upward */}
       {open && (
         <ul ref={listRef} className="absolute bottom-full mb-1 left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden z-20 max-h-60 overflow-y-auto">
           {results.map((s, i) => (

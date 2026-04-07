@@ -108,11 +108,11 @@ export function TrimProgressDialog({ regionCode, recentDays, questionTypes, onCl
             </p>
           ) : affected.length === 0 ? (
             <p className="text-slate-500 text-sm text-center py-8">
-              Nothing to trim — all your progress is for birds currently in your region's window. 🎉
+              Nothing to trim - all your progress is for birds currently in your region's window. 🎉
             </p>
           ) : (
             <>
-              {/* Question type filter — only shown when multiple types are affected */}
+              {/* Question type filter - only shown when multiple types are affected */}
               {availableTypes.length > 1 && (
                 <div className="mb-5">
                   <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">

@@ -317,7 +317,7 @@ export function FactsCurationPanel() {
         )}
         {!loading && visible.length === 0 && (
           <p className="text-sm text-slate-400 text-center mt-8">
-            {facts.length === 0 ? 'No facts yet — add one above' : 'No matches'}
+            {facts.length === 0 ? 'No facts yet - add one above' : 'No matches'}
           </p>
         )}
         {!loading && visible.map(fact => (

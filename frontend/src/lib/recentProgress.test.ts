@@ -111,7 +111,7 @@ describe('categoriseRecentBirds', () => {
     const result = categoriseRecentBirds(
       [makeSpecies('amero')],
       [
-        makeRecord('amero', 'image', 2, true), // mastered — should be ignored for category
+        makeRecord('amero', 'image', 2, true), // mastered - should be ignored for category
         makeRecord('amero', 'song',  1, false), // active, level 1
       ],
       types,

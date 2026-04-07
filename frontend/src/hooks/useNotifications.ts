@@ -21,7 +21,7 @@ export function useNotifications({
   const lastToastTimeRef                  = useRef<number>(0);
   const pendingToastTimerRef              = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Session stats — refs so they don't trigger re-renders
+  // Session stats - refs so they don't trigger re-renders
   const sessionQuestionsRef       = useRef(0);
   const sessionRoundsRef          = useRef(0);
   const sessionMasteredRef        = useRef(0);

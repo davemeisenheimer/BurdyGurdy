@@ -22,7 +22,7 @@ app.use('/api/friends', friendsRouter);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
-// Secret cache-clear endpoint — token must match ADMIN_TOKEN env var
+// Secret cache-clear endpoint - token must match ADMIN_TOKEN env var
 app.post('/api/admin/cache-clear', (req, res) => {
   const token = process.env.ADMIN_TOKEN;
   if (!token || req.query.token !== token) {
@@ -39,7 +39,7 @@ app.get('*', (_req, res) => res.sendFile(path.join(frontendDist, 'index.html')))
 
 app.listen(PORT, () => {
   console.log(`BurdyGurdy backend running on http://localhost:${PORT}`);
-  console.log('Env check — RESEND_API_KEY:', process.env.RESEND_API_KEY ? 'SET' : 'MISSING');
-  console.log('Env check — SUPABASE_URL:', process.env.SUPABASE_URL ? 'SET' : 'MISSING');
-  console.log('Env check — SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SET' : 'MISSING');
+  console.log('Env check - RESEND_API_KEY:', process.env.RESEND_API_KEY ? 'SET' : 'MISSING');
+  console.log('Env check - SUPABASE_URL:', process.env.SUPABASE_URL ? 'SET' : 'MISSING');
+  console.log('Env check - SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SET' : 'MISSING');
 });

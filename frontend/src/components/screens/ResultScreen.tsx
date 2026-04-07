@@ -114,7 +114,7 @@ function LevelUpSummary({ levelUps, noLongerStruggling = [], stillStruggling = [
   const harder    = groupBySpecies(levelUps.filter(ev => !ev.graduated));
   const graduated = groupBySpecies(levelUps.filter(ev => ev.graduated));
 
-  // Don't show "no longer struggling" for birds that also appear in "graduated" — graduation is the bigger event.
+  // Don't show "no longer struggling" for birds that also appear in "graduated" - graduation is the bigger event.
   const graduatedCodes = new Set(levelUps.filter(ev => ev.graduated).map(ev => ev.speciesCode));
   const recovered = groupNoLongerStruggling(noLongerStruggling.filter(ev => !graduatedCodes.has(ev.speciesCode)));
 

@@ -3,7 +3,7 @@ import { STRUGGLING_WINDOW, STRUGGLING_MIN_CORRECT } from '@birdygurdy/shared';
 
 export { STRUGGLING_WINDOW, STRUGGLING_MIN_CORRECT };
 
-/** Derived accuracy threshold (80%) — for use in non-mastered struggling check. */
+/** Derived accuracy threshold (80%) - for use in non-mastered struggling check. */
 export const STRUGGLING_THRESHOLD = STRUGGLING_MIN_CORRECT / STRUGGLING_WINDOW;
 
 /**

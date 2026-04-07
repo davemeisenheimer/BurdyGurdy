@@ -133,10 +133,10 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
           <p className="text-slate-500 mt-2">Learn the birds you live with</p>
         </div>
 
-        {/* Card — grows to fill remaining height; sections flex apart */}
+        {/* Card - grows to fill remaining height; sections flex apart */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col flex-1 px-6 py-6">
 
-          {/* Region — desktop only; mobile sets region in Settings */}
+          {/* Region - desktop only; mobile sets region in Settings */}
           {isDesktop && (<>
           <div className="shrink-0">
             <div className="flex items-center gap-2 mb-1">

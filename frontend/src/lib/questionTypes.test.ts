@@ -23,7 +23,7 @@ describe('expandQuestionTypes', () => {
 
   it('returns the base list unchanged when no variant settings are enabled', () => {
     // Baseline: with both variant toggles off the output should be identical
-    // to the input — no extra types appended, no types removed.
+    // to the input - no extra types appended, no types removed.
     const result = expandQuestionTypes(['song', 'image', 'family'], BASE);
     expect(result).toEqual(['song', 'image', 'family']);
   });

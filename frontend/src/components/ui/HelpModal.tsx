@@ -22,7 +22,7 @@ const FAQS: FaqEntry[] = [
       { type: 'p', text: 'The app defaults to a recent sightings window of 1 day. If you live in a remote region where there aren\'t many people reporting their sightings, you may need to broaden that window.' },
       { type: 'ul', items: [
         'Broaden the sightings window to 7 days or 30 days in the settings.',
-        'You may also have set your region to a very local level. Try broadening it — for example, from city or county level up to state or province.',
+        'You may also have set your region to a very local level. Try broadening it - for example, from city or county level up to state or province.',
       ]},
     ],
   },
@@ -41,9 +41,9 @@ const FAQS: FaqEntry[] = [
     answer: [
       { type: 'p', text: 'Both the images shown and the answer choices change as you advance:' },
       { type: 'ol', items: [
-        'Easy — only the primary reference photo is used; answer options are completely random.',
-        'Medium — a primary or secondary image is chosen randomly; answer options are birds from the same family.',
-        'Hard — up to a dozen images and 6 or more audio clips can be shown; answer options are all from the same genus where possible.',
+        'Easy - only the primary reference photo is used; answer options are completely random.',
+        'Medium - a primary or secondary image is chosen randomly; answer options are birds from the same family.',
+        'Hard - up to a dozen images and 6 or more audio clips can be shown; answer options are all from the same genus where possible.',
       ]},
       { type: 'p', text: 'Note: for some genera and families there aren\'t many closely related birds, so hard-level options may still be relatively easy to distinguish.' },
     ],
@@ -53,8 +53,8 @@ const FAQS: FaqEntry[] = [
     answer: [
       { type: 'p', text: 'Two settings can help:' },
       { type: 'ol', items: [
-        'Expire birds after 90 days — requires you to remaster birds on a seasonal basis. Birds that last migrated through your region 3 months ago will reappear as birds to master the next time they pass through.',
-        'Trim outdated progress — a button in the settings panel that resets any birds not in your current recent sightings window back to unmastered. Birds that are mastered and still in your window remain mastered.',
+        'Expire birds after 90 days - requires you to remaster birds on a seasonal basis. Birds that last migrated through your region 3 months ago will reappear as birds to master the next time they pass through.',
+        'Trim outdated progress - a button in the settings panel that resets any birds not in your current recent sightings window back to unmastered. Birds that are mastered and still in your window remain mastered.',
       ]},
     ],
   },
@@ -70,8 +70,8 @@ const FAQS: FaqEntry[] = [
     answer: [
       { type: 'p', text: 'There are two kinds of blocked photos:' },
       { type: 'ul', items: [
-        'User-blocked — when you don\'t want a particular photo to appear in quizzes, click the ✕ on the photo to remove it from your pool. It will no longer show up in questions or in the photo carousel for that bird.',
-        'Admin-blocked — photos flagged through error reports and reviewed by an administrator. When blocked by an admin, the photo is removed for all users, meaning your report helps improve the app for everyone.',
+        'User-blocked - when you don\'t want a particular photo to appear in quizzes, click the ✕ on the photo to remove it from your pool. It will no longer show up in questions or in the photo carousel for that bird.',
+        'Admin-blocked - photos flagged through error reports and reviewed by an administrator. When blocked by an admin, the photo is removed for all users, meaning your report helps improve the app for everyone.',
       ]},
       { type: 'p', text: 'In most cases, reporting an error is the better option. In the answer reveal screen, a "Report error" link appears inside the correct answer button. Use it to flag photos or audio clips that show the wrong bird, are poor quality, or are otherwise confusing. Photos of nests or eggs are interesting but may simply be blocked for quiz questions while remaining visible in info panels.' },
     ],
@@ -110,7 +110,7 @@ const SECTIONS: HelpSection[] = [
   },
   {
     title: 'Question Types',
-    body: 'Choose what kind of questions you want to practice. Song / Call plays a recording and asks you to name the bird. Photo shows a picture of the bird. Latin Name shows the scientific name. Bird Family shows the family name. You can mix and match — any combination is valid.',
+    body: 'Choose what kind of questions you want to practice. Song / Call plays a recording and asks you to name the bird. Photo shows a picture of the bird. Latin Name shows the scientific name. Bird Family shows the family name. You can mix and match - any combination is valid.',
   },
   {
     title: 'Bird Group',
@@ -122,7 +122,7 @@ const SECTIONS: HelpSection[] = [
   },
   {
     title: 'Ask More Often (★)',
-    body: 'Available in adaptive mode after answering a question. If you have birds you are really keen to nail your identification for, use this to ensure they appear more often. The setting applies per bird per question type — you might choose to be asked about the robin\'s song more often but not the robin\'s Latin name.',
+    body: 'Available in adaptive mode after answering a question. If you have birds you are really keen to nail your identification for, use this to ensure they appear more often. The setting applies per bird per question type - you might choose to be asked about the robin\'s song more often but not the robin\'s Latin name.',
   },
   {
     title: 'Don\'t ask again',

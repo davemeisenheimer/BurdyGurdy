@@ -140,7 +140,7 @@ export async function sendInvite(
   } catch (err: unknown) {
     let detail = 'unknown error';
     if (err && typeof err === 'object' && 'response' in err) {
-      // Axios error — response body is already parsed in .response.data
+      // Axios error - response body is already parsed in .response.data
       const data = (err as { response: { data?: { error?: string } } }).response.data;
       detail = data?.error ?? 'unknown error';
     } else if (err instanceof Error) {
@@ -168,14 +168,14 @@ export async function acceptInvite(
   }
 
   // Insert with JS-ordered pair first; if the DB's collation orders them differently,
-  // Postgres will reject with check constraint 23514 — retry with the pair swapped.
+  // Postgres will reject with check constraint 23514 - retry with the pair swapped.
   const pair1 = invite.fromUserId < userId
     ? { user_id_a: invite.fromUserId, user_id_b: userId }
     : { user_id_a: userId, user_id_b: invite.fromUserId };
   let { error: friendshipError } = await supabase.from('friendships').insert(pair1);
 
   if (friendshipError?.code === '23514') {
-    // Ordering constraint fired — DB collation differs from JS; try the reversed pair
+    // Ordering constraint fired - DB collation differs from JS; try the reversed pair
     const pair2 = { user_id_a: pair1.user_id_b, user_id_b: pair1.user_id_a };
     ({ error: friendshipError } = await supabase.from('friendships').insert(pair2));
   }

@@ -2,7 +2,7 @@ import { db } from '../../lib/db';
 import { fetchRegionSpecies } from '../remote/api';
 import type { BirdSpecies, CachedSpecies } from '../../types';
 
-/** Cache TTL scales with the observation window — shorter windows need fresher data. */
+/** Cache TTL scales with the observation window - shorter windows need fresher data. */
 function ttlMs(back: number): number {
   if (back <= 1)  return 1 * 60 * 60 * 1000;  // 1 day window  → 1 hour
   if (back <= 7)  return 6 * 60 * 60 * 1000;  // 7 day window  → 6 hours
@@ -11,7 +11,7 @@ function ttlMs(back: number): number {
 
 /**
  * Maps the full BirdSpecies API response to the leaner CachedSpecies shape.
- * All species from all five promotion groups are included — no filtering.
+ * All species from all five promotion groups are included - no filtering.
  * Exported for unit tests.
  */
 export function buildSpeciesCache(full: BirdSpecies[]): CachedSpecies[] {
@@ -27,7 +27,7 @@ export function buildSpeciesCache(full: BirdSpecies[]): CachedSpecies[] {
 /**
  * Returns the ordered regional species list from cache, fetching from the backend if needed.
  * Order: backyard-family species (most common first), then other species (most common first).
- * This ordering is the promotion queue — new birds enter the Learning Palette from the top.
+ * This ordering is the promotion queue - new birds enter the Learning Palette from the top.
  * Uses a composite cache key "${regionCode}:${back}" so different observation windows are cached separately.
  */
 export async function getRegionSpecies(regionCode: string, back = 30): Promise<CachedSpecies[]> {

@@ -92,7 +92,7 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
           </div>
         )}
 
-        {/* Region — mobile only; desktop sets region on the home screen */}
+        {/* Region - mobile only; desktop sets region on the home screen */}
         {!isDesktop && regionCode !== undefined && onRegionChange && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mb-4">
             <p className="font-medium text-slate-800 text-sm mb-1">Region</p>
@@ -198,7 +198,7 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
           )}
         </div>
 
-        {/* Birder level — signed-in users only */}
+        {/* Birder level - signed-in users only */}
         {user && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mt-4">
             <div className="flex items-center gap-2 mb-3">
@@ -240,7 +240,7 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
               <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-sm p-6">
                 <p className="font-semibold text-slate-800 text-base mb-3">Change to {newLevelInfo.label}?</p>
-                <p className="text-sm text-slate-600 mb-2">Your birds already in progress will not be affected — they'll continue from their current difficulty level.</p>
+                <p className="text-sm text-slate-600 mb-2">Your birds already in progress will not be affected - they'll continue from their current difficulty level.</p>
                 <p className="text-sm text-slate-600 mb-6">{newBirdMsg}</p>
                 <div className="flex gap-3 justify-end">
                   <button
@@ -289,7 +289,7 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
           </div>
         )}
 
-        {/* Home screen install — mobile only, not already standalone */}
+        {/* Home screen install - mobile only, not already standalone */}
         {(isIOS || isAndroid) && !isStandalone && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mt-4">
             <p className="font-medium text-slate-800 text-sm mb-1">Add to home screen</p>

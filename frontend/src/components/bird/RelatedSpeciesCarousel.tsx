@@ -59,6 +59,33 @@ export function RelatedSpeciesCarousel({
   const [playingCode, setPlayingCode] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
+  // Listen mode
+  const [listenMode, setListenMode]   = useState(false);
+  const listenModeRef  = useRef(false);
+  const listenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearListenTimer = () => {
+    if (listenTimerRef.current !== null) {
+      clearTimeout(listenTimerRef.current);
+      listenTimerRef.current = null;
+    }
+  };
+
+  const stopListenMode = () => {
+    clearListenTimer();
+    setListenMode(false);
+    listenModeRef.current = false;
+  };
+
+  const startListenMode = () => {
+    if (slides.length <= 1) return;
+    setAutoScrolling(false);
+    setAnimated(true);
+    setListenMode(true);
+    listenModeRef.current = true;
+    setIdx(1);
+  };
+
   // Navigate to a slide; wrapping is always instant (no reverse-direction animation)
   const navigateTo = (newIdx: number) => {
     const n      = slides.length;
@@ -101,10 +128,55 @@ export function RelatedSpeciesCarousel({
     return () => clearTimeout(timer);
   }, [autoScrolling, idx, slides.length]);
 
+  // Drive listen mode: advances through each photo slide playing its audio
+  useEffect(() => {
+    if (!listenMode) return;
+    const slide = slides[idx];
+    if (!slide || slide.kind === 'title') return;
+
+    const code = slide.speciesCode;
+    const recs = recordings.get(code);
+    const n    = slides.length;
+
+    const advance = () => {
+      if (!listenModeRef.current) return;
+      clearListenTimer();
+      audioRef.current?.pause();
+      setPlayingCode(null);
+      const next = idx + 1;
+      if (next >= n) {
+        setListenMode(false);
+        listenModeRef.current = false;
+        setAnimated(false);
+        setIdx(0);
+      } else {
+        setIdx(next);
+      }
+    };
+
+    clearListenTimer();
+
+    if (recs === undefined) {
+      // Still fetching — wait up to 5 s then advance
+      listenTimerRef.current = setTimeout(advance, 5000);
+    } else if (recs === null || recs.length === 0) {
+      // No audio available — pause 2 s so the user can see the bird, then advance
+      listenTimerRef.current = setTimeout(advance, 2000);
+    } else {
+      // Play audio; 30 s fallback in case onEnded never fires
+      setPlayingCode(code);
+      listenTimerRef.current = setTimeout(advance, 30000);
+    }
+
+    return clearListenTimer;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listenMode, idx, recordings, slides.length]);
+
   // Reset when reference species changes
   useEffect(() => {
     genRef.current++;
     stopAutoScroll();
+    stopListenMode();
     hasTriggeredRef.current = false;
     setAnimated(true);
     setSlides([{ kind: 'title', ...referenceSpecies }]);
@@ -242,6 +314,15 @@ export function RelatedSpeciesCarousel({
   const prevReady = fetchedCodes.has(prevCode);
   const nextReady = fetchedCodes.has(nextCode);
 
+  const listenButton = (
+    <button
+      onClick={startListenMode}
+      className="flex items-center gap-1.5 bg-black/60 hover:bg-black/80 text-white text-xs rounded-full px-3 py-1.5 transition-colors"
+    >
+      ♪ Listen to related species
+    </button>
+  );
+
   return (
     <div className="relative bg-slate-900 h-full overflow-hidden">
       {/* Slide track */}
@@ -283,15 +364,25 @@ export function RelatedSpeciesCarousel({
                         {referencePhoto.credit}
                       </span>
                     )}
+                    {/* Listen button — photo layout */}
+                    {n > 1 && !listenMode && (
+                      <div className="absolute bottom-1 left-1">
+                        {listenButton}
+                      </div>
+                    )}
                   </>
                 ) : (
-                <div className="flex flex-col items-center justify-center h-full px-4 text-center gap-1">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Related Species</p>
-                  <p className="text-base font-bold text-white leading-tight mt-1">{slide.comName}</p>
-                  <p className="text-xs italic text-slate-400">{slide.sciName}</p>
-                  <p className="text-xs text-slate-500">{slide.familyComName}</p>
-                  <p className="text-xs text-slate-400 mt-4 leading-relaxed">Scroll to see and compare related species →</p>
-                </div>
+                  <div className="flex flex-col items-center justify-center h-full px-4 text-center gap-1">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Related Species</p>
+                    <p className="text-base font-bold text-white leading-tight mt-1">{slide.comName}</p>
+                    <p className="text-xs italic text-slate-400">{slide.sciName}</p>
+                    <p className="text-xs text-slate-500">{slide.familyComName}</p>
+                    <p className="text-xs text-slate-400 mt-4 leading-relaxed">Scroll to see and compare related species →</p>
+                    {/* Listen button — text layout */}
+                    {n > 1 && !listenMode && (
+                      <div className="mt-2">{listenButton}</div>
+                    )}
+                  </div>
                 )
               ) : (
                 <>
@@ -308,7 +399,7 @@ export function RelatedSpeciesCarousel({
                       {slide.comName} ({slide.sciName})
                     </span>
                     <button
-                      onClick={() => { stopAutoScroll(); onViewSpecies(slide); }}
+                      onClick={() => { stopAutoScroll(); stopListenMode(); onViewSpecies(slide); }}
                       className="shrink-0 text-xs text-sky-300 hover:text-sky-200 whitespace-nowrap"
                     >
                       View info →
@@ -321,7 +412,13 @@ export function RelatedSpeciesCarousel({
                     if (recs === null) return null;
                     return (
                       <button
-                        onClick={e => { e.stopPropagation(); stopAutoScroll(); if (!isPlaying) onWillPlay?.(); setPlayingCode(isPlaying ? null : slide.speciesCode); }}
+                        onClick={e => {
+                          e.stopPropagation();
+                          stopAutoScroll();
+                          stopListenMode();
+                          if (!isPlaying) onWillPlay?.();
+                          setPlayingCode(isPlaying ? null : slide.speciesCode);
+                        }}
                         className="absolute bottom-1 left-1 flex items-center gap-1 bg-black/60 hover:bg-black/80 rounded-full px-2 py-0.5 text-white text-xs"
                         aria-label={isPlaying ? 'Pause song' : 'Play song'}
                       >
@@ -329,7 +426,21 @@ export function RelatedSpeciesCarousel({
                       </button>
                     );
                   })()}
-                  {photo?.credit && (
+                  {/* Listen mode indicator + stop button */}
+                  {listenMode && (
+                    <div className="absolute bottom-1 right-1 flex items-center gap-1">
+                      <span className="bg-black/60 text-white/80 text-[10px] px-2 py-0.5 rounded-full animate-pulse">
+                        ♪ listening…
+                      </span>
+                      <button
+                        onClick={() => stopListenMode()}
+                        className="bg-black/60 hover:bg-black/80 text-white text-[10px] px-2 py-0.5 rounded-full transition-colors"
+                      >
+                        stop
+                      </button>
+                    </div>
+                  )}
+                  {photo?.credit && !listenMode && (
                     <span className="absolute bottom-1 right-1 bg-black/50 text-white/50 text-[10px] px-1.5 py-0.5 rounded max-w-[60%] truncate">
                       {photo.credit}
                     </span>
@@ -345,11 +456,11 @@ export function RelatedSpeciesCarousel({
       {n > 1 && (
         <>
           <button
-            onClick={() => { stopAutoScroll(); navigateTo((idx - 1 + n) % n); }}
+            onClick={() => { stopAutoScroll(); stopListenMode(); navigateTo((idx - 1 + n) % n); }}
             className={`absolute left-1 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm transition-opacity duration-[2000ms] ${prevReady ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
           >‹</button>
           <button
-            onClick={() => { stopAutoScroll(); navigateTo((idx + 1) % n); }}
+            onClick={() => { stopAutoScroll(); stopListenMode(); navigateTo((idx + 1) % n); }}
             className={`absolute right-1 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm transition-opacity duration-[2000ms] ${nextReady ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
           >›</button>
           <span className="absolute top-8 right-1 bg-black/50 text-white text-xs px-1 py-0.5 rounded-full">
@@ -357,7 +468,24 @@ export function RelatedSpeciesCarousel({
           </span>
         </>
       )}
-      <audio ref={audioRef} onEnded={() => setPlayingCode(null)} />
+      <audio
+        ref={audioRef}
+        onEnded={() => {
+          setPlayingCode(null);
+          if (listenModeRef.current) {
+            clearListenTimer();
+            const next = idx + 1;
+            if (next >= slides.length) {
+              setListenMode(false);
+              listenModeRef.current = false;
+              setAnimated(false);
+              setIdx(0);
+            } else {
+              setIdx(next);
+            }
+          }
+        }}
+      />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { cache } from '../cache';
 
-const TTL = 7 * 24 * 60 * 60 * 1000; // 7 days — Wikipedia content is stable
+const TTL = 7 * 24 * 60 * 60 * 1000; // 7 days - Wikipedia content is stable
 const HEADERS = { 'User-Agent': 'BurdyGurdy/1.0 (bird identification learning app)' };
 
 export interface AttributedPhoto {
@@ -48,7 +48,7 @@ export async function getWikipediaRangeMapLegend(sciName: string, comName: strin
           format:   'json',
           page:     name,
           prop:     'text',
-          section:  0,        // intro + infobox only — keeps the payload small
+          section:  0,        // intro + infobox only - keeps the payload small
           redirects: 1,
         },
         headers: HEADERS,
@@ -284,7 +284,7 @@ export async function getWikipediaSummary(sciName: string, comName: string): Pro
           format:      'json',
           titles:      name,
           prop:        'extracts|pageimages',
-          // no exintro — fetch the full article text
+          // no exintro - fetch the full article text
           explaintext: 1,        // plain text, no HTML markup
           pithumbsize: 400,
           redirects:   1,

@@ -13,7 +13,7 @@ function makeSpecies(code: string): PoolSpecies {
   };
 }
 
-// Minimal question stub — only fields used by the guarantee logic
+// Minimal question stub - only fields used by the guarantee logic
 function makeQ(code: string, type = 'image') {
   return { speciesCode: code, type };
 }
@@ -112,7 +112,7 @@ describe('buildCandidates', () => {
 
 // ── buildCandidates: level 0 behaviour ───────────────────────────────────────
 
-describe('buildCandidates — level 0 birds', () => {
+describe('buildCandidates - level 0 birds', () => {
   it('level 0 non-recent bird keeps full palette weight (not discounted)', () => {
     const recentPool  = [];
     const allPool     = [makeSpecies('lv0bird')];
@@ -148,7 +148,7 @@ describe('palette cap enforcement (26 over-seeded level-0 birds)', () => {
     return Array.from({ length: 26 }, (_, i) => makeSpecies(`bird${i}`));
   }
 
-  it('all 26 level-0 birds appear as full-weight (20) candidates — cap is not enforced', () => {
+  it('all 26 level-0 birds appear as full-weight (20) candidates - cap is not enforced', () => {
     const pool = make26Level0Birds();
     const recentCodes = new Set(pool.map(s => s.speciesCode));
     const weightsMap  = Object.fromEntries(pool.map(s => [`${s.speciesCode}:song`, 20]));
@@ -169,7 +169,7 @@ describe('palette cap enforcement (26 over-seeded level-0 birds)', () => {
     // After graduation, the level-2 bird drops from PALETTE_WEIGHT to HISTORY_WEIGHT (1).
     const weightsMap = {
       ...Object.fromEntries(level0Pool.map(s => [`${s.speciesCode}:song`, 20])),
-      'gradbird:song': 1, // HISTORY_WEIGHT — now mastered
+      'gradbird:song': 1, // HISTORY_WEIGHT - now mastered
     };
 
     const candidates = buildCandidates(allPool, allPool, recentCodes, weightsMap, SONG, true);
@@ -179,14 +179,14 @@ describe('palette cap enforcement (26 over-seeded level-0 birds)', () => {
     expect(level0Candidates.every(c => c.weight === 20)).toBe(true);   // still at full weight
   });
 
-  it('setting a level-0 bird weight to 0 still lands it at floor weight 3 — cannot suppress via weights alone', () => {
+  it('setting a level-0 bird weight to 0 still lands it at floor weight 3 - cannot suppress via weights alone', () => {
     const bird        = makeSpecies('excess');
     const recentCodes = new Set(['excess']);
     const weightsMap  = { 'excess:song': 0 }; // attempted suppression
 
     const candidates = buildCandidates([bird], [bird], recentCodes, weightsMap, SONG, true);
 
-    expect(candidates[0].weight).toBe(3); // floored — not actually suppressed
+    expect(candidates[0].weight).toBe(3); // floored - not actually suppressed
   });
 });
 

@@ -1,5 +1,5 @@
 /**
- * Cloud sync — uploads local IndexedDB progress to Supabase and merges
+ * Cloud sync - uploads local IndexedDB progress to Supabase and merges
  * remote records back. Merge rule: whichever record has the higher
  * `lastAsked` timestamp is considered more recent and wins.
  */
@@ -12,7 +12,7 @@ import type { AppSettings, QuizConfigPrefs } from '../../lib/settings';
 // ── Upload ────────────────────────────────────────────────────────────────────
 
 /** Upserts all local progress records to the cloud for the given user.
- *  Skips seeded-but-never-played records (lastAsked === 0) — these are
+ *  Skips seeded-but-never-played records (lastAsked === 0) - these are
  *  palette placeholders and uploading them would corrupt cloud progress
  *  from other devices. */
 export async function uploadProgress(userId: string): Promise<void> {
@@ -48,7 +48,7 @@ export async function uploadProgress(userId: string): Promise<void> {
 type LocalSnapshot  = { lastAsked: number; isMastered?: boolean; masteryLevel?: number } | null;
 type RemoteSnapshot = { last_asked: number; in_history?: boolean; mastery_level?: number };
 
-/** Pure predicate — exported for unit tests. */
+/** Pure predicate - exported for unit tests. */
 export function decideTakeRemote(local: LocalSnapshot, remote: RemoteSnapshot): boolean {
   const localHistory  = local?.isMastered   ?? false;
   const remoteHistory = remote.in_history   ?? false;

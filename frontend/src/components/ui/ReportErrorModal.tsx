@@ -17,11 +17,11 @@ interface Props {
 }
 
 const ISSUE_LABELS: Record<ReportIssueType, string> = {
-  wrong_bird:   'Wrong bird — this media shows a different species',
-  poor_quality: 'Poor quality — too blurry, noisy, or unclear',
-  nest:         'Nest — this photo shows a nest, not the bird',
-  egg:          'Egg — this photo shows an egg, not the bird',
-  confusing:    'Confusing — unfair or misleading for a question',
+  wrong_bird:   'Wrong bird - this media shows a different species',
+  poor_quality: 'Poor quality - too blurry, noisy, or unclear',
+  nest:         'Nest - this photo shows a nest, not the bird',
+  egg:          'Egg - this photo shows an egg, not the bird',
+  confusing:    'Confusing - unfair or misleading for a question',
   other:        'Other',
 };
 
@@ -110,7 +110,7 @@ export function ReportErrorModal({ mediaType, mediaUrl, comName, onSubmit, onClo
           />
         )}
 
-        {/* Description — available for all types */}
+        {/* Description - available for all types */}
         <div className="mb-4">
           <textarea
             placeholder="Additional details (optional)"

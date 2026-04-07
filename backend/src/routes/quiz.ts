@@ -33,7 +33,7 @@ export interface QuizQuestion {
   options: string[];
   optionAudioUrls?: string[];
   correctAnswer: string;
-  noAudio?: boolean;  // true when no recordings exist — frontend awards a free correct answer
+  noAudio?: boolean;  // true when no recordings exist - frontend awards a free correct answer
 }
 
 
@@ -226,7 +226,7 @@ function selectDistractors(
         candidates = [...combined, ...pickRandom(rest, count - combined.length)];
       }
     } else {
-      // No same-genus birds available — fall back to same family
+      // No same-genus birds available - fall back to same family
       candidates = sameFamily.length >= count ? sameFamily : similarOrAll(target, others, count);
     }
   }
@@ -291,14 +291,14 @@ router.post('/questions', async (req, res) => {
     const {
       regionCode    = 'CA-ON-OT',
       count         = 10,
-      types         = ['song', 'latin', 'family'],
+      types         = ['image'],
       exclude              = [],
       weights              = {},
       groupId              = 'all',
       masteryLevels        = {},
       banned               = [],
       paletteSpeciesCodes  = [],
-      back                 = 30,
+      back                 = 1,
       level0Keys           = [],
       historyKeys          = [],
       bannedAudioUrls      = [],
@@ -367,7 +367,7 @@ router.post('/questions', async (req, res) => {
         } as PoolSpecies;
       })
       .filter(s => groupOrders.length === 0 || groupOrders.includes(s.tax!.order));
-    // Historical extras supplement the distractor pool only — not question subjects.
+    // Historical extras supplement the distractor pool only - not question subjects.
     // This prevents extinct/rare historical species (e.g. Passenger Pigeon) from
     // appearing as correct answers while still providing taxonomic variety for distractors.
     filteredPool  = [...filteredPool,  ...historicalExtras];

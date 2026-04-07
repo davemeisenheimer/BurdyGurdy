@@ -16,9 +16,9 @@ const PRIORITY_GROUPS = ['recentCommon', 'recentUncommon', 'regionCommon', 'regi
 function pgIndex(isHistorical: boolean, isBackyard: boolean, commonRank: number): number {
   if (!isHistorical && isBackyard)       return 0; // recentCommon
   if (!isHistorical && !isBackyard)      return 1; // recentUncommon
-  if (isHistorical && commonRank < 9999) return 2; // regionCommon   — any historically common bird
-  if (isHistorical && isBackyard)        return 3; // regionUncommon — uncommon but backyard family
-  return 4;                                        // rareUncommon   — uncommon + non-backyard (vagrants)
+  if (isHistorical && commonRank < 9999) return 2; // regionCommon   - any historically common bird
+  if (isHistorical && isBackyard)        return 3; // regionUncommon - uncommon but backyard family
+  return 4;                                        // rareUncommon   - uncommon + non-backyard (vagrants)
 }
 
 // GET /api/birds/region/:regionCode
@@ -81,11 +81,11 @@ router.get('/region/:regionCode', async (req, res) => {
     const all = [...recent, ...historical];
 
     // Sort into 5 priority groups:
-    //   0: recentCommon   — recent + backyard family
-    //   1: recentUncommon — recent + non-backyard family
-    //   2: regionCommon   — historical + in common ranking (any genuinely common regional bird)
-    //   3: regionUncommon — historical + NOT in common ranking + backyard family (uncommon visitors)
-    //   4: rareUncommon   — historical + NOT in common ranking + non-backyard (vagrants/rarities)
+    //   0: recentCommon   - recent + backyard family
+    //   1: recentUncommon - recent + non-backyard family
+    //   2: regionCommon   - historical + in common ranking (any genuinely common regional bird)
+    //   3: regionUncommon - historical + NOT in common ranking + backyard family (uncommon visitors)
+    //   4: rareUncommon   - historical + NOT in common ranking + non-backyard (vagrants/rarities)
     // Within each group, order by commonness rank.
     all.sort((a, b) => {
       const gA = pgIndex(a.isHistorical, a.isBackyard, a.commonRank);
@@ -276,7 +276,7 @@ router.get('/regions/search', async (req, res) => {
     res.json(results);
   } catch (err) {
     console.error('Region search error:', err);
-    res.json([]); // fail silently — don't break the UI
+    res.json([]); // fail silently - don't break the UI
   }
 });
 

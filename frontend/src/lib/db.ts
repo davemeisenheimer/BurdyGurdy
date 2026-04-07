@@ -16,7 +16,7 @@ class BirdyGurdyDB extends Dexie {
 
   constructor(name: string) {
     super(name);
-    // v1: initial schema — progress table with compound key [speciesCode+questionType]
+    // v1: initial schema - progress table with compound key [speciesCode+questionType]
     this.version(1).stores({
       progress: '[speciesCode+questionType], weight, lastAsked',
     });
@@ -48,18 +48,18 @@ class BirdyGurdyDB extends Dexie {
         if (record.inHistory === undefined) record.inHistory = false;
       });
     });
-    // v5: add regionSpecies table — ordered species cache used as the adaptive promotion queue
+    // v5: add regionSpecies table - ordered species cache used as the adaptive promotion queue
     this.version(5).stores({
       progress: '[speciesCode+questionType], speciesCode, weight, lastAsked',
       regionSpecies: 'regionCode',
     });
-    // v6: add blockedPhotos table — URLs of optional observation photos dismissed by the user
+    // v6: add blockedPhotos table - URLs of optional observation photos dismissed by the user
     this.version(6).stores({
       progress: '[speciesCode+questionType], speciesCode, weight, lastAsked',
       regionSpecies: 'regionCode',
       blockedPhotos: 'url',
     });
-    // v7: add adminBlockedMedia table — media globally blocked by admin via the curation panel;
+    // v7: add adminBlockedMedia table - media globally blocked by admin via the curation panel;
     //     initially keyed on url only (v8 changes this)
     this.version(7).stores({
       progress: '[speciesCode+questionType], speciesCode, weight, lastAsked',
@@ -75,7 +75,7 @@ class BirdyGurdyDB extends Dexie {
       blockedPhotos: 'url',
       adminBlockedMedia: '[url+speciesCode]',
     }).upgrade(tx => tx.table('adminBlockedMedia').clear());
-    // v9: seed recentAnswers rolling window for existing mastered birds — backfills based on
+    // v9: seed recentAnswers rolling window for existing mastered birds - backfills based on
     //     historical accuracy (Fs first, Ts last) so the window reflects past performance
     this.version(9).stores({
       progress: '[speciesCode+questionType], speciesCode, weight, lastAsked',
@@ -125,7 +125,7 @@ class BirdyGurdyDB extends Dexie {
         r => r.lastAsked === 0 && (r.masteryLevel ?? 0) === 0 && !(r.isMastered ?? false),
       ).delete(),
     );
-    // v12: backfill masteredAt for existing mastered records — best approximation is lastAsked,
+    // v12: backfill masteredAt for existing mastered records - best approximation is lastAsked,
     //      which is the most recent time the bird was seen in adaptive review.
     this.version(12).stores({
       progress: '[speciesCode+questionType], speciesCode, weight, lastAsked',
@@ -142,12 +142,12 @@ class BirdyGurdyDB extends Dexie {
 
 function openDb(instance: BirdyGurdyDB): BirdyGurdyDB {
   // If a schema migration leaves the database in an unrecoverable state, Dexie will
-  // reject the open promise.  Delete and reload — onAuthStateChange fires on the next
+  // reject the open promise.  Delete and reload - onAuthStateChange fires on the next
   // load for already-signed-in users, which triggers the full cloud sync automatically.
   instance.open().catch(async err => {
     // DatabaseClosedError is expected when switchToUserDb closes the DB while it is
     // still opening (e.g. onAuthStateChange fires before open() resolves).  It is not
-    // a schema corruption — the caller has already reassigned `db` to the new instance.
+    // a schema corruption - the caller has already reassigned `db` to the new instance.
     if (err?.name === 'DatabaseClosedError') return;
     console.error('BirdyGurdyDB: failed to open, resetting database:', err);
     try { await instance.delete(); } catch { /* best-effort */ }

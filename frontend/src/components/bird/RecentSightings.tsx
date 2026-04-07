@@ -52,7 +52,7 @@ export function RecentSightings({ sightings, variant = 'cards' }: Props) {
                     <p className="truncate">{loc.name}</p>
                   </td>
                   <td className="px-2 py-1 text-slate-400 text-right whitespace-nowrap align-top">
-                    {coords ?? '—'}
+                    {coords ?? '-'}
                   </td>
                 </tr>
               );

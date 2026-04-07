@@ -13,7 +13,7 @@ import {
 // Previously, promotion used a sequential index that advanced through the
 // species list. Once the index reached the end it was stuck there. When the
 // cache refreshed, new birds appeared anywhere in the sorted list (most common
-// / most recent first) — but because they landed *behind* the saved index they
+// / most recent first) - but because they landed *behind* the saved index they
 // were silently skipped and never promoted.
 //
 // The fix: always scan from position 0 and skip species that already have a
@@ -41,7 +41,7 @@ describe('selectSpeciesToPromote', () => {
   it('finds new birds at the front even when all old birds are already seeded', () => {
     // Simulates the core bug:
     //   Old list was [B, C, D]. Index advanced to 3 (= list.length, loop exits).
-    //   Cache refreshes to [A, B, C, D] — A is a new recent bird sorted to the front.
+    //   Cache refreshes to [A, B, C, D] - A is a new recent bird sorted to the front.
     //   Old index approach: starts at 3, processes D (seeded, wasNew=false),
     //     index→4, 4<4 false, exits. A is never promoted.
     //   New approach: scans from 0, skips B/C/D, promotes A.
@@ -53,13 +53,13 @@ describe('selectSpeciesToPromote', () => {
 
   it('promotes nothing when the saved index was past the list end and no new birds exist', () => {
     // Old list [A, B, C] with index=3; cache refreshes but same species.
-    // All are already seeded — nothing to do.
+    // All are already seeded - nothing to do.
     const list = [bird('A'), bird('B'), bird('C')];
     const result = selectSpeciesToPromote(list, new Set(['A', 'B', 'C']), 2);
     expect(result).toHaveLength(0);
   });
 
-  it('respects sort order — earlier positions are promoted before later ones', () => {
+  it('respects sort order - earlier positions are promoted before later ones', () => {
     // The backend sorts: recent+common → recent+less → historical+common → historical+less.
     // selectSpeciesToPromote must preserve that ordering by scanning front-to-back.
     const list = [

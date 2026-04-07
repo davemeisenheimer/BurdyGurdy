@@ -13,9 +13,9 @@ export const MASTERY_LABELS = ['Easy', 'Medium', 'Hard'] as const;
 
 /** Tailwind badge classes for mastery levels 0, 1, 2. */
 export const MASTERY_BADGE_COLORS = [
-  'bg-slate-100 text-slate-600',   // 0 — Easy
-  'bg-sky-100 text-sky-700',       // 1 — Medium
-  'bg-purple-100 text-purple-700', // 2 — Hard
+  'bg-slate-100 text-slate-600',   // 0 - Easy
+  'bg-sky-100 text-sky-700',       // 1 - Medium
+  'bg-purple-100 text-purple-700', // 2 - Hard
 ] as const;
 
 /** Tailwind badge classes for a fully mastered (graduated) bird. */

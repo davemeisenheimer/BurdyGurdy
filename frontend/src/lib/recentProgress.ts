@@ -1,6 +1,6 @@
 /**
  * Pure functions for categorising recent-window birds by mastery status.
- * Extracted for unit testability — no browser or React dependencies.
+ * Extracted for unit testability - no browser or React dependencies.
  */
 
 import type { CachedSpecies, BirdProgress, QuestionType } from '../types';
@@ -16,7 +16,7 @@ export interface RecentBirdEntry {
    * Only meaningful when category === 'notAsked'.
    * true  = the bird has been seeded into the palette (lastAsked=0 record exists)
    *         but has never appeared as a question.
-   * false = the bird has never been seeded at all — completely unseen.
+   * false = the bird has never been seeded at all - completely unseen.
    */
   isSeeded: boolean;
   /** Asked progress records for this bird (empty for notAsked birds). */
@@ -28,11 +28,11 @@ export interface RecentBirdEntry {
  * categories based on the player's progress records and the active question types.
  *
  * Categories:
- *   notAsked — no record exists, or every record has lastAsked=0 (seeded, never asked)
- *   easy     — at least one asked record; highest active mastery level = 0
- *   medium   — highest active mastery level = 1
- *   hard     — highest active mastery level = 2 (not yet graduated)
- *   mastered — every questionType is graduated (isMastered=true) for this species
+ *   notAsked - no record exists, or every record has lastAsked=0 (seeded, never asked)
+ *   easy     - at least one asked record; highest active mastery level = 0
+ *   medium   - highest active mastery level = 1
+ *   hard     - highest active mastery level = 2 (not yet graduated)
+ *   mastered - every questionType is graduated (isMastered=true) for this species
  */
 export function categoriseRecentBirds(
   recentSpecies: CachedSpecies[],

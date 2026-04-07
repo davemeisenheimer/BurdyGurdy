@@ -50,7 +50,7 @@ describe('calcWeight', () => {
 
   it('does not apply the non-mastered boost to mastered birds (they use the rolling window instead)', () => {
     // Even if a mastered bird had terrible all-time accuracy, the boost path is
-    // not taken — the rolling window drives mastered weight.
+    // not taken - the rolling window drives mastered weight.
     expect(calcWeight(true, false, Array(10).fill(true) as boolean[], 0, 100)).toBe(HISTORY_WEIGHT);
   });
 
@@ -70,7 +70,7 @@ describe('calcWeight', () => {
 
   it('returns low history weight when the window is not yet full (not enough data to call struggling)', () => {
     // A mastered bird with a short window (< STRUGGLING_WINDOW) is not considered
-    // struggling — not enough data — so it stays at history weight.
+    // struggling - not enough data - so it stays at history weight.
     expect(calcWeight(true, false, [true, false, false])).toBe(HISTORY_WEIGHT);
     expect(calcWeight(true, false, [])).toBe(HISTORY_WEIGHT);
     expect(calcWeight(true, false, undefined)).toBe(HISTORY_WEIGHT);
@@ -119,7 +119,7 @@ describe('applyAnswer', () => {
 
   it('resets the streak to 0 on a wrong answer', () => {
     // Any incorrect answer breaks the streak back to zero regardless of how
-    // long it was — the user must rebuild from scratch.
+    // long it was - the user must rebuild from scratch.
     const result = applyAnswer(makeExisting({ consecutiveCorrect: 2 }), false, 'amero', 'American Robin', 'song');
     expect(result.newState.consecutiveCorrect).toBe(0);
   });
@@ -171,14 +171,14 @@ describe('applyAnswer', () => {
 
   it('seeds recentAnswers with 10/10 at graduation', () => {
     // Graduation seeds a perfect rolling window so the bird cannot immediately
-    // be considered struggling — 3 wrong answers at mastered level are needed first.
+    // be considered struggling - 3 wrong answers at mastered level are needed first.
     const existing = makeExisting({ masteryLevel: 2, consecutiveCorrect: 4 });
     const result   = applyAnswer(existing, true, 'amero', 'American Robin', 'song');
     expect(result.newState.recentAnswers).toEqual(Array(STRUGGLING_WINDOW).fill(true));
   });
 
   it('does not fire noLongerStruggling at graduation (clean-slate window takes effect instead)', () => {
-    // The pre-graduation window doesn't matter — graduation always seeds 10/10.
+    // The pre-graduation window doesn't matter - graduation always seeds 10/10.
     const existing = makeExisting({ masteryLevel: 2, consecutiveCorrect: 4, correct: 2, incorrect: 10 });
     const result   = applyAnswer(existing, true, 'amero', 'American Robin', 'song');
     expect(result.levelUp?.graduated).toBe(true);
@@ -198,7 +198,7 @@ describe('applyAnswer', () => {
   it('shows the completed level at threshold when a level-up just occurred', () => {
     // When a bird just advanced from level 0 to 1, the UI should show "3/3 Easy"
     // (the completed threshold) rather than "0/3 Medium" (the new level at zero).
-    // This is a display-only adjustment — newState still has the real values.
+    // This is a display-only adjustment - newState still has the real values.
     const existing = makeExisting({ masteryLevel: 0, consecutiveCorrect: 2 });
     const result   = applyAnswer(existing, true, 'amero', 'American Robin', 'song');
     expect(result.updatedMastery.masteryLevel).toBe(0);          // old level shown
@@ -258,7 +258,7 @@ describe('applyAnswer', () => {
   });
 
   it('does NOT fire noLongerStruggling when still struggling after answer', () => {
-    // 6/10 → after wrong answer → 6/10 (oldest entry was true, new is false) — still struggling.
+    // 6/10 → after wrong answer → 6/10 (oldest entry was true, new is false) - still struggling.
     // Simplest: bird has been struggling for many answers; one wrong doesn't help.
     const window   = makeWindow(STRUGGLING_MIN_CORRECT - 2); // 6/10, struggling
     const existing = makeExisting({ isMastered: true, recentAnswers: window });

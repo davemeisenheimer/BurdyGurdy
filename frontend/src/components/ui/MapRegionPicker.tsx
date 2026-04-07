@@ -47,7 +47,7 @@ export function MapRegionPicker({ onSelect, onClose }: Props) {
     } catch (err: unknown) {
       if (id !== requestId.current) return;
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(msg ?? 'Could not identify region — try a different spot');
+      setError(msg ?? 'Could not identify region - try a different spot');
     } finally {
       if (id === requestId.current) setLoading(false);
     }

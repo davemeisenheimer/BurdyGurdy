@@ -186,7 +186,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
   }, [currentQuestion?.id, nextQuestion_?.id, state.status, randomizeQuestionPhotos]);
 
   // Fetch reveal photos and range map when the question changes.
-  // Intentionally depends only on question id — NOT state.status — so answering
+  // Intentionally depends only on question id - NOT state.status - so answering
   // (active → answered) does not cancel an in-flight fetch.
   useEffect(() => {
     if (!currentQuestion) return;

@@ -33,7 +33,7 @@ export function VictoryScreen({ recentWindow, questionTypes, onKeepPlaying, onHo
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-8 text-left">
           <p className="text-sm font-semibold text-slate-700 mb-2">What's next?</p>
           <p className="text-sm text-slate-600">
-            By continuing, you'll practice birds found in your region throughout the year — first the more common ones, then the rarer ones. Your progress carries over.
+            By continuing, you'll practice birds found in your region throughout the year - first the more common ones, then the rarer ones. Your progress carries over.
           </p>
         </div>
 

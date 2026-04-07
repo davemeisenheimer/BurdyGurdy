@@ -196,12 +196,12 @@ export async function maintainLevel0Palette(
  * Graduates a bird to mastered immediately because no audio recordings exist
  * for it. Sets noAudio=true so the UI can distinguish this from a normally-
  * learned bird. Weight is set to HISTORY_WEIGHT so it still gets occasional
- * review checks — if audio becomes available later, the backend will return a
+ * review checks - if audio becomes available later, the backend will return a
  * real song question instead of a noAudio one, and the bird naturally re-enters
  * normal review rotation.
  */
 /**
- * Pure helper — computes the record to write and the result to return.
+ * Pure helper - computes the record to write and the result to return.
  * Exported for unit tests; call graduateNoAudio() from production code.
  */
 export function buildNoAudioGraduation(

@@ -30,9 +30,9 @@ export function WelcomePanel({ hasActiveQuestion, userEmail, onAuthClick, onSign
 
           <ul className="mt-6 space-y-3">
             {[
-              { icon: '🧠', text: 'Adaptive learning — birds are introduced gradually, with most common birds first, and the quiz adjusts to your pace as you build mastery.' },
-              { icon: '📍', text: 'Region-based sightings — your quiz pool comes from real eBird observations in your area, so you learn birds you\'ll actually encounter. If you use the map to select your region, the zoom level will determine scope: county, province/state, or country.' },
-              { icon: '⚙️', text: 'Configurable — choose your region, bird families you care about, question types (song, photo...), observation window, and how many questions per round. Visit settings for more configurability options.' },
+              { icon: '🧠', text: 'Adaptive learning - birds are introduced gradually, with most common birds first, and the quiz adjusts to your pace as you build mastery.' },
+              { icon: '📍', text: 'Region-based sightings - your quiz pool comes from real eBird observations in your area, so you learn birds you\'ll actually encounter. If you use the map to select your region, the zoom level will determine scope: county, province/state, or country.' },
+              { icon: '⚙️', text: 'Configurable - choose your region, bird families you care about, question types (song, photo...), observation window, and how many questions per round. Visit settings for more configurability options.' },
             ].map(({ icon, text }) => (
               <li key={icon} className="flex items-start gap-3">
                 <div className="shrink-0 w-20 flex justify-end">

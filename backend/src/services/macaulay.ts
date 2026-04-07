@@ -19,7 +19,7 @@ export interface PhotoSet {
   optional: AttributedPhoto[];
 }
 
-// Exclusions for quiz question photos — informational but don't help with visual ID.
+// Exclusions for quiz question photos - informational but don't help with visual ID.
 const QUESTION_EXCLUDE = /egg|eggs|nest|habitat|clutch|chick|hatchling|juvenile|immature|skeleton|prey|mhnt/i;
 
 function filenameFromUrl(url: string): string {
@@ -117,7 +117,7 @@ async function loadPhotoSet(
   return result;
 }
 
-/** Returns all photos for the reveal/info carousel — unfiltered (eggs, nests etc. are informational). */
+/** Returns all photos for the reveal/info carousel - unfiltered (eggs, nests etc. are informational). */
 export async function getSpeciesPhotoUrls(
   speciesCode: string,
   comName?: string,
@@ -126,7 +126,7 @@ export async function getSpeciesPhotoUrls(
   return loadPhotoSet(speciesCode, comName, sciName);
 }
 
-/** Returns appearance-only photos for question display — eggs, nests, chicks etc. filtered out. */
+/** Returns appearance-only photos for question display - eggs, nests, chicks etc. filtered out. */
 export async function getSpeciesPhotoUrlsForQuestion(
   speciesCode: string,
   comName?: string,

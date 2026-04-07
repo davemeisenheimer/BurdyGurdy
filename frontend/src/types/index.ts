@@ -45,8 +45,8 @@ export interface RegionSpeciesCache {
   regionCode: string;
   species: CachedSpecies[];  // ordered by 5-group priority: recentCommon → recentUncommon → regionCommon → regionUncommon → rareUncommon
   cachedAt: number;
-  promotionIndex?: number;                                     // legacy — no longer written, kept so old records deserialise cleanly
-  promotionIndexByType?: Partial<Record<QuestionType, number>>; // legacy — no longer written, kept so old records deserialise cleanly
+  promotionIndex?: number;                                     // legacy - no longer written, kept so old records deserialise cleanly
+  promotionIndexByType?: Partial<Record<QuestionType, number>>; // legacy - no longer written, kept so old records deserialise cleanly
 }
 
 export interface QuizQuestion {
@@ -65,7 +65,7 @@ export interface QuizQuestion {
   options: string[];
   optionAudioUrls?: string[];
   correctAnswer: string;
-  noAudio?: boolean;  // true when no recordings exist — frontend awards a free correct answer
+  noAudio?: boolean;  // true when no recordings exist - frontend awards a free correct answer
 }
 
 export interface QuizConfig {
@@ -74,7 +74,7 @@ export interface QuizConfig {
   mode: GameMode;
   questionsPerRound: number;
   groupId: string; // 'all' or a BirdGroup id
-  recentDays?: number; // 1, 7, or 30 — observation window for recent species pool
+  recentDays?: number; // 1, 7, or 30 - observation window for recent species pool
   onlyStruggling?: boolean; // when true, restrict quiz to species where the user is struggling
 }
 
@@ -106,7 +106,7 @@ export interface BirdProgress {
   excluded: boolean;           // user asked never to see this bird again
   masteryLevel: number;        // 0=easy distractors, 1=same-family, 2=same-genus
   consecutiveCorrect: number;  // streak at the current mastery level
-  isMastered?: boolean;        // graduated from learning palette — appears only occasionally for review
+  isMastered?: boolean;        // graduated from learning palette - appears only occasionally for review
   masteredAt?: number;         // timestamp (ms) when isMastered first became true
   noAudio?: boolean;           // graduated automatically because no recordings exist for this question type
   recentAnswers?: boolean[];   // rolling window of last STRUGGLING_WINDOW answers (mastered birds only)

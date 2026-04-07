@@ -24,9 +24,9 @@ export {
  *   - Non-mastered birds struggling by all-time accuracy get a 1.5× palette weight boost.
  *   - Non-mastered birds that are fine get standard palette weight.
  *
- * Two distinct "struggling" concepts are in play here — see struggling.ts for details:
- *   - isStrugglingByWindow()     — mastered birds, rolling recent-answers window
- *   - isNonMasteredStruggling()  — active-palette birds, all-time accuracy
+ * Two distinct "struggling" concepts are in play here - see struggling.ts for details:
+ *   - isStrugglingByWindow()     - mastered birds, rolling recent-answers window
+ *   - isNonMasteredStruggling()  - active-palette birds, all-time accuracy
  */
 export function calcWeight(
   isMastered: boolean,
@@ -53,7 +53,7 @@ export interface ExistingProgressState {
   incorrect: number;
   masteryLevel: number;
   consecutiveCorrect: number;
-  isMastered?: boolean;      // optional to match BirdProgress — treated as false when absent
+  isMastered?: boolean;      // optional to match BirdProgress - treated as false when absent
   favourited: boolean;
   recentAnswers?: boolean[]; // rolling window for mastered birds
 }
@@ -88,7 +88,7 @@ export interface AdaptiveParams {
  * first encounter) and whether the answer was correct, returns the new state
  * that should be persisted, along with any level-up events.
  *
- * This is a pure function — it reads no database and has no side effects.
+ * This is a pure function - it reads no database and has no side effects.
  * The caller is responsible for writing the returned newState to the DB.
  */
 export function applyAnswer(
@@ -144,7 +144,7 @@ export function applyAnswer(
       if (prevMastery === 0 && newMastery === 1) advancedFromLevel0 = true;
       levelUp = { speciesCode, comName, questionType, newLevel: newMastery, graduated: false };
     } else if (newMastery >= 2 && newStreak >= GRADUATION_STREAK && !newInHistory) {
-      // Graduation: seed recentAnswers with 10/10 (clean slate — not yet struggling).
+      // Graduation: seed recentAnswers with 10/10 (clean slate - not yet struggling).
       newInHistory     = true;
       newRecentAnswers = Array(STRUGGLING_WINDOW).fill(true) as boolean[];
       levelUp = { speciesCode, comName, questionType, newLevel: 3, graduated: true };
@@ -163,7 +163,7 @@ export function applyAnswer(
   const weight = calcWeight(newInHistory, existing.favourited ?? false, newRecentAnswers, newCorrect, newIncorrect);
 
   // When a level just advanced (but not graduated), show the completed level at
-  // its threshold rather than the new level at 0 — e.g. "3/3 Easy" not "0/3 Medium".
+  // its threshold rather than the new level at 0 - e.g. "3/3 Easy" not "0/3 Medium".
   const updatedMastery = (levelUp && !levelUp.graduated)
     ? { masteryLevel: prevMastery, consecutiveCorrect: MASTERY_ADVANCE_STREAK, isMastered: false,        correct: newCorrect, incorrect: newIncorrect }
     : { masteryLevel: newMastery,  consecutiveCorrect: newStreak,              isMastered: newInHistory,  correct: newCorrect, incorrect: newIncorrect };

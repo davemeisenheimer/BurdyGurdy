@@ -121,7 +121,7 @@ export function OnboardingWizard({ user, settings, onUpdateSettings, onRegionDet
         }
       },
       (err) => {
-        console.warn('[OnboardingWizard] geolocation error — code:', err.code, 'message:', err.message);
+        console.warn('[OnboardingWizard] geolocation error - code:', err.code, 'message:', err.message);
         setGeoPhase('error');
       },
     );
@@ -331,7 +331,7 @@ export function OnboardingWizard({ user, settings, onUpdateSettings, onRegionDet
                   <div>
                     <h2 className="text-xl font-bold text-slate-800 mb-1">Set your region</h2>
                     <p className="text-sm text-slate-500 leading-relaxed">
-                      BurdyGurdy quizzes you on birds from your local area. Allow location access and we'll set your region automatically — you can always change it in settings.
+                      BurdyGurdy quizzes you on birds from your local area. Allow location access and we'll set your region automatically - you can always change it in settings.
                     </p>
                   </div>
 
@@ -413,7 +413,7 @@ export function OnboardingWizard({ user, settings, onUpdateSettings, onRegionDet
                       <div>
                         <h2 className="text-xl font-bold text-slate-800 mb-1">Add to your home screen</h2>
                         <p className="text-sm text-slate-500 leading-relaxed">
-                          Install BurdyGurdy for a full-screen experience without the browser address bar — just like a native app.
+                          Install BurdyGurdy for a full-screen experience without the browser address bar - just like a native app.
                         </p>
                       </div>
                       {onInstallApp ? (

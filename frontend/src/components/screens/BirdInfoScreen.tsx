@@ -117,7 +117,7 @@ export function BirdInfoScreen({
           </div>
         )}
 
-        {/* Content — natural flow, parent scrolls */}
+        {/* Content - natural flow, parent scrolls */}
         {loading || primarySpecies === null ? (
           <div className="flex items-center justify-center py-16">
             <p className="text-slate-400 text-sm">Loading bird info…</p>

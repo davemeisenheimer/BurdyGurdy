@@ -188,7 +188,7 @@ export default function App() {
   }, [user]);
 
   // Auto sign-out after 30 minutes of inactivity.
-  // The check runs on every user interaction — if more than 30 minutes have
+  // The check runs on every user interaction - if more than 30 minutes have
   // passed since the last interaction, sign out and show the modal instead
   // of performing the action.  No visibility-change check needed.
   const INACTIVITY_MS = 30 * 60 * 1000;
@@ -201,7 +201,7 @@ export default function App() {
         if (Date.now() - last > INACTIVITY_MS) {
           performSignOut();
           setWasAutoSignedOut(true);
-          return; // don't update lastActivity — leave it stale until sign-in
+          return; // don't update lastActivity - leave it stale until sign-in
         }
       }
       if (!throttle) throttle = setTimeout(() => { touch(); throttle = null; }, 60_000);
@@ -252,7 +252,7 @@ export default function App() {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      // Switch DB first — all subsequent reads/writes go to the correct store.
+      // Switch DB first - all subsequent reads/writes go to the correct store.
       switchToUserDb(session?.user?.id ?? null);
       setUser(session?.user ?? null);
       // When a session appears (OAuth redirect back), merge cloud data
@@ -270,11 +270,11 @@ export default function App() {
             if (localCount > 0) setShowUploadPrompt(true);
           }
         }).catch(() => {});
-        // Capture now — prevAuthUserIdRef will be updated before the promise resolves.
+        // Capture now - prevAuthUserIdRef will be updated before the promise resolves.
         const isNewSignIn = event === 'SIGNED_IN' && prevAuthUserIdRef.current === null;
         downloadSettings(userId).then(remote => {
           if (remote) {
-            // Returning user with cloud settings — import prefs and skip the wizard.
+            // Returning user with cloud settings - import prefs and skip the wizard.
             localStorage.setItem('burdygurdy_onboarding_complete', '1');
             setShowOnboarding(false);
             const mergedSettings = { ...loadSettings(), ...remote.appSettings };
@@ -292,7 +292,7 @@ export default function App() {
             }));
             mergeVictorySeen(remote.victorySeen);
           } else if (isNewSignIn) {
-            // Brand-new user, no cloud settings anywhere — reset stale local prefs
+            // Brand-new user, no cloud settings anywhere - reset stale local prefs
             // (which may belong to a previous user on this device) and run the wizard.
             const freshSettings = resetUserSettings();
             setSettings(freshSettings);
@@ -302,7 +302,7 @@ export default function App() {
         downloadUserBlockedPhotos(userId).catch(() => {});
         fetchAdminBlockedMedia().catch(() => {});
         downloadRegionSnapshot(userId).then(snap => { if (snap) saveSnapshot(snap); }).catch(() => {});
-        // Send login notification only on a genuine new sign-in — i.e. the user
+        // Send login notification only on a genuine new sign-in - i.e. the user
         // was previously signed out.  Supabase also fires SIGNED_IN on silent
         // token refreshes (~hourly); checking prevAuthUserIdRef filters those out.
         if (event === 'SIGNED_IN' && prevAuthUserIdRef.current === null) {
@@ -323,7 +323,7 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Upload on hide, download on return — bridges activity on other devices/tabs.
+  // Upload on hide, download on return - bridges activity on other devices/tabs.
   // Only re-downloads if the tab was hidden for at least 60 seconds.
   useEffect(() => {
     if (!user) return;
@@ -358,7 +358,7 @@ export default function App() {
           });
         } catch { /* non-fatal */ }
       },
-      () => { /* user denied or unavailable — non-fatal */ },
+      () => { /* user denied or unavailable - non-fatal */ },
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -418,7 +418,7 @@ export default function App() {
       const snapshot = loadSnapshot();
       const snapshotMatches = snapshot?.regionCode === fullConfig.regionCode && snapshot?.back === back;
       if (!snapshotMatches) {
-        // First run or region/back changed — save baseline silently
+        // First run or region/back changed - save baseline silently
         const newSnap = buildSnapshot(fullConfig.regionCode, back, currentSpecies);
         saveSnapshot(newSnap);
         if (user) uploadRegionSnapshot(user.id, newSnap).catch(() => {});
@@ -865,7 +865,7 @@ export default function App() {
         />
       )}
 
-      {/* Upload local progress prompt — shown after a new registration */}
+      {/* Upload local progress prompt - shown after a new registration */}
       {showUploadPrompt && user && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center">
@@ -898,7 +898,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Mastery fact dialog — shown mid-quiz the first time a bird graduates in a round */}
+      {/* Mastery fact dialog - shown mid-quiz the first time a bird graduates in a round */}
       {masteryFactEvent && (
         <MasteryFactDialog
           event={masteryFactEvent}
@@ -947,7 +947,7 @@ export default function App() {
                 }}
                 className="flex-1 py-2.5 rounded-xl border border-slate-300 text-slate-600 font-medium text-sm hover:bg-slate-50 transition-colors"
               >
-                Cancel — turn off expiry
+                Cancel - turn off expiry
               </button>
               <button
                 onClick={async () => {

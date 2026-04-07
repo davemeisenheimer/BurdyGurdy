@@ -10,7 +10,7 @@
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LEARNING PALETTE — how many birds are in active rotation at once
+// LEARNING PALETTE - how many birds are in active rotation at once
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // The "palette" is the set of unmastered birds the quiz is currently teaching.
@@ -34,7 +34,7 @@ export const MAX_LEVEL_0_SIZE_THIRD  = 10;
 export const MAX_LEVEL_0_SIZE        = 12;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MASTERY PROGRESSION — streaks required to advance through levels
+// MASTERY PROGRESSION - streaks required to advance through levels
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // Each bird×questionType combination progresses through three levels (Easy →
@@ -53,13 +53,13 @@ export const MASTERY_ADVANCE_STREAK = 3;
 
 /**
  * Consecutive-correct streak required to graduate from Level 2 to Mastered.
- * Intentionally higher than MASTERY_ADVANCE_STREAK — the final step demands
+ * Intentionally higher than MASTERY_ADVANCE_STREAK - the final step demands
  * more sustained accuracy before a bird is considered learned.
  */
 export const GRADUATION_STREAK = 5;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STRUGGLING DETECTION — identifying birds that need extra attention
+// STRUGGLING DETECTION - identifying birds that need extra attention
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // Two independent "struggling" concepts are in play:
@@ -87,7 +87,7 @@ export const STRUGGLING_WINDOW = 10;
 export const STRUGGLING_MIN_CORRECT = 8;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// QUIZ SELECTION WEIGHTS — how likely each bird is to appear as a question
+// QUIZ SELECTION WEIGHTS - how likely each bird is to appear as a question
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // Every bird×questionType pair carries a numeric weight.  At question-pick
@@ -99,8 +99,8 @@ export const STRUGGLING_MIN_CORRECT = 8;
 //   Struggling non-mastered (palette × boost)      30.0   ← most urgent
 //   Active palette (unmastered, levels 0/1/2)       20.0
 //   Mastered-but-struggling (window accuracy < 80%)  20.0  ← back to palette
-//   Mastered non-struggling — recent sighting floor   3.0
-//   Mastered non-struggling — no recent sighting       1.0  ← rare review
+//   Mastered non-struggling - recent sighting floor   3.0
+//   Mastered non-struggling - no recent sighting       1.0  ← rare review
 //
 // Birds with no weight record (first encounter) are treated as NEW_ENCOUNTER_WEIGHT.
 
@@ -149,7 +149,7 @@ export const MASTERED_FLOOR_WEIGHT = 3;
 export const ACTIVE_PALETTE_MIN_WEIGHT = 5;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// QUESTION MIX GUARANTEE — ensuring enough "needs practice" questions per round
+// QUESTION MIX GUARANTEE - ensuring enough "needs practice" questions per round
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // Without a guarantee, a user who has mastered many birds could get a round
@@ -181,7 +181,7 @@ export const RECENT_UNMASTERED_RATIO = 0.67;
 export const UNMASTERED_FLOOR_RATIO = 0.5;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DISTRACTOR SELECTION — choosing wrong-answer options
+// DISTRACTOR SELECTION - choosing wrong-answer options
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -209,7 +209,7 @@ export const PALETTE_DISTRACTOR_WEIGHT = 10;
 export const DISTRACTOR_SIZE_CLASS_TOLERANCE = 1;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MASTERY EXPIRY — resetting mastered birds after prolonged inactivity
+// MASTERY EXPIRY - resetting mastered birds after prolonged inactivity
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // A bird mastered long ago and never encountered again may be forgotten.
@@ -221,7 +221,7 @@ export const DISTRACTOR_SIZE_CLASS_TOLERANCE = 1;
 export const EXPIRY_DAYS = 90;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// INFRASTRUCTURE CONSTANTS — not gameplay tuning but documented here for
+// INFRASTRUCTURE CONSTANTS - not gameplay tuning but documented here for
 // completeness
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -229,6 +229,6 @@ export const EXPIRY_DAYS = 90;
  * Xeno-canto audio-fetch batch size.  When pre-loading recordings for a quiz
  * round, requests are issued in groups of this size to avoid hammering the
  * xeno-canto API with 40+ simultaneous requests.
- * Not a gameplay tuning knob — change only if xeno-canto rate-limits the app.
+ * Not a gameplay tuning knob - change only if xeno-canto rate-limits the app.
  */
 export const XC_FETCH_BATCH_SIZE = 6;

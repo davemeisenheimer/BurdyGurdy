@@ -115,7 +115,7 @@ export function PhotoCurationPanel() {
       pendingUrlRef.current = null;
       doBlock(url, 'full');
     } else {
-      // First click — wait to see if double click arrives
+      // First click - wait to see if double click arrives
       if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
       pendingUrlRef.current = url;
       clickTimerRef.current = setTimeout(() => {
@@ -203,7 +203,7 @@ export function PhotoCurationPanel() {
                 )}
               </div>
 
-              {/* Scope indicator — updates to reflect last interaction */}
+              {/* Scope indicator - updates to reflect last interaction */}
               <div className="flex gap-2 mb-3">
                 {(['question', 'full'] as const).map(s => (
                   <div key={s} className={`flex-1 flex items-center justify-center gap-1.5 border rounded-lg px-2 py-1.5 text-xs select-none ${blockScope === s ? 'border-red-500 bg-red-50 text-red-700 font-medium' : 'border-slate-200 text-slate-400'}`}>
