@@ -27,7 +27,7 @@ import type { LocateResult } from './services/remote/api';
 import { db, switchToUserDb } from './lib/db';
 import { supabase } from './lib/supabase';
 import type { SupabaseUser } from './lib/supabase';
-import { uploadProgress, downloadAndMerge, uploadSettings, downloadSettings, downloadUserBlockedPhotos, deleteAllUserBlockedPhotos, uploadUserBlockedPhoto, submitMediaReport, fetchAdminBlockedMedia, deleteCloudProgressRecords, uploadRegionSnapshot, downloadRegionSnapshot } from './services/remote/sync';
+import { uploadProgress, downloadAndReplace, uploadSettings, downloadSettings, downloadUserBlockedPhotos, deleteAllUserBlockedPhotos, uploadUserBlockedPhoto, submitMediaReport, fetchAdminBlockedMedia, deleteCloudProgressRecords, uploadRegionSnapshot, downloadRegionSnapshot, getCloudUploadTime, getLocalSyncedAt, getNeedsUpload } from './services/remote/sync';
 import { checkBirdsToExpire, expireOldMasteredBirds } from './services/local/progress';
 import { getRegionSpecies } from './services/local/region';
 import { loadSnapshot, saveSnapshot, buildSnapshot, computeRegionUpdate } from './services/local/regionSnapshot';
@@ -37,6 +37,7 @@ import { computeStrugglingCount } from './lib/struggling';
 import { expandQuestionTypes } from './lib/questionTypes';
 import type { ReportErrorData } from './components/ui/ReportErrorModal';
 import { MasteryFactDialog } from './components/ui/MasteryFactDialog';
+import { CloudSyncOverlay } from './components/ui/CloudSyncOverlay';
 import type { LevelUpEvent } from './types';
 import { markNotificationsRead } from './lib/notifications';
 import { fetchFriendProgress, getReceivedPendingInvites } from './lib/friends';
@@ -114,6 +115,10 @@ export default function App() {
   const [friendProgressRecords, setFriendProgressRecords] = useState<BirdProgress[]>([]);
   const [friendProgressName, setFriendProgressName]       = useState('');
   const [hasPendingInvites, setHasPendingInvites]         = useState(false);
+  const [syncVersion, setSyncVersion]           = useState(0);
+  const [cloudSyncing, setCloudSyncing]         = useState(false);
+  const cloudSyncingRef = useRef(false);
+  const quizActiveRef   = useRef(false);
   const [masteryFactEvent, setMasteryFactEvent] = useState<LevelUpEvent | null>(null);
   const hasShownFactThisRoundRef = useRef(false);
   const prevGraduatedCountRef    = useRef(0);
@@ -177,8 +182,13 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.questionTypes, settings]);
 
-  // Keep userRef current so the inactivity closure always sees the latest value
-  useEffect(() => { userRef.current = user; }, [user]);
+  // Keep refs current so zero-dep closures (inactivity timer, visibility) always see latest values.
+  useEffect(() => { userRef.current         = user; },         [user]);
+  useEffect(() => { cloudSyncingRef.current = cloudSyncing; }, [cloudSyncing]);
+  useEffect(() => {
+    quizActiveRef.current = screen === 'quiz' && (state.status === 'active' || state.status === 'answered');
+  }, [screen, state.status]);
+
   // Clear the modal and reset the inactivity timer when the user signs back in
   useEffect(() => {
     if (user) {
@@ -187,21 +197,77 @@ export default function App() {
     }
   }, [user]);
 
+  // Stable helper: apply downloaded cloud settings/prefs into local state.
+  // Only uses stable React setters and module-level functions — safe to call
+  // from any closure regardless of capture time.
+  const applyCloudSettings = (remote: Awaited<ReturnType<typeof downloadSettings>>) => {
+    if (!remote) return;
+    const mergedSettings = { ...loadSettings(), ...remote.appSettings };
+    setSettings(mergedSettings);
+    saveSettings(mergedSettings);
+    const mergedPrefs = { ...loadQuizPrefs(), ...remote.quizPrefs };
+    saveQuizPrefs(mergedPrefs);
+    setConfig(c => ({
+      ...c,
+      ...(mergedPrefs.questionTypes     ? { questionTypes: mergedPrefs.questionTypes as QuizConfig['questionTypes'] } : {}),
+      ...(mergedPrefs.mode              ? { mode: mergedPrefs.mode as QuizConfig['mode'] }                           : {}),
+      ...(mergedPrefs.questionsPerRound != null ? { questionsPerRound: mergedPrefs.questionsPerRound }                : {}),
+      ...(mergedPrefs.regionCode        ? { regionCode: mergedPrefs.regionCode }                                     : {}),
+      ...(mergedPrefs.groupId           ? { groupId: mergedPrefs.groupId }                                           : {}),
+    }));
+    mergeVictorySeen(remote.victorySeen);
+  };
+
   // Auto sign-out after 30 minutes of inactivity.
   // The check runs on every user interaction - if more than 30 minutes have
   // passed since the last interaction, sign out and show the modal instead
   // of performing the action.  No visibility-change check needed.
+  //
+  // Also: after 60 s of inactivity check whether another device uploaded newer
+  // data. If so, abort any in-progress quiz and download-replace so this idle
+  // device mirrors the cloud without waiting for a visibility event.
   const INACTIVITY_MS = 30 * 60 * 1000;
+  const SYNC_IDLE_MS  = 60_000;
   useEffect(() => {
     const touch = () => localStorage.setItem(ACTIVITY_KEY, String(Date.now()));
     let throttle: ReturnType<typeof setTimeout> | null = null;
+
+    const doIdleSync = async () => {
+      const u = userRef.current;
+      if (!u || cloudSyncingRef.current) return;
+      try {
+        const cloudTs = await getCloudUploadTime(u.id).catch(() => null);
+        if (cloudTs !== null) {
+          const localTs = getLocalSyncedAt(u.id) ?? 0;
+          if (localTs < cloudTs) {
+            // Cloud is newer — abort quiz if active, then download.
+            if (quizActiveRef.current) setScreen('home');
+            setCloudSyncing(true);
+            try {
+              const count = await downloadAndReplace(u.id, cloudTs).catch(() => -1);
+              if (count > 0) {
+                setSyncVersion(v => v + 1);
+                downloadSettings(u.id).then(applyCloudSettings).catch(() => {});
+              }
+            } finally {
+              setCloudSyncing(false);
+            }
+          }
+        }
+      } catch { /* non-fatal */ }
+    };
+
     const onActivity = () => {
+      const last = Number(localStorage.getItem(ACTIVITY_KEY) ?? Date.now());
       if (userRef.current) {
-        const last = Number(localStorage.getItem(ACTIVITY_KEY) ?? Date.now());
         if (Date.now() - last > INACTIVITY_MS) {
           performSignOut();
           setWasAutoSignedOut(true);
           return; // don't update lastActivity - leave it stale until sign-in
+        }
+        // First interaction after 60 s of inactivity — check for updates from other devices.
+        if (Date.now() - last > SYNC_IDLE_MS) {
+          doIdleSync();
         }
       }
       if (!throttle) throttle = setTimeout(() => { touch(); throttle = null; }, 60_000);
@@ -215,6 +281,7 @@ export default function App() {
       document.removeEventListener('keydown',    onActivity);
       document.removeEventListener('touchstart', onActivity);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleQuizPrefsChange = (prefs: { questionTypes: QuizConfig['questionTypes']; mode: QuizConfig['mode']; questionsPerRound: number; groupId: string; regionCode: string }) => {
@@ -264,12 +331,31 @@ export default function App() {
           localStorage.removeItem('burdygurdy_news_opt_in');
           supabase.auth.updateUser({ data: { news_opt_in: true } }).catch(() => {});
         }
-        downloadAndMerge(userId).then(async remoteCount => {
-          if (remoteCount === 0) {
-            const localCount = await db.progress.count();
-            if (localCount > 0) setShowUploadPrompt(true);
+        (async () => {
+          const cloudTs = await getCloudUploadTime(userId).catch(() => null);
+          setCloudSyncing(true);
+          try {
+            // Pass cloudTs so downloadAndReplace stamps localSyncedAt internally.
+            const remoteCount = await downloadAndReplace(userId, cloudTs).catch(() => -1);
+            if (remoteCount > 0) {
+              setSyncVersion(v => v + 1);
+            } else if (remoteCount === 0) {
+              // No cloud records — offer to upload guest progress for the first user on this device
+              const localCount = await db.progress.count();
+              if (localCount > 0) {
+                const dbs = await indexedDB.databases().catch(() => [] as IDBDatabaseInfo[]);
+                const hasOtherAuth = dbs.some(
+                  d => d.name?.startsWith('BirdyGurdyDB-') &&
+                       d.name !== 'BirdyGurdyDB-guest' &&
+                       d.name !== `BirdyGurdyDB-${userId}`,
+                );
+                if (!hasOtherAuth) setShowUploadPrompt(true);
+              }
+            }
+          } finally {
+            setCloudSyncing(false);
           }
-        }).catch(() => {});
+        })().catch(() => {});
         // Capture now - prevAuthUserIdRef will be updated before the promise resolves.
         const isNewSignIn = event === 'SIGNED_IN' && prevAuthUserIdRef.current === null;
         downloadSettings(userId).then(remote => {
@@ -323,23 +409,62 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Upload on hide, download on return - bridges activity on other devices/tabs.
-  // Only re-downloads if the tab was hidden for at least 60 seconds.
+  // Smart cross-device sync on visibility changes.
+  //
+  // On hide: if this device is current (localSyncedAt >= cloudTs), upload.
+  //   If cloud is newer skip the upload — show handler will download on reactivation.
+  //   If cloud check fails, attempt the upload anyway (uploadProgress sets needsUpload on failure).
+  //
+  // On show: if cloud is newer than our last sync, abort any in-progress quiz,
+  //   download-replace, then refresh settings. Retry any pending upload otherwise.
   useEffect(() => {
     if (!user) return;
     const userId = user.id;
-    const REDOWNLOAD_AFTER_MS = 60_000;
+    const MIN_HIDDEN_MS = 5_000; // ignore brief tab switches
     let hiddenAt = 0;
-    const handleVisibility = () => {
-      if (document.visibilityState === 'hidden') {
-        hiddenAt = Date.now();
-        uploadProgress(userId).catch(() => {});
-      } else if (hiddenAt > 0 && Date.now() - hiddenAt >= REDOWNLOAD_AFTER_MS) {
-        hiddenAt = 0;
-        downloadAndMerge(userId).catch(() => {});
-      } else {
-        hiddenAt = 0;
+
+    const handleHide = async () => {
+      hiddenAt = Date.now();
+      const cloudTs = await getCloudUploadTime(userId).catch(() => null);
+      const localSyncedAt = getLocalSyncedAt(userId) ?? 0;
+      if (cloudTs === null || localSyncedAt >= cloudTs) {
+        // Can't check cloud, or we're current — upload (uploadProgress owns bookkeeping).
+        await uploadProgress(userId).catch(() => {});
       }
+      // If cloud is newer: skip upload so we don't overwrite a trim.
+    };
+
+    const handleShow = async () => {
+      if (hiddenAt > 0 && Date.now() - hiddenAt < MIN_HIDDEN_MS) { hiddenAt = 0; return; }
+      hiddenAt = 0;
+      const cloudTs = await getCloudUploadTime(userId).catch(() => null);
+      if (cloudTs !== null) {
+        const localSyncedAt = getLocalSyncedAt(userId) ?? 0;
+        if (localSyncedAt < cloudTs) {
+          // Cloud is newer — abort quiz if active, then download.
+          if (quizActiveRef.current) setScreen('home');
+          setCloudSyncing(true);
+          try {
+            const count = await downloadAndReplace(userId, cloudTs).catch(() => -1);
+            if (count > 0) {
+              setSyncVersion(v => v + 1);
+              downloadSettings(userId).then(applyCloudSettings).catch(() => {});
+              return;
+            }
+          } finally {
+            setCloudSyncing(false);
+          }
+        }
+      }
+      // Retry a pending upload (previous attempt failed or cloud check failed).
+      if (getNeedsUpload(userId)) {
+        await uploadProgress(userId).catch(() => {});
+      }
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') handleHide();
+      else handleShow();
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
@@ -376,7 +501,9 @@ export default function App() {
       })
       .catch(() => {});
     sessionRoundsRef.current += 1;
-    if (user && config.mode !== 'random') uploadProgress(user.id).catch(() => {});
+    if (user && config.mode !== 'random') {
+      uploadProgress(user.id).catch(() => {});
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.status]);
 
@@ -662,9 +789,11 @@ export default function App() {
           onSelectBird={isDesktop
             ? setProgressSelectedSpecies
             : s => { setProgressSelectedSpecies(s); setPrevScreen('progress'); setScreen('birdinfo'); }}
+          selectedSpeciesCode={isDesktop ? progressSelectedSpecies?.speciesCode : undefined}
           regionCode={config.regionCode}
           recentDays={config.recentDays ?? 30}
           onRecentProgress={() => { setRecentProgressBack('progress'); setScreen('recentprogress'); }}
+          syncKey={syncVersion}
         />
       )}
 
@@ -775,6 +904,7 @@ export default function App() {
           onSelectBird={isDesktop
             ? setProgressSelectedSpecies
             : s => { setProgressSelectedSpecies(s); setPrevScreen('recentprogress'); setScreen('birdinfo'); }}
+          selectedSpeciesCode={isDesktop ? progressSelectedSpecies?.speciesCode : undefined}
         />
       )}
 
@@ -831,6 +961,7 @@ export default function App() {
           showFocusModeToggle={false}
           onToggleFocusStruggling={() => {}}
           onSelectBird={isDesktop ? setProgressSelectedSpecies : s => { setProgressSelectedSpecies(s); setPrevScreen('friendprogress'); setScreen('birdinfo'); }}
+          selectedSpeciesCode={isDesktop ? progressSelectedSpecies?.speciesCode : undefined}
           regionCode={config.regionCode}
           recentDays={RECENT_DAYS[settings.recentWindow ?? 'month']}
           onRecentProgress={() => setScreen('friendrecentprogress')}
@@ -846,6 +977,7 @@ export default function App() {
           questionTypes={expandQuestionTypes(config.questionTypes, settings)}
           onBack={() => setScreen('friendprogress')}
           onSelectBird={isDesktop ? setProgressSelectedSpecies : s => { setProgressSelectedSpecies(s); setPrevScreen('friendrecentprogress'); setScreen('birdinfo'); }}
+          selectedSpeciesCode={isDesktop ? progressSelectedSpecies?.speciesCode : undefined}
           overrideRecords={friendProgressRecords}
           friendDisplayName={friendProgressName}
         />
@@ -856,11 +988,7 @@ export default function App() {
       {showAuth && (
         <AuthPanel
           onClose={() => setShowAuth(false)}
-          onSignIn={() => {
-            supabase.auth.getUser().then(({ data }) => {
-              if (data.user) downloadAndMerge(data.user.id).catch(() => {});
-            });
-          }}
+          onSignIn={() => {}}
           onSignUp={() => {}}
         />
       )}
@@ -876,7 +1004,7 @@ export default function App() {
             <div className="flex gap-3 justify-center">
               <button
                 onClick={async () => {
-                  await uploadProgress(user.id);
+                  await uploadProgress(user.id).catch(() => {});
                   await uploadSettings(user.id, settings, loadQuizPrefs(), getVictorySeen());
                   const blocked = await db.blockedPhotos.toArray();
                   await Promise.all(blocked.map(p => uploadUserBlockedPhoto(user.id, p.url)));
@@ -897,6 +1025,9 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Cloud sync overlay - blocks interaction while downloading from cloud */}
+      {cloudSyncing && <CloudSyncOverlay />}
 
       {/* Mastery fact dialog - shown mid-quiz the first time a bird graduates in a round */}
       {masteryFactEvent && (

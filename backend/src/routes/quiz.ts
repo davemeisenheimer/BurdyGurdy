@@ -24,6 +24,7 @@ export interface QuizQuestion {
   comName: string;
   sciName: string;
   familyComName: string;
+  familySciName?: string;
   order?: string;
   audioUrl?: string;
   audioTracks?: { audioUrl: string; sonoUrl?: string }[];
@@ -449,8 +450,9 @@ router.post('/questions', async (req, res) => {
           speciesCode: species.speciesCode,
           comName: species.comName,
           sciName: species.sciName,
-          familyComName: species.tax!.familyComName,
-          order: species.tax!.order,
+          familyComName:  species.tax!.familyComName,
+          familySciName:  species.tax!.familySciName,
+          order:          species.tax!.order,
           options,
           correctAnswer,
         };

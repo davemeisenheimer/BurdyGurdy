@@ -17,9 +17,12 @@ interface Props {
   showFocusModeToggle?: boolean;
   onToggleFocusStruggling?: () => void;
   onSelectBird?: (species: { speciesCode: string; comName: string }) => void;
+  selectedSpeciesCode?: string;
   regionCode?: string;
   recentDays?: number;
   onRecentProgress?: () => void;
+  /** Increment to force a data reload (e.g. after a background cloud sync). */
+  syncKey?: number;
   /** When provided, renders a read-only view of a friend's progress instead of local DB data. */
   overrideRecords?: BirdProgress[];
   /** Display name shown in the header when viewing a friend's list. */
@@ -71,7 +74,7 @@ function getGroupLabel(bird: BirdSummary, viewRecord: BirdProgress | null, typeF
   return MASTERY_LABELS[maxMastery] ?? 'Hard';
 }
 
-export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggling, showFocusModeToggle, onToggleFocusStruggling, onSelectBird, regionCode, recentDays, onRecentProgress, overrideRecords, friendDisplayName }: Props) {
+export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggling, showFocusModeToggle, onToggleFocusStruggling, onSelectBird, selectedSpeciesCode, regionCode, recentDays, onRecentProgress, syncKey, overrideRecords, friendDisplayName }: Props) {
   const readOnly = overrideRecords !== undefined;
   const [birds, setBirds]               = useState<BirdSummary[]>([]);
   const [filter, setFilter]             = useState<Filter>('learning');
@@ -148,7 +151,8 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
       setBirds(summaries);
       setLoading(false);
     });
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncKey]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -508,9 +512,13 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
             return (<Fragment key={bird.speciesCode}>
               {groupHeader}
               <div
-                className={`bg-white rounded-xl border p-4 ${
-                  bird.excluded ? 'border-red-200 opacity-75' : 'border-slate-200'
-                } ${onSelectBird ? 'cursor-pointer hover:border-sky-300 hover:shadow-sm transition-shadow' : ''}`}
+                className={`rounded-xl border p-4 transition-shadow ${
+                  bird.excluded
+                    ? 'bg-white border-red-200 opacity-75'
+                    : bird.speciesCode === selectedSpeciesCode
+                      ? 'bg-sky-50 border-sky-400 shadow-sm'
+                      : 'bg-white border-slate-200'
+                } ${onSelectBird ? 'cursor-pointer hover:border-sky-300 hover:shadow-sm' : ''}`}
                 onClick={onSelectBird ? () => onSelectBird({ speciesCode: bird.speciesCode, comName: bird.comName }) : undefined}
               >
               <div className="flex items-start justify-between mb-2">

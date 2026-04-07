@@ -56,6 +56,7 @@ export interface QuizQuestion {
   comName: string;
   sciName: string;
   familyComName: string;
+  familySciName?: string;
   order?: string;
   audioUrl?: string;
   audioTracks?: { audioUrl: string; sonoUrl?: string }[];
@@ -82,8 +83,9 @@ export interface LevelUpEvent {
   speciesCode: string;
   comName: string;
   questionType: QuestionType;
-  newLevel: number;   // 1, 2, or 3 where 3 = graduated to mastered
-  graduated: boolean; // true when isMastered becomes true
+  newLevel: number;    // 1, 2, or 3 where 3 = graduated to mastered
+  graduated: boolean;  // true when isMastered becomes true
+  familySciName?: string;
 }
 
 /** Fired when a mastered bird's rolling window crosses back to ≥ 80% correct. */

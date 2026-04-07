@@ -11,36 +11,90 @@ import type { AppSettings, QuizConfigPrefs } from '../../lib/settings';
 
 // ── Upload ────────────────────────────────────────────────────────────────────
 
-/** Upserts all local progress records to the cloud for the given user.
- *  Skips seeded-but-never-played records (lastAsked === 0) - these are
- *  palette placeholders and uploading them would corrupt cloud progress
- *  from other devices. */
-export async function uploadProgress(userId: string): Promise<void> {
+// ── Per-user localStorage sync state ─────────────────────────────────────────
+
+const syncedAtKey  = (uid: string) => `birdygurdy_synced_at_${uid}`;
+const needsUpKey   = (uid: string) => `birdygurdy_needs_upload_${uid}`;
+
+/** Timestamp (ms) of the last time this device either uploaded or confirmed it
+ *  matched the cloud. Persisted per user so it survives page reloads. */
+export function getLocalSyncedAt(userId: string): number | null {
+  const v = localStorage.getItem(syncedAtKey(userId));
+  return v ? Number(v) : null;
+}
+function setLocalSyncedAt(userId: string, ts: number): void {
+  localStorage.setItem(syncedAtKey(userId), String(ts));
+}
+
+/** True when the last upload attempt failed and a retry is pending. */
+export function getNeedsUpload(userId: string): boolean {
+  return localStorage.getItem(needsUpKey(userId)) === '1';
+}
+function setNeedsUpload(userId: string, val: boolean): void {
+  if (val) localStorage.setItem(needsUpKey(userId), '1');
+  else     localStorage.removeItem(needsUpKey(userId));
+}
+
+/**
+ * Upserts all local progress records to the cloud for the given user.
+ * Skips seeded-but-never-played records (lastAsked === 0) - these are
+ * palette placeholders and uploading them would corrupt cloud progress
+ * from other devices.
+ *
+ * On success: stamps last_upload_at in the cloud AND updates localSyncedAt /
+ * needsUpload in localStorage so they are always kept in sync with the upload.
+ * These localStorage helpers are intentionally private to this module — all
+ * callers go through this function so the coupling can never be broken.
+ *
+ * Returns true on success, false on failure.
+ */
+export async function uploadProgress(userId: string): Promise<boolean> {
   const records = (await db.progress.toArray()).filter(r => r.lastAsked > 0);
-  if (records.length === 0) return;
 
-  const rows = records.map(r => ({
-    user_id:             userId,
-    species_code:        r.speciesCode,
-    question_type:       r.questionType,
-    com_name:            r.comName,
-    correct:             r.correct,
-    incorrect:           r.incorrect,
-    last_asked:          r.lastAsked,
-    weight:              r.weight,
-    favourited:          r.favourited  ?? false,
-    excluded:            r.excluded    ?? false,
-    mastery_level:       r.masteryLevel       ?? 0,
-    consecutive_correct: r.consecutiveCorrect ?? 0,
-    in_history:          r.isMastered  ?? false,
-    recent_answers:      r.recentAnswers      ?? null,
-  }));
+  if (records.length > 0) {
+    const rows = records.map(r => ({
+      user_id:             userId,
+      species_code:        r.speciesCode,
+      question_type:       r.questionType,
+      com_name:            r.comName,
+      correct:             r.correct,
+      incorrect:           r.incorrect,
+      last_asked:          r.lastAsked,
+      weight:              r.weight,
+      favourited:          r.favourited  ?? false,
+      excluded:            r.excluded    ?? false,
+      mastery_level:       r.masteryLevel       ?? 0,
+      consecutive_correct: r.consecutiveCorrect ?? 0,
+      in_history:          r.isMastered  ?? false,
+      recent_answers:      r.recentAnswers      ?? null,
+    }));
 
-  const { error } = await supabase
-    .from('bird_progress')
-    .upsert(rows, { onConflict: 'user_id,species_code,question_type' });
+    const { error } = await supabase
+      .from('bird_progress')
+      .upsert(rows, { onConflict: 'user_id,species_code,question_type' });
 
-  if (error) console.warn('sync: upload failed:', error.message);
+    if (error) {
+      console.warn('sync: upload failed:', error.message);
+      setNeedsUpload(userId, true);
+      return false;
+    }
+  }
+
+  // Stamp last_upload_at so other devices detect this upload on reactivation.
+  // Uses UPDATE (not upsert) to avoid creating a partial row; uploadSettings
+  // creates the full row on first sign-in.
+  const ts = Date.now();
+  const { error: tsErr } = await supabase
+    .from('user_settings')
+    .update({ last_upload_at: new Date(ts).toISOString(), updated_at: new Date(ts).toISOString() })
+    .eq('user_id', userId);
+  if (tsErr) console.warn('sync: last_upload_at stamp failed:', tsErr.message);
+  // tsErr is non-fatal: no row yet means uploadSettings hasn't run — it will set last_upload_at when it does.
+
+  // Always use the same timestamp we wrote to the cloud, not Date.now() called later.
+  setLocalSyncedAt(userId, ts);
+  setNeedsUpload(userId, false);
+  return true;
 }
 
 // ── Download & merge ──────────────────────────────────────────────────────────
@@ -122,6 +176,101 @@ export async function downloadAndMerge(userId: string): Promise<number> {
   return data.length;
 }
 
+// ── Smart sync helpers ────────────────────────────────────────────────────────
+
+/** Returns the timestamp (ms) of the most recent upload stored in the cloud,
+ *  or null if unreachable / no row exists yet. */
+export async function getCloudUploadTime(userId: string): Promise<number | null> {
+  const { data, error } = await supabase
+    .from('user_settings')
+    .select('last_upload_at')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error || !data?.last_upload_at) return null;
+  return new Date(data.last_upload_at as string).getTime();
+}
+
+/**
+ * Downloads all cloud records for the user and REPLACES local IndexedDB with
+ * them — adding/updating records that exist in the cloud and deleting local
+ * records that the cloud no longer has.  Local-only fields (masteredAt,
+ * noAudio) are preserved where the record still exists in both.
+ *
+ * cloudTs: the last_upload_at timestamp already fetched from the cloud (passed
+ * in to avoid a second round-trip). On success, localSyncedAt is stamped with
+ * this value so the caller never needs to touch localStorage directly.
+ *
+ * Returns the number of cloud records (> 0), 0 if cloud has no records
+ * (safe no-op — local is untouched), or -1 on network error.
+ */
+export async function downloadAndReplace(userId: string, cloudTs: number | null): Promise<number> {
+  const { data, error } = await supabase
+    .from('bird_progress')
+    .select('*')
+    .eq('user_id', userId);
+
+  if (error || !data) {
+    console.warn('sync: downloadAndReplace failed:', error?.message);
+    return -1;
+  }
+  if (data.length === 0) return 0; // no cloud records — don't wipe local
+
+  const local = await db.progress.toArray();
+  const localByKey = new Map(local.map(r => [`${r.speciesCode}|${r.questionType}`, r]));
+  const cloudKeys  = new Set(data.map(r => `${r.species_code}|${r.question_type}`));
+
+  // Delete local records that are absent from the cloud (trimmed on another device)
+  const toDelete = local
+    .filter(r => !cloudKeys.has(`${r.speciesCode}|${r.questionType}`))
+    .map(r => [r.speciesCode, r.questionType] as [string, string]);
+  if (toDelete.length > 0) {
+    await db.progress
+      .where('[speciesCode+questionType]')
+      .anyOf(toDelete)
+      .delete();
+  }
+
+  // Upsert all cloud records, preserving local-only fields where they exist
+  const records: BirdProgress[] = data.map(remote => {
+    const existing = localByKey.get(`${remote.species_code}|${remote.question_type}`);
+    const record: BirdProgress = {
+      speciesCode:        remote.species_code,
+      questionType:       remote.question_type,
+      comName:            remote.com_name,
+      correct:            remote.correct,
+      incorrect:          remote.incorrect,
+      lastAsked:          remote.last_asked,
+      weight:             remote.weight,
+      favourited:         remote.favourited,
+      excluded:           remote.excluded,
+      masteryLevel:       remote.mastery_level,
+      consecutiveCorrect: remote.consecutive_correct,
+      isMastered:         remote.in_history,
+      recentAnswers:      remote.recent_answers ?? existing?.recentAnswers ?? null,
+      masteredAt:         existing?.masteredAt,
+      noAudio:            existing?.noAudio,
+    };
+    if (record.isMastered && !record.recentAnswers) {
+      const total = record.correct + record.incorrect;
+      const accuracy = total > 0 ? record.correct / total : 1;
+      const correctCount = Math.round(accuracy * STRUGGLING_WINDOW);
+      record.recentAnswers = [
+        ...Array(STRUGGLING_WINDOW - correctCount).fill(false),
+        ...Array(correctCount).fill(true),
+      ];
+    }
+    return record;
+  });
+
+  await db.progress.bulkPut(records);
+
+  // Stamp local sync state so callers never need to touch localStorage.
+  if (cloudTs !== null) setLocalSyncedAt(userId, cloudTs);
+  setNeedsUpload(userId, false);
+
+  return data.length;
+}
+
 // ── Settings ──────────────────────────────────────────────────────────────────
 
 export async function uploadSettings(
@@ -130,14 +279,16 @@ export async function uploadSettings(
   quizPrefs: QuizConfigPrefs,
   victorySeen: string[],
 ): Promise<void> {
+  const now = new Date().toISOString();
   const { error } = await supabase
     .from('user_settings')
     .upsert({
-      user_id:      userId,
-      app_settings: appSettings,
-      quiz_prefs:   quizPrefs,
-      victory_seen: victorySeen,
-      updated_at:   new Date().toISOString(),
+      user_id:        userId,
+      app_settings:   appSettings,
+      quiz_prefs:     quizPrefs,
+      victory_seen:   victorySeen,
+      updated_at:     now,
+      last_upload_at: now,
     }, { onConflict: 'user_id' });
   if (error) console.warn('sync: settings upload failed:', error.message);
 }

@@ -24,6 +24,7 @@ export async function recordAnswer(
   correct: boolean,
   comName: string,
   initialMasteryLevel = 0,
+  familySciName?: string,
 ): Promise<RecordAnswerResult> {
   const existing = await db.progress.get([speciesCode, questionType]);
   const { newState, advancedFromLevel0, levelUp, noLongerStruggling, updatedMastery } = applyAnswer(
@@ -33,6 +34,7 @@ export async function recordAnswer(
     comName,
     questionType,
     initialMasteryLevel,
+    familySciName,
   );
 
   const now = Date.now();
@@ -210,6 +212,7 @@ export function buildNoAudioGraduation(
   comName: string,
   existing: BirdProgress | null,
   now: number,
+  familySciName?: string,
 ): {
   record: BirdProgress;
   levelUp: LevelUpEvent;
@@ -234,7 +237,7 @@ export function buildNoAudioGraduation(
   };
   return {
     record,
-    levelUp: { speciesCode, comName, questionType, newLevel: 3, graduated: true },
+    levelUp: { speciesCode, comName, questionType, newLevel: 3, graduated: true, familySciName },
     updatedMastery: {
       masteryLevel:       record.masteryLevel,
       consecutiveCorrect: record.consecutiveCorrect,
@@ -249,13 +252,14 @@ export async function graduateNoAudio(
   speciesCode: string,
   questionType: QuestionType,
   comName: string,
+  familySciName?: string,
 ): Promise<{
   levelUp: LevelUpEvent;
   updatedMastery: { masteryLevel: number; consecutiveCorrect: number; isMastered: boolean; correct: number; incorrect: number };
 }> {
   const existing = await db.progress.get([speciesCode, questionType]);
   const { record, levelUp, updatedMastery } = buildNoAudioGraduation(
-    speciesCode, questionType, comName, existing ?? null, Date.now(),
+    speciesCode, questionType, comName, existing ?? null, Date.now(), familySciName,
   );
   await db.progress.put(record);
   return { levelUp, updatedMastery };

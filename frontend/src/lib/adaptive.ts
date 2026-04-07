@@ -98,6 +98,7 @@ export function applyAnswer(
   comName: string,
   questionType: QuestionType,
   initialMasteryLevel = 0,
+  familySciName?: string,
 ): RecordAnswerResult & { newState: ExistingProgressState & { weight: number } } {
   // ── First encounter ───────────────────────────────────────────────────────
   if (!existing) {
@@ -142,12 +143,12 @@ export function applyAnswer(
       newMastery++;
       newStreak = 0;
       if (prevMastery === 0 && newMastery === 1) advancedFromLevel0 = true;
-      levelUp = { speciesCode, comName, questionType, newLevel: newMastery, graduated: false };
+      levelUp = { speciesCode, comName, questionType, newLevel: newMastery, graduated: false, familySciName };
     } else if (newMastery >= 2 && newStreak >= GRADUATION_STREAK && !newInHistory) {
       // Graduation: seed recentAnswers with 10/10 (clean slate - not yet struggling).
       newInHistory     = true;
       newRecentAnswers = Array(STRUGGLING_WINDOW).fill(true) as boolean[];
-      levelUp = { speciesCode, comName, questionType, newLevel: 3, graduated: true };
+      levelUp = { speciesCode, comName, questionType, newLevel: 3, graduated: true, familySciName };
     }
   } else {
     newStreak = 0;

@@ -1,6 +1,6 @@
 {
   "name": "birdygurdy-frontend",
-  "version": "0.5.03",
+  "version": "0.5.04",
   "type": "module",
   "scripts": {
     "dev": "vite",
