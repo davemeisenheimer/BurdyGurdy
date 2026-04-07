@@ -94,6 +94,7 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
     const audio = audioRef.current;
     if (!audio) return;
     const failedUrl = allTracks[trackIndexRef.current]?.audioUrl;
+    console.warn(`[AudioPlayer] track failed (retryKey=${retryKey}): ${failedUrl}`, audio.error);
     if (DEV_LOG_AUDIO_ERRORS) {
       console.warn(`[AudioPlayer] track failed: ${failedUrl}`);
     }
@@ -105,6 +106,7 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
       setActiveSonoUrl(next.sonoUrl);
       audio.play().catch(() => {});
     } else {
+      console.warn(`[AudioPlayer] all ${allTracks.length} track(s) failed — showing "Audio unavailable"`, allTracks.map(t => t.audioUrl));
       if (DEV_LOG_AUDIO_ERRORS) {
         console.warn(`[AudioPlayer] all ${allTracks.length} track(s) failed for question — showing "Audio unavailable"`, allTracks.map(t => t.audioUrl));
       }
@@ -116,6 +118,7 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
   const handleRetry = () => {
     // Increment retryKey to unmount/remount the <audio> element, clearing any stuck
     // iOS audio session state.  The retryKey useEffect re-wires src + play after mount.
+    console.warn(`[AudioPlayer] retry #${retryKey + 1} — urls:`, allTracks.map(t => t.audioUrl));
     setAudioError(false);
     setPlaying(false);
     setSonoLoaded(false);
@@ -130,7 +133,7 @@ export function AudioPlayer({ url, tracks, sonoUrl, onAudioUnavailable }: Props)
     if (playing) {
       audio.pause();
     } else {
-      audio.play().catch(() => { setAudioError(true); onAudioUnavailable?.(); });
+      audio.play().catch((err) => { console.warn('[AudioPlayer] play() rejected:', err); setAudioError(true); onAudioUnavailable?.(); });
     }
   };
 

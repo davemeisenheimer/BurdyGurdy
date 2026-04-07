@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 
-export type ReportIssueType = 'wrong_bird' | 'poor_quality' | 'confusing' | 'other';
+export type ReportIssueType = 'wrong_bird' | 'poor_quality' | 'confusing' | 'nest' | 'egg' | 'other';
 
 export interface ReportErrorData {
   issueType:   ReportIssueType;
@@ -19,6 +19,8 @@ interface Props {
 const ISSUE_LABELS: Record<ReportIssueType, string> = {
   wrong_bird:   'Wrong bird — this media shows a different species',
   poor_quality: 'Poor quality — too blurry, noisy, or unclear',
+  nest:         'Nest — this photo shows a nest, not the bird',
+  egg:          'Egg — this photo shows an egg, not the bird',
   confusing:    'Confusing — unfair or misleading for a question',
   other:        'Other',
 };
@@ -83,7 +85,7 @@ export function ReportErrorModal({ mediaType, mediaUrl, comName, onSubmit, onClo
 
         {/* Issue type */}
         <div className="space-y-2.5 mb-4">
-          {(['wrong_bird', 'poor_quality', 'confusing', 'other'] as ReportIssueType[]).map(type => (
+          {(['wrong_bird', 'poor_quality', 'nest', 'egg', 'confusing', 'other'] as ReportIssueType[]).map(type => (
             <label key={type} className="flex items-start gap-2.5 cursor-pointer">
               <input
                 type="radio"

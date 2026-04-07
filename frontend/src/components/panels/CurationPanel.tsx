@@ -21,7 +21,7 @@ function detectService(url: string): string {
 
 const ISSUE_LABELS: Record<string, string> = {
   wrong_bird: 'Wrong bird', poor_quality: 'Poor quality',
-  confusing: 'Confusing', other: 'Other',
+  confusing: 'Confusing', nest: 'Nest', egg: 'Egg', other: 'Other',
 };
 
 function IssueBadge({ type }: { type: string }) {
@@ -29,6 +29,8 @@ function IssueBadge({ type }: { type: string }) {
     wrong_bird: 'bg-red-100 text-red-700',
     poor_quality: 'bg-amber-100 text-amber-700',
     confusing: 'bg-purple-100 text-purple-700',
+    nest: 'bg-green-100 text-green-700',
+    egg: 'bg-yellow-100 text-yellow-700',
     other: 'bg-slate-100 text-slate-600',
   };
   return (

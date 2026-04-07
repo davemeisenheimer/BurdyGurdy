@@ -49,11 +49,11 @@ const ACTIVITY_KEY = 'lastActivity';
 
 const DEFAULT_CONFIG: QuizConfig = {
   regionCode: 'CA-ON-OT',
-  questionTypes: ['song', 'image', 'family'],
+  questionTypes: ['image'],
   mode: 'adaptive',
-  questionsPerRound: 10,
+  questionsPerRound: 5,
   groupId: 'all',
-  recentDays: 30,
+  recentDays: 1,
 };
 
 // Capture the invite token from the URL into sessionStorage so it survives

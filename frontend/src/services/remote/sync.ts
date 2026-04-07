@@ -5,6 +5,7 @@
  */
 import { supabase } from '../../lib/supabase';
 import { db } from '../../lib/db';
+import { STRUGGLING_WINDOW } from '../../lib/struggling';
 import type { BirdProgress } from '../../types';
 import type { AppSettings, QuizConfigPrefs } from '../../lib/settings';
 
@@ -100,6 +101,19 @@ export async function downloadAndMerge(userId: string): Promise<number> {
           isMastered:         remote.in_history,
           recentAnswers:      remote.recent_answers ?? local?.recentAnswers,
         };
+        // Seed recentAnswers for mastered records that are missing a window.
+        // This happens when a cloud record was uploaded before the feature existed,
+        // or when the record arrives on a fresh device before local v9 migration had
+        // anything to seed.  Mirrors the v9 DB migration's backfill logic.
+        if (record.isMastered && !record.recentAnswers) {
+          const total = record.correct + record.incorrect;
+          const accuracy = total > 0 ? record.correct / total : 1;
+          const correctCount = Math.round(accuracy * STRUGGLING_WINDOW);
+          record.recentAnswers = [
+            ...Array(STRUGGLING_WINDOW - correctCount).fill(false),
+            ...Array(correctCount).fill(true),
+          ];
+        }
         await db.progress.put(record);
       }
     }),
@@ -180,7 +194,7 @@ export interface SubmitReportParams {
   service:     string | null;
   speciesCode: string;
   comName:     string;
-  issueType:   'wrong_bird' | 'poor_quality' | 'confusing' | 'other';
+  issueType:   'wrong_bird' | 'poor_quality' | 'confusing' | 'nest' | 'egg' | 'other';
   wrongBird:   string | null;
   description: string | null;
 }

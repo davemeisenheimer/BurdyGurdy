@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, Fragment } from 'react';
 import { db } from '../../lib/db';
 import { setExcluded } from '../../services/local/progress';
 import { getRegionSpecies } from '../../services/local/region';
-import { isStrugglingByWindow } from '../../lib/struggling';
+import { isStrugglingByWindow, STRUGGLING_WINDOW } from '../../lib/struggling';
 import { MASTERY_LABELS, masteryBadgeClass } from '../../lib/mastery';
 import { MasteryBadge } from '../ui/MasteryBadge';
 import { FocusModeToggle } from '../ui/FocusModeToggle';
@@ -124,11 +124,11 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
 
         const totalCorrect  = askedRecs.reduce((s, r) => s + r.correct, 0);
         const totalAttempts = askedRecs.reduce((s, r) => s + r.correct + r.incorrect, 0);
-        const recentWindows = askedRecs
-          .filter(r => (r.isMastered ?? false) && r.recentAnswers && r.recentAnswers.length > 0)
-          .flatMap(r => r.recentAnswers!);
-        const recentAccuracy = recentWindows.length > 0
-          ? recentWindows.filter(Boolean).length / recentWindows.length
+        const masteredWindowRecs = askedRecs.filter(
+          r => (r.isMastered ?? false) && r.recentAnswers && r.recentAnswers.length >= STRUGGLING_WINDOW,
+        );
+        const recentAccuracy = masteredWindowRecs.length > 0
+          ? Math.min(...masteredWindowRecs.map(r => r.recentAnswers!.filter(Boolean).length / r.recentAnswers!.length))
           : null;
         summaries.push({
           speciesCode,
