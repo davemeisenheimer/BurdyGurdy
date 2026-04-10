@@ -89,7 +89,7 @@ export async function uploadProgress(userId: string): Promise<boolean> {
     .update({ last_upload_at: new Date(ts).toISOString(), updated_at: new Date(ts).toISOString() })
     .eq('user_id', userId);
   if (tsErr) console.warn('sync: last_upload_at stamp failed:', tsErr.message);
-  // tsErr is non-fatal: no row yet means uploadSettings hasn't run — it will set last_upload_at when it does.
+  // tsErr is non-fatal: no row yet means the user_settings row doesn't exist — uploadSettings will create it.
 
   // Always use the same timestamp we wrote to the cloud, not Date.now() called later.
   setLocalSyncedAt(userId, ts);
@@ -283,12 +283,14 @@ export async function uploadSettings(
   const { error } = await supabase
     .from('user_settings')
     .upsert({
-      user_id:        userId,
-      app_settings:   appSettings,
-      quiz_prefs:     quizPrefs,
-      victory_seen:   victorySeen,
-      updated_at:     now,
-      last_upload_at: now,
+      user_id:      userId,
+      app_settings: appSettings,
+      quiz_prefs:   quizPrefs,
+      victory_seen: victorySeen,
+      updated_at:   now,
+      // last_upload_at is intentionally NOT set here — it tracks progress sync
+      // only (uploadProgress owns it). Settings uploads must not advance that
+      // clock or they'll trigger spurious download-and-replace on the same device.
     }, { onConflict: 'user_id' });
   if (error) console.warn('sync: settings upload failed:', error.message);
 }
