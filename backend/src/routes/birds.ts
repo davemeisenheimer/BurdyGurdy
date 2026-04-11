@@ -5,7 +5,7 @@ import { getRecordings } from '../services/xenocanto';
 import { getSpeciesPhotoUrl, getSpeciesPhotoUrls, getSpeciesPhotoUrlsForQuestion } from '../services/macaulay';
 import { getWikipediaSummary, getWikipediaRangeMap, getWikipediaRangeMapLegend, getWikipediaPhotos } from '../services/wikipedia';
 import { cache } from '../cache';
-import { BACKYARD_FAMILIES } from '../constants';
+import { BACKYARD_FAMILIES, ORDER_COMMON_NAMES } from '../constants';
 import { filterObservationsToKnownSpecies } from '../lib/speciesFilter';
 
 const router = Router();
@@ -54,6 +54,7 @@ router.get('/region/:regionCode', async (req, res) => {
           familyComName: tax?.familyComName ?? '',
           familySciName: tax?.familySciName ?? '',
           order: tax?.order ?? '',
+          orderComName: ORDER_COMMON_NAMES[tax?.order ?? ''],
           isBackyard: BACKYARD_FAMILIES.has(tax?.familySciName ?? ''),
           commonRank: commonRank.get(obs.speciesCode) ?? 9999,
           isHistorical: false,

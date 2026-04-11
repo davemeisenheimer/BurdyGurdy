@@ -28,8 +28,17 @@ export function SpeciesTaxonomyCard({ sp, conservationStatus }: Props) {
       <h2 className="text-2xl font-bold text-slate-900 leading-tight">{sp.comName}</h2>
       <p className="text-base italic text-slate-500">{sp.sciName}</p>
       <div className="flex flex-wrap items-center gap-1 pt-1 text-xs text-slate-500">
-        <span className="bg-slate-100 px-2 py-0.5 rounded-full">Family: {sp.familyComName}</span>
+        <span className="bg-slate-100 px-2 py-0.5 rounded-full">
+          Family: {sp.familyComName}{sp.familySciName ? <span className="italic"> ({sp.familySciName})</span> : null}
+        </span>
       </div>
+      {(sp.order || sp.orderComName) && (
+        <div className="flex flex-wrap items-center gap-1 text-xs text-slate-500">
+          <span className="bg-slate-100 px-2 py-0.5 rounded-full">
+            Order: {sp.orderComName ?? sp.order}{sp.orderComName && sp.order ? <span className="italic"> ({sp.order})</span> : null}
+          </span>
+        </div>
+      )}
       {cs && csLabel && csColor && (
         <div className="pt-1">
           <span className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full ${csColor}`}>

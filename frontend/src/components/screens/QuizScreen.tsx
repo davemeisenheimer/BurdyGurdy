@@ -318,13 +318,13 @@ export function QuizScreen({
                   </span>
                 )}
                 {stimType === 'family' && (
-                  <span className="text-xl text-slate-700 text-center px-2">
-                    {question.familyComName}
+                  <span className={`text-xl text-slate-700 text-center px-2${question.promptLatinName ? ' italic' : ''}`}>
+                    {question.promptLatinName ? question.familySciName : question.familyComName}
                   </span>
                 )}
                 {stimType === 'order' && (
-                  <span className="text-xl text-slate-700 text-center px-2">
-                    {question.order}
+                  <span className={`text-xl text-slate-700 text-center px-2${question.promptLatinName ? ' italic' : ''}`}>
+                    {question.promptLatinName ? question.order : (question.orderComName ?? question.order)}
                   </span>
                 )}
               </div>

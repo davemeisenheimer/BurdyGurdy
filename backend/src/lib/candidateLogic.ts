@@ -15,7 +15,7 @@ export interface PoolSpecies {
   speciesCode: string;
   comName: string;
   sciName: string;
-  tax: { familySciName: string; familyComName: string; order: string } | undefined;
+  tax: { familySciName: string; familyComName: string; order: string; orderComName?: string } | undefined;
 }
 
 export interface Candidate {

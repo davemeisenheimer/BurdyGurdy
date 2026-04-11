@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { getTaxonomy, getRegionalSpecies, getCommonSpeciesCodes, getBackyardSpeciesRanking, getSpeciesList } from '../services/ebird';
 import { getRecordings } from '../services/xenocanto';
 import { getSpeciesPhotoUrl } from '../services/macaulay';
-import { BACKYARD_FAMILIES, GROUP_ORDERS } from '../constants';
+import { BACKYARD_FAMILIES, GROUP_ORDERS, ORDER_COMMON_NAMES } from '../constants';
 import {
   PALETTE_DISTRACTOR_WEIGHT, RECENT_UNMASTERED_RATIO, XC_FETCH_BATCH_SIZE,
 } from '@birdygurdy/shared';
@@ -26,6 +26,8 @@ export interface QuizQuestion {
   familyComName: string;
   familySciName?: string;
   order?: string;
+  orderComName?: string;
+  promptLatinName?: boolean;
   audioUrl?: string;
   audioTracks?: { audioUrl: string; sonoUrl?: string }[];
   sonoUrl?: string;
@@ -364,7 +366,7 @@ router.post('/questions', async (req, res) => {
           speciesCode: code,
           comName: tax.comName,
           sciName: tax.sciName,
-          tax: { familySciName: tax.familySciName, familyComName: tax.familyComName, order: tax.order },
+          tax: { familySciName: tax.familySciName, familyComName: tax.familyComName, order: tax.order, orderComName: ORDER_COMMON_NAMES[tax.order] },
         } as PoolSpecies;
       })
       .filter(s => groupOrders.length === 0 || groupOrders.includes(s.tax!.order));
@@ -420,11 +422,19 @@ router.post('/questions', async (req, res) => {
         const masteryKey   = `${species.speciesCode}:${type}`;
         const masteryLevel = (masteryLevels as Record<string, number>)[masteryKey] ?? 0;
 
-        const distractorSpecies = selectDistractors(species, filteredPool, masteryLevel, 3, paletteCodes);
+        // For order/family questions, distractors must come from a different order/family —
+        // otherwise multiple answer options would be correct.
+        const distractorPool = type === 'order'
+          ? filteredPool.filter(s => s.tax?.order !== species.tax!.order)
+          : (type === 'family' || type === 'family-latin')
+            ? filteredPool.filter(s => s.tax?.familySciName !== species.tax!.familySciName)
+            : filteredPool;
+
+        const distractorSpecies = selectDistractors(species, distractorPool, masteryLevel, 3, paletteCodes);
         // Fill any gaps (e.g. not enough birds at this mastery tier) with random picks
         while (distractorSpecies.length < 3) {
           const fallback = pickRandom(
-            filteredPool.filter(s =>
+            distractorPool.filter(s =>
               s.speciesCode !== species.speciesCode &&
               !distractorSpecies.some(d => d.speciesCode === s.speciesCode)
             ),
@@ -453,6 +463,10 @@ router.post('/questions', async (req, res) => {
           familyComName:  species.tax!.familyComName,
           familySciName:  species.tax!.familySciName,
           order:          species.tax!.order,
+          orderComName:   species.tax!.orderComName,
+          promptLatinName: (['family', 'family-latin', 'order'] as string[]).includes(type)
+            ? masteryLevel >= 2 ? true : masteryLevel === 1 ? Math.random() < 0.5 : false
+            : undefined,
           options,
           correctAnswer,
         };

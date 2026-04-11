@@ -63,6 +63,9 @@ export function BirdInfoPanel({
         comName:       browseSpecies.comName,
         sciName:       found?.sciName       ?? '',
         familyComName: found?.familyComName ?? '',
+        familySciName: found?.familySciName,
+        order:         found?.order,
+        orderComName:  found?.orderComName,
       });
     }).catch(() => setBrowseResolved({ speciesCode: browseSpecies.speciesCode, comName: browseSpecies.comName, sciName: '', familyComName: '' }));
   }, [browseSpecies?.speciesCode, regionCode]);
@@ -137,6 +140,9 @@ export function BirdInfoPanel({
     comName:       question!.comName,
     sciName:       question!.sciName,
     familyComName: question!.familyComName,
+    familySciName: question!.familySciName,
+    order:         question!.order,
+    orderComName:  question!.orderComName,
   };
   const sp: SlideSpecies = viewingSpecies ?? primarySpecies;
 

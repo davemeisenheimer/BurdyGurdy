@@ -15,6 +15,7 @@ export interface BirdSpecies {
   familyComName: string;
   familySciName?: string;
   order?: string;
+  orderComName?: string;
   isBackyard?: boolean;
   isHistorical?: boolean;
   priorityGroup?: PriorityGroup;
@@ -58,6 +59,8 @@ export interface QuizQuestion {
   familyComName: string;
   familySciName?: string;
   order?: string;
+  orderComName?: string;
+  promptLatinName?: boolean;
   audioUrl?: string;
   audioTracks?: { audioUrl: string; sonoUrl?: string }[];
   sonoUrl?: string;
