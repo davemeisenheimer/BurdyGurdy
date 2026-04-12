@@ -1,5 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import type { BirdInfoData } from '../../services/remote/api';
+import { SpectrogramPlayer } from '../ui/SpectrogramPlayer';
+import { toProxyUrl } from '../../lib/audioProxy';
 
 interface Props {
   recordings:   BirdInfoData['recordings'];
@@ -10,17 +12,13 @@ interface Props {
   fillHeight?:  boolean;
 }
 
-const toHttps = (u: string | null) => u?.startsWith('//') ? `https:${u}` : u ?? null;
-
 export function AudioPanel({ recordings, autoplay = false, pauseRef, fillHeight = false }: Props) {
   const [idx, setIdx]         = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [sonoError, setSonoError] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
-  const rec = { ...recordings[idx], sonoUrl: toHttps(recordings[idx].sonoUrl) };
+  const rec = recordings[idx];
 
   useEffect(() => { setIdx(0); setPlaying(autoplay); }, [recordings]);
-  useEffect(() => { setSonoError(false); }, [idx]);
 
   useEffect(() => {
     if (!pauseRef) return;
@@ -41,23 +39,28 @@ export function AudioPanel({ recordings, autoplay = false, pauseRef, fillHeight 
 
   if (recordings.length === 0) return null;
 
-  const hasSono = !!(rec.sonoUrl && !sonoError);
+  const togglePlaying = () => setPlaying(p => !p);
 
   return (
     <div className={`flex flex-col bg-slate-900 overflow-hidden ${fillHeight ? 'h-full' : ''}`}>
-      {(hasSono || fillHeight) && (
-        <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden">
-          {hasSono
-            ? <img
-                src={rec.sonoUrl!}
-                alt="Sonogram"
-                className="w-full h-full object-cover"
-                onError={() => setSonoError(true)}
-              />
-            : <span className="text-slate-600 text-4xl">♪</span>
-          }
-        </div>
+      {/* Audio element — src managed via toProxyUrl for Content-Length / seekable range */}
+      <audio ref={audioRef} src={toProxyUrl(rec.file)} onEnded={() => setPlaying(false)} />
+
+      {/* Spectrogram + position indicator + duration pill */}
+      {(!!rec.file || fillHeight) && (
+        <SpectrogramPlayer
+          audioUrl={rec.file || undefined}
+          audioRef={audioRef}
+          playing={playing}
+          onToggle={togglePlaying}
+          fillHeight={fillHeight}
+          height={fillHeight ? undefined : 140}
+          className={fillHeight ? 'flex-1 min-h-0' : ''}
+          hideButton
+        />
       )}
+
+      {/* Controls bar */}
       <div className="flex items-center gap-2 px-3 py-2 bg-slate-800">
         {/* Left: recording info */}
         <div className="flex-1 min-w-0">
@@ -70,7 +73,7 @@ export function AudioPanel({ recordings, autoplay = false, pauseRef, fillHeight 
             <button onClick={() => { setPlaying(false); setIdx(i => (i - 1 + recordings.length) % recordings.length); }}
               className="w-6 h-6 rounded-full bg-slate-600 hover:bg-slate-500 flex items-center justify-center text-white text-sm">‹</button>
           )}
-          <button onClick={() => setPlaying(p => !p)}
+          <button onClick={togglePlaying}
             className="w-8 h-8 rounded-full bg-forest-600 hover:bg-forest-700 flex items-center justify-center text-white text-sm shadow">
             {playing ? '⏸' : '▶'}
           </button>
@@ -86,7 +89,6 @@ export function AudioPanel({ recordings, autoplay = false, pauseRef, fillHeight 
           )}
         </div>
       </div>
-      <audio ref={audioRef} src={rec.file} onEnded={() => setPlaying(false)} />
     </div>
   );
 }

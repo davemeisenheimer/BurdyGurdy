@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getTaxonomy, getRegionalSpecies, getCommonSpeciesCodes, getBackyardSpeciesRanking, getSpeciesList } from '../services/ebird';
-import { getRecordings } from '../services/xenocanto';
+import { getRecordings, parseXCLength } from '../services/xenocanto';
 import { getSpeciesPhotoUrl } from '../services/macaulay';
 import { BACKYARD_FAMILIES, GROUP_ORDERS, ORDER_COMMON_NAMES } from '../constants';
 import {
@@ -29,6 +29,7 @@ export interface QuizQuestion {
   orderComName?: string;
   promptLatinName?: boolean;
   audioUrl?: string;
+  audioDuration?: number;  // duration in seconds for sono clips
   audioTracks?: { audioUrl: string; sonoUrl?: string }[];
   sonoUrl?: string;
   imageUrl?: string;
@@ -333,7 +334,10 @@ router.post('/questions', async (req, res) => {
         !seen.has(obs.speciesCode) &&
         (seen.add(obs.speciesCode), true),
       )
-      .map(obs => ({ ...obs, tax: taxMap.get(obs.speciesCode) }))
+      .map(obs => {
+        const tax = taxMap.get(obs.speciesCode);
+        return { ...obs, tax: tax ? { ...tax, orderComName: ORDER_COMMON_NAMES[tax.order] } : undefined };
+      })
       .filter(s => s.tax) as PoolSpecies[];
 
     const groupOrders   = GROUP_ORDERS[groupId] ?? [];
@@ -481,9 +485,19 @@ router.post('/questions', async (req, res) => {
           q.noAudio = true;
         }
         if (availableRecordings.length > 0) {
+          // For sono questions prefer clips ≤ 10 s so the spectrogram is easy to read.
+          // Fall back to all available recordings if none meet the threshold.
+          const MAX_SONO_S = 10;
+          const isSonoType = ['sono', 'sono-song'].includes(q.type as string);
+          const candidateRecs = isSonoType
+            ? (availableRecordings.filter(r => parseXCLength(r.length) <= MAX_SONO_S).length > 0
+                ? availableRecordings.filter(r => parseXCLength(r.length) <= MAX_SONO_S)
+                : availableRecordings)
+            : availableRecordings;
+
           // Shuffle and take up to 3 paired tracks so the frontend can fall back if a URL fails.
           // Each track keeps its audio and spectrogram together to avoid a mismatch on fallback.
-          const shuffledRecs = [...availableRecordings].sort(() => Math.random() - 0.5).slice(0, 3);
+          const shuffledRecs = [...candidateRecs].sort(() => Math.random() - 0.5).slice(0, 3);
           const toHttps = (u?: string) => {
             if (!u) return u;
             if (u.startsWith('//')) return `https:${u}`;
@@ -492,6 +506,8 @@ router.post('/questions', async (req, res) => {
           };
           q.audioUrl    = shuffledRecs[0].file;
           q.sonoUrl     = toHttps(shuffledRecs[0].sono?.med ?? shuffledRecs[0].sono?.small);
+          const dur = parseXCLength(shuffledRecs[0].length);
+          if (isFinite(dur)) q.audioDuration = dur;
           q.audioTracks = shuffledRecs.map(r => ({
             audioUrl: r.file,
             sonoUrl:  toHttps(r.sono?.med ?? r.sono?.small),

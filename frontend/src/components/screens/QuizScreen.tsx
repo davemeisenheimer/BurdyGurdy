@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { QuizQuestion, AttributedPhoto } from '../../types';
 import type { RecentSighting } from '../../services/remote/api';
 import { AudioPlayer } from '../ui/AudioPlayer';
+import { SpectrogramCanvas } from '../ui/SpectrogramCanvas';
+import { SpectrogramPlayer } from '../ui/SpectrogramPlayer';
 import { AnswerOption } from '../ui/AnswerOption';
 import { ProgressBar } from '../ui/ProgressBar';
 import { masteryBadgeClass, masteryLabel, masteryThreshold, MASTERY_LABELS } from '../../lib/mastery';
@@ -127,10 +129,12 @@ export function QuizScreen({
   // Flat list for reveal carousel: primary first, then optional (dismissable), then range map, then spectrogram last
   // Photos that failed to load are excluded so a broken image never hides the carousel.
   const allRevealPhotos = [
-    ...(revealPhotos.primary ? [{ url: revealPhotos.primary.url, credit: revealPhotos.primary.credit, isOptional: false, isSono: false, isRangeMap: false }] : []),
-    ...revealPhotos.optional.map(p => ({ url: p.url, credit: p.credit, isOptional: true, isSono: false, isRangeMap: false })),
-    ...(revealRangeMapUrl && showMediaInCarousel ? [{ url: revealRangeMapUrl, credit: '', isOptional: false, isSono: false, isRangeMap: true }] : []),
-    ...(question.sonoUrl && showMediaInCarousel ? [{ url: question.sonoUrl, credit: '', isOptional: false, isSono: true, isRangeMap: false }] : []),
+    ...(stimType === 'sono' && question.audioUrl
+      ? [{ url: question.audioUrl, credit: '', isOptional: false, isSono: false, isRangeMap: false, isSonoPlayer: true }]
+      : []),
+    ...(revealPhotos.primary ? [{ url: revealPhotos.primary.url, credit: revealPhotos.primary.credit, isOptional: false, isSono: false, isRangeMap: false, isSonoPlayer: false }] : []),
+    ...revealPhotos.optional.map(p => ({ url: p.url, credit: p.credit, isOptional: true, isSono: false, isRangeMap: false, isSonoPlayer: false })),
+    ...(revealRangeMapUrl && showMediaInCarousel ? [{ url: revealRangeMapUrl, credit: '', isOptional: false, isSono: false, isRangeMap: true, isSonoPlayer: false }] : []),
   ].filter(p => !failedPhotoUrls.has(p.url));
 
   // The question photo - pre-selected in useQuiz (with pre-fetch) to avoid mid-render switches.
@@ -211,7 +215,7 @@ export function QuizScreen({
   };
 
   return (
-    <div className="flex flex-col h-dvh max-w-lg mx-auto w-full px-4 py-4 gap-3">
+    <div className="flex flex-col h-dvh min-h-[652px] max-w-lg mx-auto w-full px-4 py-4 gap-3">
 
       {/* Hidden audio element for option playback */}
       {isSongAnswer && (
@@ -278,12 +282,22 @@ export function QuizScreen({
             </div>
           ) : stimType === 'sono' ? (
             /* Spectrogram question */
-            <div className="relative h-full bg-slate-900 flex items-center justify-center">
-              <img
-                src={question.sonoUrl}
-                alt="Song spectrogram"
-                className="w-full object-contain"
-              />
+            <div className="relative h-full bg-slate-900 flex flex-col">
+              {/* Top half: favicon centered in space above spectrogram */}
+              <div className="flex-1 flex items-center justify-center overflow-hidden">
+                <img src="/favicon.png" className="w-10 h-10 opacity-80 pointer-events-none" aria-hidden="true" />
+              </div>
+              {/* Spectrogram with duration pill overlaid at top-right */}
+              <div className="relative w-full">
+                <SpectrogramCanvas audioUrl={question.audioUrl} height={140} className="w-full" />
+                {question.audioDuration !== undefined && (
+                  <span className="absolute top-2 right-2 bg-slate-700/80 text-white/70 text-xs px-3 py-1 rounded-full">
+                    Duration: {Math.round(question.audioDuration)} seconds
+                  </span>
+                )}
+              </div>
+              {/* Bottom half */}
+              <div className="flex-1" />
               {isFirstEncounter && (
                 <span className="absolute bottom-10 right-3 z-10 bg-slate-700 border-2 border-amber-400 text-white text-xs font-bold px-2.5 py-1.5 rounded-full shadow-md leading-none">
                   ✨ New bird!
@@ -296,11 +310,11 @@ export function QuizScreen({
             </div>
           ) : (
             /* Text/audio stimulus */
-            <div className="relative h-full flex flex-col px-5 pt-5 pb-4">
-              <p className="shrink-0 text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">
+            <div className="relative h-full flex flex-col px-5 pt-5 pb-4 bg-slate-500">
+              <p className="shrink-0 text-xs uppercase tracking-wider text-slate-300 font-semibold mb-1">
                 {TYPE_LABELS[question.type]}
               </p>
-              <h2 className="shrink-0 text-xl font-semibold text-slate-800 mb-4">
+              <h2 className="shrink-0 text-xl font-semibold text-white mb-4">
                 {PROMPTS[question.type]}
               </h2>
               {isFirstEncounter && (
@@ -308,25 +322,31 @@ export function QuizScreen({
                   ✨ New bird!
                 </span>
               )}
-              <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-3 px-5 pb-4">
+              <div className="flex-1 min-h-0 flex flex-col items-center px-5">
+                {/* Space above stimulus */}
+                <div className="flex-1" />
                 {stimType === 'song' && question.audioUrl && (
-                  <AudioPlayer url={question.audioUrl} tracks={question.audioTracks} sonoUrl={question.sonoUrl} onAudioUnavailable={() => setAudioUnavailable(true)} />
+                  <AudioPlayer url={question.audioUrl} tracks={question.audioTracks} durationSeconds={question.audioDuration} onAudioUnavailable={() => setAudioUnavailable(true)} />
                 )}
                 {stimType === 'latin' && (
-                  <span className="text-2xl italic text-slate-700 text-center px-2">
+                  <span className="text-2xl italic text-slate-200 text-center px-2">
                     {question.sciName}
                   </span>
                 )}
                 {stimType === 'family' && (
-                  <span className={`text-xl text-slate-700 text-center px-2${question.promptLatinName ? ' italic' : ''}`}>
+                  <span className={`text-xl text-slate-200 text-center px-2${question.promptLatinName ? ' italic' : ''}`}>
                     {question.promptLatinName ? question.familySciName : question.familyComName}
                   </span>
                 )}
                 {stimType === 'order' && (
-                  <span className={`text-xl text-slate-700 text-center px-2${question.promptLatinName ? ' italic' : ''}`}>
+                  <span className={`text-xl text-slate-200 text-center px-2${question.promptLatinName ? ' italic' : ''}`}>
                     {question.promptLatinName ? question.order : (question.orderComName ?? question.order)}
                   </span>
                 )}
+                {/* Space below stimulus: favicon centered here for song questions */}
+                <div className={`flex-1 flex items-center justify-center overflow-hidden ${stimType === 'song' ? '' : 'invisible'}`}>
+                  <img src="/favicon.png" className="w-10 h-10 opacity-60 pointer-events-none [@media(max-height:719px)]:invisible" aria-hidden="true" />
+                </div>
               </div>
             </div>
           )
@@ -380,19 +400,22 @@ export function QuizScreen({
             {/* Photo/spectrogram carousel */}
             {currentRevealPhoto && (
               <div className="flex-1 min-h-0 relative flex items-center justify-center bg-slate-900 overflow-hidden">
-                <img
-                  src={currentRevealPhoto.url}
-                  alt={currentRevealPhoto.isSono ? 'Song spectrogram' : question.comName}
-                  className={`${currentRevealPhoto.isSono ? 'w-full object-contain' : 'max-h-full max-w-full object-contain'} transition-opacity duration-500 ${revealPhotoLoaded ? 'opacity-100' : 'opacity-0'} ${showMediaInCarousel ? 'cursor-zoom-in' : ''}`}
-                  onLoad={() => setRevealPhotoLoaded(true)}
-                  onError={() => {
-                    setFailedPhotoUrls(prev => new Set(prev).add(currentRevealPhoto.url));
-                    setPhotoIdx(i => Math.max(0, i - 1));
-                  }}
-                  onClick={() => { if (showMediaInCarousel) setLightboxOpen(true); }}
-                />
-                {/* Slide type label - top-right for sono and range map (never dismissable, so no conflict with ✕) */}
-                {currentRevealPhoto.isSono && (
+                {currentRevealPhoto.isSonoPlayer
+                  ? <SpectrogramPlayer audioUrl={currentRevealPhoto.url} className="w-full" height={140} durationHint={question.audioDuration} />
+                  : <img
+                      src={currentRevealPhoto.url}
+                      alt={question.comName}
+                      className={`max-h-full max-w-full object-contain transition-opacity duration-500 ${revealPhotoLoaded ? 'opacity-100' : 'opacity-0'} ${showMediaInCarousel ? 'cursor-zoom-in' : ''}`}
+                      onLoad={() => setRevealPhotoLoaded(true)}
+                      onError={() => {
+                        setFailedPhotoUrls(prev => new Set(prev).add(currentRevealPhoto.url));
+                        setPhotoIdx(i => Math.max(0, i - 1));
+                      }}
+                      onClick={() => { if (showMediaInCarousel) setLightboxOpen(true); }}
+                    />
+                }
+                {/* Slide type label */}
+                {currentRevealPhoto.isSonoPlayer && (
                   <span className="absolute top-2 right-2 bg-black/60 text-white text-xs font-semibold px-2 py-0.5 rounded-full">
                     Spectrogram
                   </span>
@@ -402,8 +425,8 @@ export function QuizScreen({
                     Range Map
                   </span>
                 )}
-                {/* Play/pause button for song audio */}
-                {showMediaInCarousel && question.audioUrl && (
+                {/* Play/pause button for song audio — not shown on sono player slide (has its own controls) */}
+                {showMediaInCarousel && question.audioUrl && !currentRevealPhoto.isSonoPlayer && (
                   <button
                     onClick={toggleRevealAudio}
                     className="absolute top-2 left-2 bg-black/60 hover:bg-black/80 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm leading-none"
@@ -603,7 +626,7 @@ export function QuizScreen({
       )}
 
       {/* Lightbox - fullscreen photo viewer (mobile only) */}
-      {lightboxOpen && currentRevealPhoto && (
+      {lightboxOpen && currentRevealPhoto && !currentRevealPhoto.isSonoPlayer && (
         <div
           className="fixed inset-0 z-50 bg-black flex items-center justify-center"
           onClick={() => setLightboxOpen(false)}

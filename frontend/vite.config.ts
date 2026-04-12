@@ -37,11 +37,20 @@ export default defineConfig({
             },
           },
           {
-            // Cache xeno-canto audio files
+            // Cache xeno-canto audio files (direct)
             urlPattern: /xeno-canto\.org/,
             handler: 'CacheFirst',
             options: {
               cacheName: 'audio-cache',
+              expiration: { maxEntries: 200, maxAgeSeconds: 604800 },
+            },
+          },
+          {
+            // Cache proxied audio (for spectrogram generation) and spectrogram images
+            urlPattern: /\/api\/proxy\//,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'xc-proxy-cache',
               expiration: { maxEntries: 200, maxAgeSeconds: 604800 },
             },
           },

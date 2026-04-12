@@ -62,6 +62,7 @@ export interface QuizQuestion {
   orderComName?: string;
   promptLatinName?: boolean;
   audioUrl?: string;
+  audioDuration?: number;  // duration in seconds for sono clips
   audioTracks?: { audioUrl: string; sonoUrl?: string }[];
   sonoUrl?: string;
   imageUrl?: string;

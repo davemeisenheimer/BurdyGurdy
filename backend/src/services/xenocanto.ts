@@ -16,6 +16,16 @@ export interface XCRecording {
   file: string;   // audio file url
   sono: { small: string; med: string }; // spectrogram images
   q: string;      // quality rating A-E
+  length?: string; // clip duration as "M:SS" (e.g. "0:08", "1:32")
+}
+
+/** Parse a xeno-canto "M:SS" length string to total seconds. Returns Infinity if unparseable. */
+export function parseXCLength(length: string | undefined): number {
+  if (!length) return Infinity;
+  const parts = length.split(':').map(Number);
+  if (parts.length === 2 && !parts.some(isNaN)) return parts[0] * 60 + parts[1];
+  if (parts.length === 1 && !isNaN(parts[0])) return parts[0];
+  return Infinity;
 }
 
 export interface XCResponse {

@@ -693,7 +693,7 @@ export default function App() {
 
   return (
     <div className="font-sans lg:flex lg:h-screen">
-      <Toast toast={currentToast} onDismiss={() => setCurrentToast(null)} />
+<Toast toast={currentToast} onDismiss={() => setCurrentToast(null)} />
 
       {showOnboarding && (
         <OnboardingWizard
