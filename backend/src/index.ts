@@ -7,6 +7,7 @@ import birdsRouter from './routes/birds';
 import quizRouter from './routes/quiz';
 import friendsRouter from './routes/friends';
 import proxyRouter from './routes/proxy';
+import adminRouter from './routes/admin';
 
 dotenv.config();
 
@@ -21,6 +22,7 @@ app.use('/api/birds', birdsRouter);
 app.use('/api/quiz', quizRouter);
 app.use('/api/friends', friendsRouter);
 app.use('/api/proxy', proxyRouter);
+app.use('/api/admin', adminRouter);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 

@@ -94,7 +94,7 @@ export function SpectrogramPlayer({
 
         {/* Playback position line */}
         <div
-          className="absolute top-0 bottom-0 w-0.5 bg-white/80 pointer-events-none"
+          className="absolute top-0 bottom-0 w-0.5 bg-cyan-400 pointer-events-none"
           style={{ left: `calc(${progress * 100}% - 1px)` }}
         />
 

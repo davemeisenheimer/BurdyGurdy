@@ -7,7 +7,7 @@ import {
   PALETTE_DISTRACTOR_WEIGHT, RECENT_UNMASTERED_RATIO, XC_FETCH_BATCH_SIZE,
 } from '@birdygurdy/shared';
 import { buildCandidates, applyRecentUnmasteredGuarantee } from '../lib/candidateLogic';
-import { filterRecordings } from '../lib/recordingFilter';
+import { filterRecordings, weightedSampleByDuration } from '../lib/recordingFilter';
 import type { PoolSpecies, Candidate } from '../lib/candidateLogic';
 
 const router = Router();
@@ -495,9 +495,13 @@ router.post('/questions', async (req, res) => {
                 : availableRecordings)
             : availableRecordings;
 
-          // Shuffle and take up to 3 paired tracks so the frontend can fall back if a URL fails.
-          // Each track keeps its audio and spectrogram together to avoid a mismatch on fallback.
-          const shuffledRecs = [...candidateRecs].sort(() => Math.random() - 0.5).slice(0, 3);
+          // Pick up to 3 paired tracks so the frontend can fall back if a URL fails.
+          // Sono questions already filtered to short clips above; for audio questions use
+          // weighted sampling (weight = 1/duration) so shorter clips are preferred while
+          // variety is preserved — longer clips remain in the pool and can still be picked.
+          const shuffledRecs = isSonoType
+            ? [...candidateRecs].sort(() => Math.random() - 0.5).slice(0, 3)
+            : weightedSampleByDuration(candidateRecs, 3);
           const toHttps = (u?: string) => {
             if (!u) return u;
             if (u.startsWith('//')) return `https:${u}`;

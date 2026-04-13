@@ -184,10 +184,10 @@ describe('buildNoAudioGraduation', () => {
 // that type.
 //
 // The tiers are designed to keep early learners from being overwhelmed:
-//   0–1 graduates  → small palette (FIRST)
-//   2–6 graduates  → medium palette (SECOND)
-//   7–12 graduates → larger palette (THIRD)
-//   13+ graduates  → full palette (MAX)
+//   0–1 graduates → small palette (FIRST)
+//   2   graduates → medium palette (SECOND)
+//   3   graduates → larger palette (THIRD)
+//   4+  graduates → full palette (MAX)
 
 describe('typeLevel0MaxSize', () => {
   it('returns the smallest palette size when no birds have graduated yet', () => {
@@ -202,16 +202,16 @@ describe('typeLevel0MaxSize', () => {
     expect(typeLevel0MaxSize(2)).toBe(MAX_LEVEL_0_SIZE_SECOND);
   });
 
-  it('returns the second tier at 6 graduates', () => {
-    expect(typeLevel0MaxSize(6)).toBe(MAX_LEVEL_0_SIZE_SECOND);
+  it('returns the third tier at 3 graduates', () => {
+    expect(typeLevel0MaxSize(3)).toBe(MAX_LEVEL_0_SIZE_THIRD);
   });
 
-  it('returns the third tier at 7 graduates', () => {
-    expect(typeLevel0MaxSize(7)).toBe(MAX_LEVEL_0_SIZE_THIRD);
+  it('returns the full palette size at 4 graduates', () => {
+    expect(typeLevel0MaxSize(4)).toBe(MAX_LEVEL_0_SIZE);
   });
 
-  it('returns the third tier at 12 graduates', () => {
-    expect(typeLevel0MaxSize(12)).toBe(MAX_LEVEL_0_SIZE_THIRD);
+  it('returns the full palette size at 12 graduates', () => {
+    expect(typeLevel0MaxSize(12)).toBe(MAX_LEVEL_0_SIZE);
   });
 
   it('returns the full palette size at 13 graduates', () => {

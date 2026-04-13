@@ -263,7 +263,8 @@ export function OnboardingWizard({ user, settings, onUpdateSettings, onRegionDet
 
                   {accountMode === 'sent' && (
                     <div className="text-center py-4 space-y-2">
-                      <p className="text-slate-700 font-medium">Check your email</p>
+                      <img src="/favicon.png" className="w-14 h-14 mx-auto mb-2 opacity-90" aria-hidden="true" />
+                      <p className="text-sky-700 font-semibold">Check your email</p>
                       <p className="text-sm text-slate-500">We sent a confirmation link to <strong>{email}</strong>. Click it to activate your account, then come back here.</p>
                       <button onClick={advance} className="mt-2 text-sm text-forest-600 font-medium hover:underline">
                         Continue as guest for now →

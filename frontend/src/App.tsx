@@ -13,10 +13,12 @@ import { VictoryScreen } from './components/screens/VictoryScreen';
 import { FriendsScreen } from './components/screens/FriendsScreen';
 import { NotificationsScreen } from './components/screens/NotificationsScreen';
 import { CurationPanel } from './components/panels/CurationPanel';
+import { FactsCurationPanel } from './components/panels/FactsCurationPanel';
+import { DatabasePanel } from './components/panels/DatabasePanel';
 import { BirdInfoPanel } from './components/panels/BirdInfoPanel';
 import { AuthPanel } from './components/panels/AuthPanel';
 import { Toast } from './components/ui/Toast';
-import { InactivitySignOutModal } from './components/ui/InactivitySignOutModal';
+import { DialogGeneric } from './components/ui/DialogGeneric';
 import { useQuiz } from './hooks/useQuiz';
 import { useNotifications } from './hooks/useNotifications';
 import { loadSettings, saveSettings, loadQuizPrefs, saveQuizPrefs, resetUserSettings } from './lib/settings';
@@ -37,6 +39,7 @@ import { computeStrugglingCount } from './lib/struggling';
 import { expandQuestionTypes } from './lib/questionTypes';
 import type { ReportErrorData } from './components/ui/ReportErrorModal';
 import { MasteryFactDialog } from './components/ui/MasteryFactDialog';
+import { PasswordResetDialog } from './components/ui/PasswordResetDialog';
 import { CloudSyncOverlay } from './components/ui/CloudSyncOverlay';
 import type { LevelUpEvent } from './types';
 import { markNotificationsRead } from './lib/notifications';
@@ -91,6 +94,7 @@ export default function App() {
   const [user, setUser]               = useState<SupabaseUser | null>(null);
   const [showAuth, setShowAuth]           = useState(false);
   const [wasAutoSignedOut, setWasAutoSignedOut] = useState(false);
+  const [showPasswordReset, setShowPasswordReset] = useState(false);
   const userRef = useRef<SupabaseUser | null>(null);
   const [showUploadPrompt, setShowUploadPrompt] = useState(false);
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
@@ -110,7 +114,7 @@ export default function App() {
   const [prevScreen, setPrevScreen] = useState<'progress' | 'recentprogress' | 'friendprogress' | 'friendrecentprogress'>('progress');
   const [recentProgressBack, setRecentProgressBack] = useState<'result' | 'progress'>('result');
   const [lifeListBack, setLifeListBack] = useState<'home' | 'result'>('home');
-  const [rightPanelTab, setRightPanelTab] = useState<'info' | 'curation'>('info');
+  const [rightPanelTab, setRightPanelTab] = useState<'info' | 'curation' | 'facts' | 'database'>('info');
   const [progressSelectedSpecies, setProgressSelectedSpecies] = useState<{ speciesCode: string; comName: string } | null>(null);
   const [friendProgressRecords, setFriendProgressRecords] = useState<BirdProgress[]>([]);
   const [friendProgressName, setFriendProgressName]       = useState('');
@@ -270,16 +274,18 @@ export default function App() {
           doIdleSync();
         }
       }
-      if (!throttle) throttle = setTimeout(() => { touch(); throttle = null; }, 60_000);
+      if (!throttle) throttle = setTimeout(() => { touch(); throttle = null; }, 15_000);
     };
     touch();
     document.addEventListener('click',      onActivity);
     document.addEventListener('keydown',    onActivity);
     document.addEventListener('touchstart', onActivity);
+    document.addEventListener('scroll',     onActivity, { passive: true });
     return () => {
       document.removeEventListener('click',      onActivity);
       document.removeEventListener('keydown',    onActivity);
       document.removeEventListener('touchstart', onActivity);
+      document.removeEventListener('scroll',     onActivity);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -322,6 +328,8 @@ export default function App() {
       // Switch DB first - all subsequent reads/writes go to the correct store.
       switchToUserDb(session?.user?.id ?? null);
       setUser(session?.user ?? null);
+      // Password-reset link redirects back here — show the set-new-password dialog.
+      if (event === 'PASSWORD_RECOVERY') { setShowPasswordReset(true); return; }
       // When a session appears (OAuth redirect back), merge cloud data
       if (session?.user) {
         const userId = session.user.id;
@@ -331,63 +339,73 @@ export default function App() {
           localStorage.removeItem('burdygurdy_news_opt_in');
           supabase.auth.updateUser({ data: { news_opt_in: true } }).catch(() => {});
         }
-        (async () => {
-          const cloudTs = await getCloudUploadTime(userId).catch(() => null);
-          setCloudSyncing(true);
-          try {
-            // Pass cloudTs so downloadAndReplace stamps localSyncedAt internally.
-            const remoteCount = await downloadAndReplace(userId, cloudTs).catch(() => -1);
-            if (remoteCount > 0) {
-              setSyncVersion(v => v + 1);
-            } else if (remoteCount === 0) {
-              // No cloud records — offer to upload guest progress for the first user on this device
-              const localCount = await db.progress.count();
-              if (localCount > 0) {
-                const dbs = await indexedDB.databases().catch(() => [] as IDBDatabaseInfo[]);
-                const hasOtherAuth = dbs.some(
-                  d => d.name?.startsWith('BirdyGurdyDB-') &&
-                       d.name !== 'BirdyGurdyDB-guest' &&
-                       d.name !== `BirdyGurdyDB-${userId}`,
-                );
-                if (!hasOtherAuth) setShowUploadPrompt(true);
+        // Only download on app load or a genuine new sign-in.
+        // TOKEN_REFRESHED and repeat SIGNED_IN (silent token refresh) must not
+        // trigger a download — that fires on tab return and bypasses the
+        // MIN_HIDDEN_MS guard in the visibility-change handler.
+        const isInitialLoad   = event === 'INITIAL_SESSION';
+        const isGenuineSignIn = event === 'SIGNED_IN' && prevAuthUserIdRef.current === null;
+        if (isInitialLoad || isGenuineSignIn) {
+          (async () => {
+            const cloudTs = await getCloudUploadTime(userId).catch(() => null);
+            setCloudSyncing(true);
+            try {
+              // Pass cloudTs so downloadAndReplace stamps localSyncedAt internally.
+              const remoteCount = await downloadAndReplace(userId, cloudTs).catch(() => -1);
+              if (remoteCount > 0) {
+                setSyncVersion(v => v + 1);
+              } else if (remoteCount === 0) {
+                // No cloud records — offer to upload guest progress for the first user on this device
+                const localCount = await db.progress.count();
+                if (localCount > 0) {
+                  const dbs = await indexedDB.databases().catch(() => [] as IDBDatabaseInfo[]);
+                  const hasOtherAuth = dbs.some(
+                    d => d.name?.startsWith('BirdyGurdyDB-') &&
+                         d.name !== 'BirdyGurdyDB-guest' &&
+                         d.name !== `BirdyGurdyDB-${userId}`,
+                  );
+                  if (!hasOtherAuth) setShowUploadPrompt(true);
+                }
               }
+            } finally {
+              setCloudSyncing(false);
             }
-          } finally {
-            setCloudSyncing(false);
-          }
-        })().catch(() => {});
+          })().catch(() => {});
+        }
         // Capture now - prevAuthUserIdRef will be updated before the promise resolves.
         const isNewSignIn = event === 'SIGNED_IN' && prevAuthUserIdRef.current === null;
-        downloadSettings(userId).then(remote => {
-          if (remote) {
-            // Returning user with cloud settings - import prefs and skip the wizard.
-            localStorage.setItem('burdygurdy_onboarding_complete', '1');
-            setShowOnboarding(false);
-            const mergedSettings = { ...loadSettings(), ...remote.appSettings };
-            setSettings(mergedSettings);
-            saveSettings(mergedSettings);
-            const mergedPrefs = { ...loadQuizPrefs(), ...remote.quizPrefs };
-            saveQuizPrefs(mergedPrefs);
-            setConfig(c => ({
-              ...c,
-              ...(mergedPrefs.questionTypes     ? { questionTypes: mergedPrefs.questionTypes as QuizConfig['questionTypes'] } : {}),
-              ...(mergedPrefs.mode              ? { mode: mergedPrefs.mode as QuizConfig['mode'] }                           : {}),
-              ...(mergedPrefs.questionsPerRound != null ? { questionsPerRound: mergedPrefs.questionsPerRound }                : {}),
-              ...(mergedPrefs.regionCode        ? { regionCode: mergedPrefs.regionCode }                                     : {}),
-              ...(mergedPrefs.groupId           ? { groupId: mergedPrefs.groupId }                                           : {}),
-            }));
-            mergeVictorySeen(remote.victorySeen);
-          } else if (isNewSignIn) {
-            // Brand-new user, no cloud settings anywhere - reset stale local prefs
-            // (which may belong to a previous user on this device) and run the wizard.
-            const freshSettings = resetUserSettings();
-            setSettings(freshSettings);
-            setShowOnboarding(true);
-          }
-        }).catch(() => {});
-        downloadUserBlockedPhotos(userId).catch(() => {});
-        fetchAdminBlockedMedia().catch(() => {});
-        downloadRegionSnapshot(userId).then(snap => { if (snap) saveSnapshot(snap); }).catch(() => {});
+        if (isInitialLoad || isGenuineSignIn) {
+          downloadSettings(userId).then(remote => {
+            if (remote) {
+              // Returning user with cloud settings - import prefs and skip the wizard.
+              localStorage.setItem('burdygurdy_onboarding_complete', '1');
+              setShowOnboarding(false);
+              const mergedSettings = { ...loadSettings(), ...remote.appSettings };
+              setSettings(mergedSettings);
+              saveSettings(mergedSettings);
+              const mergedPrefs = { ...loadQuizPrefs(), ...remote.quizPrefs };
+              saveQuizPrefs(mergedPrefs);
+              setConfig(c => ({
+                ...c,
+                ...(mergedPrefs.questionTypes     ? { questionTypes: mergedPrefs.questionTypes as QuizConfig['questionTypes'] } : {}),
+                ...(mergedPrefs.mode              ? { mode: mergedPrefs.mode as QuizConfig['mode'] }                           : {}),
+                ...(mergedPrefs.questionsPerRound != null ? { questionsPerRound: mergedPrefs.questionsPerRound }                : {}),
+                ...(mergedPrefs.regionCode        ? { regionCode: mergedPrefs.regionCode }                                     : {}),
+                ...(mergedPrefs.groupId           ? { groupId: mergedPrefs.groupId }                                           : {}),
+              }));
+              mergeVictorySeen(remote.victorySeen);
+            } else if (isNewSignIn) {
+              // Brand-new user, no cloud settings anywhere - reset stale local prefs
+              // (which may belong to a previous user on this device) and run the wizard.
+              const freshSettings = resetUserSettings();
+              setSettings(freshSettings);
+              setShowOnboarding(true);
+            }
+          }).catch(() => {});
+          downloadUserBlockedPhotos(userId).catch(() => {});
+          fetchAdminBlockedMedia().catch(() => {});
+          downloadRegionSnapshot(userId).then(snap => { if (snap) saveSnapshot(snap); }).catch(() => {});
+        }
         // Send login notification only on a genuine new sign-in - i.e. the user
         // was previously signed out.  Supabase also fires SIGNED_IN on silent
         // token refreshes (~hourly); checking prevAuthUserIdRef filters those out.
@@ -420,7 +438,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     const userId = user.id;
-    const MIN_HIDDEN_MS = 5_000; // ignore brief tab switches
+    const MIN_HIDDEN_MS = 50_000; // ignore brief tab switches
     let hiddenAt = 0;
 
     const handleHide = async () => {
@@ -468,7 +486,7 @@ export default function App() {
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [user]);
+  }, [user?.id]);
 
   // On load, try to detect location and offer a region update if it differs from saved
   useEffect(() => {
@@ -707,8 +725,9 @@ export default function App() {
       )}
 
       {wasAutoSignedOut && !user && (
-        <InactivitySignOutModal
-          onSignIn={() => { setWasAutoSignedOut(false); setShowAuth(true); }}
+        <DialogGeneric
+          dialogId="inactivitySignOut"
+          onConfirm={() => { setWasAutoSignedOut(false); setShowAuth(true); }}
           onCancel={() => setWasAutoSignedOut(false)}
         />
       )}
@@ -718,7 +737,7 @@ export default function App() {
 
         {isAdmin && settings.enableAdminFeatures && (
           <div className="shrink-0 flex border-b border-slate-200 bg-white">
-            {(['info', 'curation'] as const).map(tab => (
+            {(['info', 'curation', 'facts', 'database'] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setRightPanelTab(tab)}
@@ -728,7 +747,7 @@ export default function App() {
                     : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
                 }`}
               >
-                {tab === 'info' ? 'Bird Info' : 'Curation'}
+                {tab === 'info' ? 'Bird Info' : tab === 'curation' ? 'Curation' : tab === 'facts' ? 'Facts' : 'Database'}
               </button>
             ))}
           </div>
@@ -756,6 +775,16 @@ export default function App() {
             <CurationPanel />
           </div>
         )}
+        {isAdmin && settings.enableAdminFeatures && rightPanelTab === 'facts' && (
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <FactsCurationPanel />
+          </div>
+        )}
+        {isAdmin && settings.enableAdminFeatures && rightPanelTab === 'database' && (
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <DatabasePanel />
+          </div>
+        )}
       </div>}
 
       {/* ── Left panel: game (full width on mobile, constrained on desktop) ── */}
@@ -780,6 +809,7 @@ export default function App() {
 
       {screen === 'progress' && (
         <ProgressScreenLife
+          key={syncVersion}
           onBack={() => { setScreen(lifeListBack); setLifeListBack('home'); }}
           userId={user?.id}
           questionTypes={expandQuestionTypes(config.questionTypes, settings)}
@@ -1025,6 +1055,9 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Password reset dialog - shown when user returns via a reset email link */}
+      {showPasswordReset && <PasswordResetDialog onClose={() => setShowPasswordReset(false)} />}
 
       {/* Cloud sync overlay - blocks interaction while downloading from cloud */}
       {cloudSyncing && <CloudSyncOverlay />}

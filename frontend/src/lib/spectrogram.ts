@@ -11,6 +11,8 @@
  * the audio (which loads fine) is the only fully reliable approach.
  */
 
+import { INFERNO_LUT } from './spectrogramColours';
+
 const FFT_SIZE    = 1024;  // frequency resolution
 const HOP_SIZE    = 256;   // 75% overlap — smoother time resolution
 const MAX_DB_RANGE = 60;   // dynamic range shown (dB below peak)
@@ -144,17 +146,19 @@ export async function drawSpectrogram(
   const d       = imgData.data;
 
   for (let x = 0; x < cw; x++) {
-    const fi = Math.min(numFrames - 1, Math.floor(x * numFrames / cw));
+    const frameIndex = Math.min(numFrames - 1, Math.floor(x * numFrames / cw));
     for (let y = 0; y < ch; y++) {
       // y = 0 → top of canvas → highest displayed frequency
-      const bi = Math.min(maxBin - 1, Math.floor((ch - 1 - y) * maxBin / ch));
-      const v  = Math.pow(Math.max(0, (dbs[fi * maxBin + bi] - floor) / range), 0.7);
-      const pi = (y * cw + x) * 4;
-      // Greyscale with a slight blue tint — matches xeno-canto's grey-medium aesthetic
-      d[pi]     = Math.round(v * 210);
-      d[pi + 1] = Math.round(v * 225);
-      d[pi + 2] = Math.round(v * 255);
-      d[pi + 3] = 255;
+      // FFT output is divided into frequency "bins", each representing a narrow band of frequencies.
+      // We map the vertical pixel coordinate to the corresponding bin index.
+      const binIndex     = Math.min(maxBin - 1, Math.floor((ch - 1 - y) * maxBin / ch));
+      const intensity    = Math.pow(Math.max(0, (dbs[frameIndex * maxBin + binIndex] - floor) / range), 0.7);
+      const pixelIndex   = (y * cw + x) * 4;
+      const lutIndex     = Math.round(intensity * 255) * 3; // Index within the inferno lookup table
+      d[pixelIndex]     = INFERNO_LUT[lutIndex];
+      d[pixelIndex + 1] = INFERNO_LUT[lutIndex + 1];
+      d[pixelIndex + 2] = INFERNO_LUT[lutIndex + 2];
+      d[pixelIndex + 3] = 255;
     }
   }
   ctx2d.putImageData(imgData, 0, 0);

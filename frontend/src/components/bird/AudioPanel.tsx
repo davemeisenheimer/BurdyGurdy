@@ -56,6 +56,7 @@ export function AudioPanel({ recordings, autoplay = false, pauseRef, fillHeight 
           fillHeight={fillHeight}
           height={fillHeight ? undefined : 140}
           className={fillHeight ? 'flex-1 min-h-0' : ''}
+          durationHint={rec.durationSeconds ?? undefined}
           hideButton
         />
       )}

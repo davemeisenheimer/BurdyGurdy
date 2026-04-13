@@ -109,19 +109,39 @@ export function AudioPlayer({ url, tracks, onAudioUnavailable, durationSeconds }
         onError={handleError}
       />
 
-      {/* Spectrogram + position indicator + duration pill */}
-      <div className="relative cursor-pointer" onClick={toggle}>
-        <SpectrogramPlayer
-          audioUrl={activeAudioUrl}
-          height={140}
-          audioRef={audioRef}
-          playing={playing}
-          durationHint={durationSeconds}
-          hideButton
-        />
+      {/* Controls bar above spectrogram */}
+      <div className="flex items-center justify-between px-3 py-1.5 bg-slate-800">
+        {durationSeconds !== undefined ? (
+          <span className="bg-slate-700/80 text-white/70 text-xs px-3 py-1 rounded-full">
+            Duration: {Math.round(durationSeconds)} seconds
+          </span>
+        ) : <span />}
+        {playing && (
+          <button
+            onClick={toggle}
+            className="flex items-center gap-1.5 bg-black/60 hover:bg-black/80 active:bg-black/90 rounded-full px-3 py-1 transition-colors"
+            aria-label="Pause"
+          >
+            <span className="text-white text-xs font-medium">⏸ pause</span>
+          </button>
+        )}
+      </div>
 
-        {/* AudioPlayer overlay — covers only the 140px canvas area, not the duration pill */}
-        <div className="absolute top-0 inset-x-0" style={{ height: 140 }}>
+      {/* Spectrogram + position indicator */}
+      <div className="relative cursor-pointer" onClick={toggle}>
+        <div className="h-[140px] sm:h-[160px] flex flex-col">
+          <SpectrogramPlayer
+            audioUrl={activeAudioUrl}
+            fillHeight
+            className="flex-1"
+            audioRef={audioRef}
+            playing={playing}
+            hideButton
+          />
+        </div>
+
+        {/* AudioPlayer overlay — covers the spectrogram area */}
+        <div className="absolute top-0 inset-x-0 h-[140px] sm:h-[160px]">
           <div
             className={`absolute inset-0 flex items-center justify-center bg-black/40 transition-opacity duration-200 ${
               playing ? 'opacity-0 pointer-events-none' : 'opacity-100'
@@ -145,16 +165,6 @@ export function AudioPlayer({ url, tracks, onAudioUnavailable, durationSeconds }
               </div>
             )}
           </div>
-
-          {playing && (
-            <button
-              onClick={toggle}
-              className="absolute bottom-2 right-2 flex items-center gap-1.5 bg-black/60 hover:bg-black/80 rounded-full px-3 py-1 transition-colors"
-              aria-label="Pause"
-            >
-              <span className="text-white text-xs font-medium">⏸ pause</span>
-            </button>
-          )}
         </div>
       </div>
     </div>

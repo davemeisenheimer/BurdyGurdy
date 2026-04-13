@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { AppSettings, BirderLevel } from '../../lib/settings';
 import type { QuestionType } from '../../types';
 import type { SupabaseUser } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase';
 import { RegionSearch } from '../ui/RegionSearch';
 import { MapRegionPicker } from '../ui/MapRegionPicker';
 import { TrimProgressDialog } from '../ui/TrimProgressDialog';
@@ -68,6 +69,21 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
   const [showMap, setShowMap] = useState(false);
   const [showTrimDialog, setShowTrimDialog] = useState(false);
   const [pendingLevel, setPendingLevel] = useState<BirderLevel | null>(null);
+  const [resetSent, setResetSent]       = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError]     = useState<string | null>(null);
+
+  const handleResetPassword = async () => {
+    if (!user?.email) return;
+    setResetLoading(true);
+    setResetError(null);
+    const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+      redirectTo: window.location.origin,
+    });
+    setResetLoading(false);
+    if (error) setResetError(error.message);
+    else       setResetSent(true);
+  };
 
   const update = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     const next = { ...settings, [key]: value };
@@ -317,6 +333,30 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
               </div>
             ) : (
               <p className="text-xs text-slate-500">Tap the browser menu ⋮ and select "Add to Home screen".</p>
+            )}
+          </div>
+        )}
+
+        {/* Password reset - signed-in users with an email only */}
+        {user?.email && (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mt-4">
+            <p className="font-medium text-slate-800 text-sm mb-1">Password reset</p>
+            <p className="text-xs text-slate-500 mb-3">
+              Send a reset link to <span className="font-medium">{user.email}</span>.
+            </p>
+            {resetSent ? (
+              <p className="text-xs text-green-600 font-medium">Check your email for a reset link.</p>
+            ) : (
+              <>
+                <button
+                  onClick={handleResetPassword}
+                  disabled={resetLoading}
+                  className="text-xs px-3 py-1.5 border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+                >
+                  {resetLoading ? 'Sending…' : 'Send reset email'}
+                </button>
+                {resetError && <p className="text-xs text-red-500 mt-2">{resetError}</p>}
+              </>
             )}
           </div>
         )}

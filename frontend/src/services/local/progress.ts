@@ -153,8 +153,8 @@ async function promoteNextForType(
  * The target palette size grows as the user graduates more birds of that type.
  */
 export function typeLevel0MaxSize(graduateCount: number): number {
-  return graduateCount > 12 ? MAX_LEVEL_0_SIZE
-    : graduateCount > 6    ? MAX_LEVEL_0_SIZE_THIRD
+  return graduateCount > 3 ? MAX_LEVEL_0_SIZE
+    : graduateCount > 2    ? MAX_LEVEL_0_SIZE_THIRD
     : graduateCount > 1    ? MAX_LEVEL_0_SIZE_SECOND
     :                        MAX_LEVEL_0_SIZE_FIRST;
 }

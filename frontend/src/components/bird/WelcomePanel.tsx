@@ -28,6 +28,7 @@ export function WelcomePanel({ hasActiveQuestion, userEmail, onAuthClick, onSign
           <h1 className="text-3xl font-bold text-slate-800 leading-tight text-center">BirdyGurdy</h1>
           <p className="text-sm text-slate-500 mt-1 text-center">by Three Corner Orchard Technology</p>
 
+          <br/><p className="text-sm text-slate-600">A bird identification game that adapts to your pace and local area. You get to decide what to focus on: sight ID, ID by songs and calls, or scientific nomenclature.</p>
           <ul className="mt-6 space-y-3">
             {[
               { icon: '🧠', text: 'Adaptive learning - birds are introduced gradually, with most common birds first, and the quiz adjusts to your pace as you build mastery.' },

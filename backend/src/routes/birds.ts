@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import axios from 'axios';
 import { getTaxonomy, getRegionalSpecies, ebirdClient, getCommonSpeciesCodes, getSpeciesList } from '../services/ebird';
-import { getRecordings } from '../services/xenocanto';
+import { getRecordings, parseXCLength } from '../services/xenocanto';
 import { getSpeciesPhotoUrl, getSpeciesPhotoUrls, getSpeciesPhotoUrlsForQuestion } from '../services/macaulay';
 import { getWikipediaSummary, getWikipediaRangeMap, getWikipediaRangeMapLegend, getWikipediaPhotos } from '../services/wikipedia';
 import { cache } from '../cache';
@@ -193,13 +193,17 @@ router.get('/info/:speciesCode', async (req, res) => {
       rangeMapUrl,
       rangeMapLegend,
       conservationStatus,
-      recordings: recs.slice(0, 6).map((r: { file: string; sono?: { med?: string; small?: string }; type?: string; cnt?: string; en?: string }) => ({
-        file:    r.file,
-        sonoUrl: r.sono?.med ?? r.sono?.small ?? null,
-        type:    r.type ?? null,
-        country: r.cnt ?? null,
-        en:      r.en ?? null,
-      })),
+      recordings: recs.slice(0, 6).map((r: { file: string; sono?: { med?: string; small?: string }; type?: string; cnt?: string; en?: string; length?: string }) => {
+        const dur = parseXCLength(r.length);
+        return {
+          file:            r.file,
+          sonoUrl:         r.sono?.med ?? r.sono?.small ?? null,
+          type:            r.type ?? null,
+          country:         r.cnt ?? null,
+          en:              r.en ?? null,
+          durationSeconds: isFinite(dur) ? dur : null,
+        };
+      }),
       // Primary photo from iNaturalist taxa API (high quality), optionals from Wikipedia article
       photos: { primary: photoData.primary, optional: wikiPhotos },
     };

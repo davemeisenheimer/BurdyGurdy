@@ -7,7 +7,7 @@ interface Props {
   onSignUp: () => void;   // new account just created
 }
 
-type Mode = 'signin' | 'signup';
+type Mode = 'signin' | 'signup' | 'forgot';
 
 export function AuthPanel({ onClose, onSignIn, onSignUp }: Props) {
   const [mode, setMode]         = useState<Mode>('signin');
@@ -44,6 +44,18 @@ export function AuthPanel({ onClose, onSignIn, onSignUp }: Props) {
     setLoading(false);
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+    setLoading(false);
+    if (error) setError(error.message);
+    else       setSent(true);
+  };
+
   const handleOAuth = async (provider: 'google' | 'github') => {
     setLoading(true);
     setError(null);
@@ -68,18 +80,51 @@ export function AuthPanel({ onClose, onSignIn, onSignUp }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-bold text-slate-800">
-            {mode === 'signin' ? 'Sign in' : 'Create account'}
+            {mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Reset password'}
           </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl leading-none">✕</button>
         </div>
 
         {sent ? (
-          <div className="text-center py-4">
-            <p className="text-slate-700 font-medium mb-1">Check your email</p>
+          <div className="text-center py-6">
+            <img src="/favicon.png" className="w-14 h-14 mx-auto mb-4 opacity-90" aria-hidden="true" />
+            <p className="text-sky-700 font-semibold mb-1">Check your email</p>
             <p className="text-sm text-slate-500">
-              We sent a confirmation link to <strong>{email}</strong>. Click it to activate your account.
+              {mode === 'forgot'
+                ? <>We sent a password reset link to <strong>{email}</strong>.</>
+                : <>We sent a confirmation link to <strong>{email}</strong>. Click it to activate your account.</>
+              }
             </p>
           </div>
+        ) : mode === 'forgot' ? (
+          <form onSubmit={handleForgotPassword} className="flex flex-col gap-3">
+            <p className="text-sm text-slate-500">Enter your email and we'll send you a reset link.</p>
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={e => { setEmail(e.target.value); clearError(); }}
+              required
+              className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-forest-500"
+            />
+            {error && <p className="text-red-500 text-xs">{error}</p>}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-2.5 bg-forest-600 hover:bg-forest-700 text-white rounded-xl text-sm font-semibold disabled:opacity-50"
+            >
+              {loading ? 'Sending…' : 'Send reset email'}
+            </button>
+            <p className="text-center text-xs text-slate-500">
+              <button
+                type="button"
+                onClick={() => { setMode('signin'); clearError(); }}
+                className="text-forest-600 font-medium hover:underline"
+              >
+                Back to sign in
+              </button>
+            </p>
+          </form>
         ) : (
           <>
             {/* News opt-in */}
@@ -132,6 +177,17 @@ export function AuthPanel({ onClose, onSignIn, onSignUp }: Props) {
                 className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-forest-500"
               />
               {error && <p className="text-red-500 text-xs">{error}</p>}
+              {mode === 'signin' && (
+                <p className="text-right -mt-1">
+                  <button
+                    type="button"
+                    onClick={() => { setMode('forgot'); clearError(); }}
+                    className="text-xs text-slate-400 hover:text-forest-600 hover:underline"
+                  >
+                    Forgot password?
+                  </button>
+                </p>
+              )}
               <button
                 type="submit"
                 disabled={loading}

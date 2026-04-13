@@ -6,6 +6,7 @@ import { HelpModal } from '../ui/HelpModal';
 import { MapRegionPicker } from '../ui/MapRegionPicker';
 import { AccountPill } from '../ui/AccountPill';
 import { HelpInfo } from '../ui/HelpInfo';
+import { DialogGeneric } from '../ui/DialogGeneric';
 
 interface Props {
   initialConfig: QuizConfig;
@@ -42,6 +43,7 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
   const [showHelp, setShowHelp] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [showRandomWarning, setShowRandomWarning] = useState(false);
+  const [showOrderGroupWarning, setShowOrderGroupWarning] = useState(false);
 
   // Sync local state when config is updated externally (e.g. cloud download on sign-in)
   useEffect(() => {
@@ -69,7 +71,18 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
   };
 
   const handleStart = () => {
+    if (selectedTypes.includes('order') && groupId !== 'all') {
+      setShowOrderGroupWarning(true);
+      return;
+    }
     onStart({ regionCode: isDesktop ? regionCode : initialConfig.regionCode, questionTypes: selectedTypes, mode, questionsPerRound, groupId });
+  };
+
+  const handlePlayAllBirds = () => {
+    setGroupId('all');
+    notify({ groupId: 'all' });
+    setShowOrderGroupWarning(false);
+    onStart({ regionCode: isDesktop ? regionCode : initialConfig.regionCode, questionTypes: selectedTypes, mode, questionsPerRound, groupId: 'all' });
   };
 
   return (
@@ -286,34 +299,24 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
           onClose={() => setShowMap(false)}
         />
       )}
+      {showOrderGroupWarning && (
+        <DialogGeneric
+          dialogId="orderGroupWarning"
+          extraChildren={
+            <p className="text-sm text-slate-600 leading-relaxed mt-2">
+              You currently have <span className="font-semibold">{BIRD_GROUPS.find(g => g.id === groupId)?.label ?? groupId}</span> selected. To switch to All Birds and continue playing, click <span className="font-semibold">Play All Birds</span>.
+            </p>
+          }
+          onConfirm={handlePlayAllBirds}
+          onCancel={() => setShowOrderGroupWarning(false)}
+        />
+      )}
       {showRandomWarning && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 flex flex-col gap-4">
-            <div>
-              <h2 className="text-lg font-bold text-slate-800 mb-2">Random mode</h2>
-              <p className="text-sm text-slate-600 leading-relaxed">
-                In random mode your progress is <span className="font-semibold">not tracked</span>. Birds you answer correctly won't advance in your adaptive learning history, and nothing will be added to your Life List.
-              </p>
-              <p className="text-sm text-slate-600 leading-relaxed mt-2">
-                Switch back to Adaptive at any time to resume tracking.
-              </p>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowRandomWarning(false)}
-                className="flex-1 py-2.5 rounded-xl border border-slate-300 text-slate-600 font-medium text-sm hover:bg-slate-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => { setMode('random'); notify({ mode: 'random' }); setShowRandomWarning(false); }}
-                className="flex-1 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-semibold text-sm transition-colors"
-              >
-                OK, got it
-              </button>
-            </div>
-          </div>
-        </div>
+        <DialogGeneric
+          dialogId="randomWarning"
+          onConfirm={() => { setMode('random'); notify({ mode: 'random' }); setShowRandomWarning(false); }}
+          onCancel={() => setShowRandomWarning(false)}
+        />
       )}
     </div>
   );

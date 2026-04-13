@@ -25,11 +25,11 @@
 //   13+         → MAX_LEVEL_0_SIZE  (the ceiling)
 
 /** Target palette size when the user has mastered 0 birds. */
-export const MAX_LEVEL_0_SIZE_FIRST  = 6;
+export const MAX_LEVEL_0_SIZE_FIRST  = 8;
 /** Target palette size when the user has mastered 1–6 birds. */
-export const MAX_LEVEL_0_SIZE_SECOND = 8;
+export const MAX_LEVEL_0_SIZE_SECOND = 10;
 /** Target palette size when the user has mastered 7–12 birds. */
-export const MAX_LEVEL_0_SIZE_THIRD  = 10;
+export const MAX_LEVEL_0_SIZE_THIRD  = 11;
 /** Maximum palette size (reached after mastering 13+ birds). */
 export const MAX_LEVEL_0_SIZE        = 12;
 

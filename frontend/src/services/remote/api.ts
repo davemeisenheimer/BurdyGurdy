@@ -75,7 +75,8 @@ export interface BirdInfoData {
     sonoUrl: string | null;
     type: string | null;
     country: string | null;
-    en: string | null;      // English name from xeno-canto (confirmation)
+    en: string | null;              // English name from xeno-canto (confirmation)
+    durationSeconds: number | null;
   }>;
   photos: { primary: AttributedPhoto | null; optional: AttributedPhoto[] };
 }
