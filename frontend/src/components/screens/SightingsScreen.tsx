@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
+import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import type { RegionalSighting } from '../../services/remote/api';
-import { fetchRegionalSightings } from '../../services/remote/api';
+import { fetchRegionalSightings, fetchSpeciesSightings } from '../../services/remote/api';
 import { db } from '../../lib/db';
 import type { BirdProgress } from '../../types';
 import type { MapMode } from '../bird/SightingsMap';
@@ -56,6 +56,9 @@ export function SightingsScreen({ regionCode, isDesktop, onBack, onSightingsLoad
     !isDesktop && externalSelected ? externalSelected : null,
   );
   const [mapMode, setMapMode] = useState<MapMode>('single');
+  const [speciesSightings, setSpeciesSightings] = useState<RegionalSighting[]>([]);
+  const [speciesLoading,   setSpeciesLoading]   = useState(false);
+  const fetchedSpeciesRef = useRef<string | null>(null);
   // True when the map was opened via a blue tile (not by tapping a list item).
   // Controls whether the back arrow returns to the previous screen or to the list.
   const [directMap, setDirectMap] = useState(!isDesktop && !!externalSelected);
@@ -84,6 +87,18 @@ export function SightingsScreen({ regionCode, isDesktop, onBack, onSightingsLoad
 
     return () => { cancelled = true; };
   }, [regionCode]);
+
+  useEffect(() => {
+    if (mapMode !== 'species' || !mobileSelected) return;
+    const key = `${mobileSelected.speciesCode}:${regionCode}`;
+    if (fetchedSpeciesRef.current === key) return;
+    fetchedSpeciesRef.current = key;
+    setSpeciesLoading(true);
+    fetchSpeciesSightings(mobileSelected.speciesCode, regionCode).then(data => {
+      setSpeciesSightings(data);
+      setSpeciesLoading(false);
+    });
+  }, [mapMode, mobileSelected, regionCode]);
 
   const handleSelectSighting = (s: RegionalSighting) => {
     if (isDesktop) {
@@ -134,7 +149,9 @@ export function SightingsScreen({ regionCode, isDesktop, onBack, onSightingsLoad
         {/* Toggle — sits clearly above the Leaflet container */}
         <div className="shrink-0 flex gap-2 px-3 py-2 border-b border-slate-200 bg-white overflow-x-auto">
           <button className={`${btnBase} ${mapMode === 'single'  ? btnActive : btnInactive}`} onClick={() => setMapMode('single')}>Only this sighting</button>
-          <button className={`${btnBase} ${mapMode === 'species' ? btnActive : btnInactive}`} onClick={() => setMapMode('species')}>All for this species</button>
+          <button className={`${btnBase} ${mapMode === 'species' ? btnActive : btnInactive}`} onClick={() => setMapMode('species')}>
+            {mapMode === 'species' && speciesLoading ? 'Loading…' : 'All for this species'}
+          </button>
           <button className={`${btnBase} ${mapMode === 'all'     ? btnActive : btnInactive}`} onClick={() => setMapMode('all')}>All sightings</button>
         </div>
 
@@ -149,6 +166,7 @@ export function SightingsScreen({ regionCode, isDesktop, onBack, onSightingsLoad
               allSightings={sightings}
               selectedSighting={mobileSelected}
               mode={mapMode}
+              speciesSightings={speciesSightings}
             />
           </Suspense>
         </div>

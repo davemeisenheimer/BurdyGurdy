@@ -1,5 +1,6 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { RegionalSighting } from '../../services/remote/api';
+import { fetchSpeciesSightings } from '../../services/remote/api';
 import type { MapMode } from '../bird/SightingsMap';
 
 const SightingsMap = lazy(() =>
@@ -9,14 +10,31 @@ const SightingsMap = lazy(() =>
 interface Props {
   allSightings:     RegionalSighting[];
   selectedSighting: RegionalSighting | null;
+  regionCode:       string;
 }
 
 const btnBase = 'px-3 py-1 text-xs font-semibold rounded-full border transition-colors whitespace-nowrap';
 const btnActive = 'bg-sky-600 border-sky-600 text-white';
 const btnInactive = 'bg-white border-slate-300 text-slate-600 hover:border-sky-400';
 
-export function SightingsMapPanel({ allSightings, selectedSighting }: Props) {
+export function SightingsMapPanel({ allSightings, selectedSighting, regionCode }: Props) {
   const [mode, setMode] = useState<MapMode>('single');
+  const [speciesSightings, setSpeciesSightings] = useState<RegionalSighting[]>([]);
+  const [speciesLoading, setSpeciesLoading]     = useState(false);
+  // Track which species we've already fetched to avoid redundant calls.
+  const fetchedSpeciesRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (mode !== 'species' || !selectedSighting) return;
+    const key = `${selectedSighting.speciesCode}:${regionCode}`;
+    if (fetchedSpeciesRef.current === key) return;
+    fetchedSpeciesRef.current = key;
+    setSpeciesLoading(true);
+    fetchSpeciesSightings(selectedSighting.speciesCode, regionCode).then(data => {
+      setSpeciesSightings(data);
+      setSpeciesLoading(false);
+    });
+  }, [mode, selectedSighting, regionCode]);
 
   if (!selectedSighting) {
     return (
@@ -31,7 +49,9 @@ export function SightingsMapPanel({ allSightings, selectedSighting }: Props) {
       {/* Toggle bar — lives outside the Leaflet container so layout is unambiguous */}
       <div className="shrink-0 flex gap-2 px-3 py-2 border-b border-slate-200 bg-white overflow-x-auto">
         <button className={`${btnBase} ${mode === 'single'  ? btnActive : btnInactive}`} onClick={() => setMode('single')}>Only this sighting</button>
-        <button className={`${btnBase} ${mode === 'species' ? btnActive : btnInactive}`} onClick={() => setMode('species')}>All for this species</button>
+        <button className={`${btnBase} ${mode === 'species' ? btnActive : btnInactive}`} onClick={() => setMode('species')}>
+          {mode === 'species' && speciesLoading ? 'Loading…' : 'All for this species'}
+        </button>
         <button className={`${btnBase} ${mode === 'all'     ? btnActive : btnInactive}`} onClick={() => setMode('all')}>All sightings</button>
       </div>
 
@@ -46,6 +66,7 @@ export function SightingsMapPanel({ allSightings, selectedSighting }: Props) {
             allSightings={allSightings}
             selectedSighting={selectedSighting}
             mode={mode}
+            speciesSightings={speciesSightings}
           />
         </Suspense>
       </div>

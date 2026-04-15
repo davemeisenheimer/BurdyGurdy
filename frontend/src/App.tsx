@@ -784,6 +784,7 @@ export default function App() {
             <SightingsMapPanel
               allSightings={allSightings}
               selectedSighting={selectedSighting}
+              regionCode={config.regionCode}
             />
           </div>
         )}

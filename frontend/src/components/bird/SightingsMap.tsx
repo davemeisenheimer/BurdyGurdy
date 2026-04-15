@@ -18,9 +18,11 @@ L.Icon.Default.mergeOptions({
 export type MapMode = 'single' | 'species' | 'all';
 
 interface Props {
-  allSightings:     RegionalSighting[];
-  selectedSighting: RegionalSighting;
-  mode:             MapMode;
+  allSightings:      RegionalSighting[];
+  selectedSighting:  RegionalSighting;
+  mode:              MapMode;
+  /** Populated on-demand when mode === 'species'. */
+  speciesSightings?: RegionalSighting[];
 }
 
 function formatObsDt(obsDt: string): string {
@@ -33,7 +35,7 @@ function formatObsDt(obsDt: string): string {
  * Pure Leaflet map renderer.  The toggle control lives in the parent component
  * so it is completely outside Leaflet's layout influence.
  */
-export function SightingsMap({ allSightings, selectedSighting, mode }: Props) {
+export function SightingsMap({ allSightings, selectedSighting, mode, speciesSightings = [] }: Props) {
   const containerRef  = useRef<HTMLDivElement>(null);
   const mapRef        = useRef<L.Map | null>(null);
   const layerRef      = useRef<L.LayerGroup | null>(null);
@@ -42,11 +44,10 @@ export function SightingsMap({ allSightings, selectedSighting, mode }: Props) {
   const prevCountRef  = useRef<number>(-1);
   const [ready, setReady] = useState(false);
 
-  const visibleSightings = (() => {
-    if (mode === 'single')  return [selectedSighting].filter(s => s.lat != null && s.lng != null);
-    if (mode === 'species') return allSightings.filter(s => s.speciesCode === selectedSighting.speciesCode && s.lat != null && s.lng != null);
-    return allSightings.filter(s => s.lat != null && s.lng != null);
-  })();
+  const visibleSightings =
+    mode === 'single'  ? [selectedSighting].filter(s => s.lat != null && s.lng != null) :
+    mode === 'species' ? speciesSightings.filter(s => s.lat != null && s.lng != null) :
+    allSightings.filter(s => s.lat != null && s.lng != null);
 
   // Initialise the Leaflet map once the container div is in the DOM.
   useEffect(() => {

@@ -136,6 +136,15 @@ export interface RegionalSighting {
   userDisplayName: string | null;
 }
 
+export async function fetchSpeciesSightings(speciesCode: string, regionCode: string): Promise<RegionalSighting[]> {
+  try {
+    const res = await api.get<RegionalSighting[]>(`/birds/recent-species/${speciesCode}`, { params: { regionCode } });
+    return res.data;
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchRegionalSightings(regionCode: string): Promise<RegionalSighting[]> {
   try {
     const res = await api.get<RegionalSighting[]>('/birds/recent-all', { params: { regionCode } });
