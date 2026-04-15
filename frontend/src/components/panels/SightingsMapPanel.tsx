@@ -29,6 +29,7 @@ export function SightingsMapPanel({ allSightings, selectedSighting, regionCode }
     const key = `${selectedSighting.speciesCode}:${regionCode}`;
     if (fetchedSpeciesRef.current === key) return;
     fetchedSpeciesRef.current = key;
+    setSpeciesSightings([]);
     setSpeciesLoading(true);
     fetchSpeciesSightings(selectedSighting.speciesCode, regionCode).then(data => {
       setSpeciesSightings(data);

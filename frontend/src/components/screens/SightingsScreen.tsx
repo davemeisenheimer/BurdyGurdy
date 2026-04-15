@@ -93,6 +93,7 @@ export function SightingsScreen({ regionCode, isDesktop, onBack, onSightingsLoad
     const key = `${mobileSelected.speciesCode}:${regionCode}`;
     if (fetchedSpeciesRef.current === key) return;
     fetchedSpeciesRef.current = key;
+    setSpeciesSightings([]);
     setSpeciesLoading(true);
     fetchSpeciesSightings(mobileSelected.speciesCode, regionCode).then(data => {
       setSpeciesSightings(data);
