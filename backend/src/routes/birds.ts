@@ -406,6 +406,46 @@ router.get('/regions/locate', async (req, res) => {
   }
 });
 
+// GET /api/birds/recent-all?regionCode=CA-ON-OT
+// Returns all eBird observations in a region for the past 24 hours.
+// Includes speciesCode, comName, sciName, locName, obsDt, howMany, lat, lng, subId, userDisplayName.
+// Cached 5 minutes server-side.
+router.get('/recent-all', async (req, res) => {
+  const regionCode = String(req.query.regionCode ?? '');
+  if (!regionCode) return res.status(400).json({ error: 'regionCode required' });
+
+  const cacheKey = `recent-all:${regionCode}`;
+  const cached = cache.get<object[]>(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    const result = await ebirdClient().get(`/data/obs/${regionCode}/recent`, {
+      params: { back: 1, detail: 'full' },
+    });
+    type EbirdObs = {
+      speciesCode: string; comName: string; sciName: string;
+      locName: string; obsDt: string; howMany?: number;
+      lat?: number; lng?: number; subId?: string; userDisplayName?: string;
+    };
+    const sightings = (result.data as EbirdObs[]).map(s => ({
+      speciesCode:     s.speciesCode,
+      comName:         s.comName,
+      sciName:         s.sciName,
+      locName:         s.locName,
+      obsDt:           s.obsDt,
+      howMany:         s.howMany        ?? null,
+      lat:             s.lat            ?? null,
+      lng:             s.lng            ?? null,
+      subId:           s.subId          ?? null,
+      userDisplayName: s.userDisplayName ?? null,
+    }));
+    cache.set(cacheKey, sightings, 5 * 60 * 1000); // 5 minutes
+    res.json(sightings);
+  } catch {
+    res.json([]);
+  }
+});
+
 // GET /api/birds/recent/:speciesCode?regionCode=CA-ON-OT
 // Returns up to 3 most recent eBird observations of a species in a region (last 30 days).
 router.get('/recent/:speciesCode', async (req, res) => {

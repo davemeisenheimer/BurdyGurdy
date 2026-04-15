@@ -38,6 +38,7 @@ interface Props {
   onNext: () => void;
   onSkip?: () => void;
   onReportError?: (data: ReportErrorData & { mediaUrl: string; mediaType: 'photo' | 'audio' }) => void;
+  onSightingClick?: (sighting: RecentSighting, speciesCode: string, comName: string, sciName: string) => void;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -105,6 +106,7 @@ export function QuizScreen({
   onNext,
   onSkip,
   onReportError,
+  onSightingClick,
 }: Props) {
   const answered = selectedAnswer !== null;
   const stimType = getStimulusType(question.type);
@@ -526,18 +528,26 @@ export function QuizScreen({
                         {revealSightings.slice(0, 1).map((s, i) => {
                           const d = new Date(s.obsDt.replace(' ', 'T'));
                           const date = isNaN(d.getTime()) ? s.obsDt : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                          const clickable = !!onSightingClick;
                           return (
-                            <div key={i} className="bg-sky-50 border border-sky-100 rounded-lg px-2 py-1.5 flex flex-col justify-between">
+                            <div
+                              key={i}
+                              onClick={clickable ? () => onSightingClick(s, question.speciesCode, question.comName, question.sciName) : undefined}
+                              className={`bg-sky-50 border border-sky-100 rounded-lg px-2 py-1.5 flex flex-col justify-between ${clickable ? 'cursor-pointer hover:bg-sky-100 active:bg-sky-200 transition-colors' : ''}`}
+                            >
                               <p className="text-xs font-medium text-slate-700 leading-tight truncate">{s.locName}</p>
                               <div className="flex items-baseline justify-between gap-1">
                                 <p className="text-[10px] text-slate-400 leading-tight">{date}{s.howMany != null ? ` · ×${s.howMany}` : ''}</p>
-                                {s.lat != null && s.lng != null && (
+                                {s.lat != null && s.lng != null && !clickable && (
                                   <a
                                     href={`https://www.google.com/maps?q=${s.lat},${s.lng}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="text-[10px] text-sky-500 leading-tight shrink-0 hover:underline"
                                   >{s.lat.toFixed(3)}, {s.lng.toFixed(3)}</a>
+                                )}
+                                {s.lat != null && s.lng != null && clickable && (
+                                  <span className="text-[10px] text-sky-500 leading-tight shrink-0">{s.lat.toFixed(3)}, {s.lng.toFixed(3)}</span>
                                 )}
                               </div>
                             </div>

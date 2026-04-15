@@ -122,6 +122,29 @@ export async function fetchRecentSightings(speciesCode: string, regionCode: stri
   }
 }
 
+/** A single observation from the regional 24-hour feed. */
+export interface RegionalSighting {
+  speciesCode:     string;
+  comName:         string;
+  sciName:         string;
+  locName:         string;
+  obsDt:           string;
+  howMany:         number | null;
+  lat:             number | null;
+  lng:             number | null;
+  subId:           string | null;
+  userDisplayName: string | null;
+}
+
+export async function fetchRegionalSightings(regionCode: string): Promise<RegionalSighting[]> {
+  try {
+    const res = await api.get<RegionalSighting[]>('/birds/recent-all', { params: { regionCode } });
+    return res.data;
+  } catch {
+    return [];
+  }
+}
+
 export interface CarouselRecording {
   file:    string;
   sonoUrl: string | null;

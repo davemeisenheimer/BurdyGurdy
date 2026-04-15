@@ -5,6 +5,7 @@ import { getRegionSpecies } from '../../services/local/region';
 import { isStrugglingByWindow, STRUGGLING_WINDOW } from '../../lib/struggling';
 import { MASTERY_LABELS, masteryBadgeClass } from '../../lib/mastery';
 import { MasteryBadge } from '../ui/MasteryBadge';
+import { ProgressTypePill, TYPE_LABELS } from '../ui/ProgressTypePill';
 import { FocusModeToggle } from '../ui/FocusModeToggle';
 import { deleteCloudProgress } from '../../services/remote/sync';
 import type { BirdProgress, QuestionType } from '../../types';
@@ -29,11 +30,7 @@ interface Props {
   friendDisplayName?: string;
 }
 
-const TYPE_LABELS: Record<QuestionType, string> = {
-  song: 'Song', image: 'Photo', latin: 'Latin', family: 'Family', order: 'Order', sono: 'Sono',
-  'image-latin': 'PhotoL', 'song-latin': 'SongL', 'family-latin': 'FamilyL',
-  'image-song': 'PhotoS', 'sono-song': 'SpectroS', 'latin-song': 'LatinS',
-};
+// TYPE_LABELS lives in ProgressTypePill (shared with sightings screen)
 
 interface BirdSummary {
   speciesCode: string;
@@ -279,32 +276,6 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
     if (accuracy >= 0.85) return 'bg-green-500';
     if (accuracy >= 0.6)  return 'bg-amber-400';
     return 'bg-red-400';
-  };
-
-  const progressBadge = (r: BirdProgress) => {
-    const total = r.correct + r.incorrect;
-    const lifetimePct = total > 0 ? Math.round((r.correct / total) * 100) : null;
-    const recentPct = (() => { const a = recentWindowAccuracy(r); return a !== null ? Math.round(a * 100) : null; })();
-    const pct = accuracyMode === 'last10' ? (recentPct ?? lifetimePct) : lifetimePct;
-    const struggling = (r.isMastered ?? false) && isStrugglingByWindow(r.recentAnswers ?? []);
-    return (
-      <span
-        key={r.questionType}
-        className={`relative text-xs px-2 py-0.5 rounded-full ${r.favourited ? 'ring-1 ring-amber-400' : ''} ${
-          pct === null ? 'bg-slate-100 text-slate-400'
-          : pct >= 85  ? 'bg-green-100 text-green-700'
-          : pct >= 60  ? 'bg-amber-100 text-amber-700'
-          : 'bg-red-100 text-red-700'
-        }`}
-      >
-        {TYPE_LABELS[r.questionType]}: {pct !== null ? `${pct}%` : '-'}
-        {struggling && (
-          <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 text-white text-[9px] leading-none rounded-full flex items-center justify-center font-bold pointer-events-none select-none">
-            !
-          </span>
-        )}
-      </span>
-    );
   };
 
   return (
@@ -576,11 +547,15 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
                 />
               </div>
               <div className="flex flex-wrap gap-2">
-                {bird.records.filter(r => (filter !== 'mastered' && !r.isMastered) || (filter === 'mastered' && r.isMastered)).map(r => progressBadge(r))}
+                {bird.records.filter(r => (filter !== 'mastered' && !r.isMastered) || (filter === 'mastered' && r.isMastered)).map(r => (
+                  <ProgressTypePill key={r.questionType} record={r} useRecentAccuracy={accuracyMode === 'last10'} />
+                ))}
                 {filter !== 'mastered' && bird.records.some(r => r.isMastered) && (
                   <span className="text-xs px-1.5 py-0.5 rounded-full font-medium">Mastered:</span>
                 )}
-                {bird.records.filter(r => r.isMastered && filter !== 'mastered').map(r => progressBadge(r))}
+                {bird.records.filter(r => r.isMastered && filter !== 'mastered').map(r => (
+                  <ProgressTypePill key={r.questionType} record={r} useRecentAccuracy={accuracyMode === 'last10'} />
+                ))}
               </div>
             </div>
             </Fragment>);

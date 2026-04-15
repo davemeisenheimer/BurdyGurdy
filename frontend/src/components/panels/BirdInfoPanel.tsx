@@ -27,12 +27,14 @@ interface Props {
   onAuthClick?:               () => void;
   onSignOut?:                 () => void;
   browseSpecies?: { speciesCode: string; comName: string } | null;
+  /** Called when a blue sighting tile is clicked — navigate to sightings map. */
+  onSightingClick?: (sighting: RecentSighting, speciesCode: string, comName: string, sciName: string) => void;
 }
 
 export function BirdInfoPanel({
   question, isAnswered, isCorrect, selectedAnswer,
   regionCode, maxRecentSightings = 4, autoScrollRelatedSpecies = true,
-  autoplayRevealAudio = false, userEmail, onAuthClick, onSignOut, browseSpecies,
+  autoplayRevealAudio = false, userEmail, onAuthClick, onSignOut, browseSpecies, onSightingClick,
 }: Props) {
   const mainAudioPauseRef = useRef<(() => void) | null>(null);
 
@@ -216,7 +218,12 @@ export function BirdInfoPanel({
                 <SpeciesTaxonomyCard sp={sp} conservationStatus={info?.conservationStatus} />
               </div>
               <div className="flex-1 min-w-0">
-                <RecentSightings sightings={sightings} />
+                <RecentSightings
+                  sightings={sightings}
+                  onSightingClick={onSightingClick
+                    ? s => onSightingClick(s, sp.speciesCode, sp.comName, sp.sciName)
+                    : undefined}
+                />
               </div>
             </div>
 
