@@ -16,6 +16,8 @@ import { CurationPanel } from './components/panels/CurationPanel';
 import { FactsCurationPanel } from './components/panels/FactsCurationPanel';
 import { DatabasePanel } from './components/panels/DatabasePanel';
 import { BirdInfoPanel } from './components/panels/BirdInfoPanel';
+import { SightingsMapPanel } from './components/panels/SightingsMapPanel';
+import { SightingsScreen } from './components/screens/SightingsScreen';
 import { AuthPanel } from './components/panels/AuthPanel';
 import { Toast } from './components/ui/Toast';
 import { DialogGeneric } from './components/ui/DialogGeneric';
@@ -25,7 +27,7 @@ import { loadSettings, saveSettings, loadQuizPrefs, saveQuizPrefs, resetUserSett
 import type { AppSettings } from './lib/settings';
 import { checkVictoryCondition, hasSeenVictory, markVictorySeen, getVictorySeen, mergeVictorySeen, describeMastery, describeWindow } from './lib/victory';
 import { locateRegion } from './services/remote/api';
-import type { LocateResult } from './services/remote/api';
+import type { LocateResult, RegionalSighting, RecentSighting } from './services/remote/api';
 import { db, switchToUserDb } from './lib/db';
 import { supabase } from './lib/supabase';
 import type { SupabaseUser } from './lib/supabase';
@@ -108,12 +110,16 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem('burdygurdy_onboarding_complete'));
   const [installPromptEvent, setInstallPromptEvent] = useState<BeforeInstallPromptEvent | null>(null);
 
-  const [screen, setScreen] = useState<'home' | 'quiz' | 'result' | 'progress' | 'settings' | 'victory' | 'recentprogress' | 'birdinfo' | 'friends' | 'notifications' | 'friendprogress' | 'friendrecentprogress'>(
+  const [screen, setScreen] = useState<'home' | 'quiz' | 'result' | 'progress' | 'settings' | 'victory' | 'recentprogress' | 'birdinfo' | 'friends' | 'notifications' | 'friendprogress' | 'friendrecentprogress' | 'sightings'>(
     () => sessionStorage.getItem('pendingInvite') ? 'friends' : 'home',
   );
+  const [selectedSighting, setSelectedSighting] = useState<RegionalSighting | null>(null);
+  // All sightings loaded by SightingsScreen — lifted here so the map panel can access them.
+  const [allSightings, setAllSightings] = useState<RegionalSighting[]>([]);
   const [prevScreen, setPrevScreen] = useState<'progress' | 'recentprogress' | 'friendprogress' | 'friendrecentprogress'>('progress');
   const [recentProgressBack, setRecentProgressBack] = useState<'result' | 'progress'>('result');
   const [lifeListBack, setLifeListBack] = useState<'home' | 'result'>('home');
+  const [sightingsBack, setSightingsBack] = useState<typeof screen>('home');
   const [rightPanelTab, setRightPanelTab] = useState<'info' | 'curation' | 'facts' | 'database'>('info');
   const [progressSelectedSpecies, setProgressSelectedSpecies] = useState<{ speciesCode: string; comName: string } | null>(null);
   const [friendProgressRecords, setFriendProgressRecords] = useState<BirdProgress[]>([]);
@@ -709,6 +715,26 @@ export default function App() {
     setScreen('friendprogress');
   }
 
+  function handleSightingClick(
+    s: RecentSighting,
+    speciesCode: string, comName: string, sciName: string,
+  ) {
+    const regional: RegionalSighting = {
+      speciesCode, comName, sciName,
+      locName:         s.locName,
+      obsDt:           s.obsDt,
+      howMany:         s.howMany,
+      lat:             s.lat,
+      lng:             s.lng,
+      subId:           null,
+      userDisplayName: null,
+    };
+    setSelectedSighting(regional);
+    setAllSightings([]);
+    setSightingsBack(screen);
+    setScreen('sightings');
+  }
+
   return (
     <div className="font-sans lg:flex lg:h-screen">
 <Toast toast={currentToast} onDismiss={() => setCurrentToast(null)} />
@@ -735,7 +761,7 @@ export default function App() {
       {/* ── Right panel: desktop only ── */}
       {isDesktop && <div className="lg:flex lg:order-2 flex-col flex-1 border-l-2 border-slate-200 overflow-hidden">
 
-        {isAdmin && settings.enableAdminFeatures && (
+        {isAdmin && settings.enableAdminFeatures && screen !== 'sightings' && (
           <div className="shrink-0 flex border-b border-slate-200 bg-white">
             {(['info', 'curation', 'facts', 'database'] as const).map(tab => (
               <button
@@ -753,7 +779,16 @@ export default function App() {
           </div>
         )}
 
-        {(!isAdmin || !settings.enableAdminFeatures || rightPanelTab === 'info') && (
+        {screen === 'sightings' && (
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <SightingsMapPanel
+              allSightings={allSightings}
+              selectedSighting={selectedSighting}
+            />
+          </div>
+        )}
+
+        {screen !== 'sightings' && (!isAdmin || !settings.enableAdminFeatures || rightPanelTab === 'info') && (
           <BirdInfoPanel
             question={screen === 'quiz' && (state.status === 'active' || state.status === 'answered') ? currentQuestion : null}
             isAnswered={state.status === 'answered'}
@@ -767,20 +802,21 @@ export default function App() {
             userEmail={user?.email}
             onAuthClick={() => setShowAuth(true)}
             onSignOut={performSignOut}
+            onSightingClick={handleSightingClick}
           />
         )}
 
-        {isAdmin && settings.enableAdminFeatures && rightPanelTab === 'curation' && (
+        {screen !== 'sightings' && isAdmin && settings.enableAdminFeatures && rightPanelTab === 'curation' && (
           <div className="flex-1 min-h-0 overflow-hidden">
             <CurationPanel />
           </div>
         )}
-        {isAdmin && settings.enableAdminFeatures && rightPanelTab === 'facts' && (
+        {screen !== 'sightings' && isAdmin && settings.enableAdminFeatures && rightPanelTab === 'facts' && (
           <div className="flex-1 min-h-0 overflow-hidden">
             <FactsCurationPanel />
           </div>
         )}
-        {isAdmin && settings.enableAdminFeatures && rightPanelTab === 'database' && (
+        {screen !== 'sightings' && isAdmin && settings.enableAdminFeatures && rightPanelTab === 'database' && (
           <div className="flex-1 min-h-0 overflow-hidden">
             <DatabasePanel />
           </div>
@@ -795,6 +831,7 @@ export default function App() {
           isDesktop={isDesktop}
           onStart={handleStart}
           onProgress={() => setScreen('progress')}
+          onSightings={() => { setSelectedSighting(null); setAllSightings([]); setScreen('sightings'); }}
           onSettings={() => setScreen('settings')}
           onFriends={() => { setScreen('friends'); setHasPendingInvites(false); }}
           hasPendingInvites={hasPendingInvites}
@@ -804,6 +841,17 @@ export default function App() {
           onAuthClick={() => setShowAuth(true)}
           onSignOut={performSignOut}
           onQuizPrefsChange={handleQuizPrefsChange}
+        />
+      )}
+
+      {screen === 'sightings' && (
+        <SightingsScreen
+          regionCode={config.regionCode}
+          isDesktop={isDesktop}
+          onBack={() => setScreen(sightingsBack)}
+          onSightingsLoaded={setAllSightings}
+          onSelectSighting={isDesktop ? setSelectedSighting : undefined}
+          selectedSighting={selectedSighting}
         />
       )}
 
@@ -904,6 +952,7 @@ export default function App() {
           onNext={handleNext}
           onSkip={nextQuestion}
           onReportError={user ? (data) => handleReportError({ ...data, speciesCode: currentQuestion.speciesCode, comName: currentQuestion.comName }) : undefined}
+          onSightingClick={handleSightingClick}
         />
       )}
 

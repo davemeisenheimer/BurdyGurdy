@@ -15,11 +15,12 @@ function formatSightingDate(obsDt: string): string {
 }
 
 interface Props {
-  sightings: RecentSighting[];
-  variant?:  'cards' | 'table';
+  sightings:       RecentSighting[];
+  variant?:        'cards' | 'table';
+  onSightingClick?: (sighting: RecentSighting) => void;
 }
 
-export function RecentSightings({ sightings, variant = 'cards' }: Props) {
+export function RecentSightings({ sightings, variant = 'cards', onSightingClick }: Props) {
   if (sightings.length === 0) return null;
 
   if (variant === 'table') {
@@ -40,8 +41,13 @@ export function RecentSightings({ sightings, variant = 'cards' }: Props) {
               const coords = s.lat != null && s.lng != null
                 ? `${s.lat.toFixed(4)}, ${s.lng.toFixed(4)}`
                 : loc.coords;
+              const clickable = !!onSightingClick;
               return (
-                <tr key={i} className={`border-b border-sky-100 ${i % 2 === 1 ? 'bg-sky-50' : 'bg-white'}`}>
+                <tr
+                  key={i}
+                  onClick={clickable ? () => onSightingClick(s) : undefined}
+                  className={`border-b border-sky-100 ${i % 2 === 1 ? 'bg-sky-50' : 'bg-white'} ${clickable ? 'cursor-pointer hover:bg-sky-100' : ''}`}
+                >
                   <td className="px-2 py-1 text-slate-500 whitespace-nowrap align-top">
                     <span>{formatSightingDate(s.obsDt)}</span>
                     {s.howMany != null && (
@@ -72,8 +78,13 @@ export function RecentSightings({ sightings, variant = 'cards' }: Props) {
           const coords = s.lat != null && s.lng != null
             ? `${s.lat.toFixed(4)}, ${s.lng.toFixed(4)}`
             : loc.coords;
+          const clickable = !!onSightingClick;
           return (
-            <div key={i} className="shrink-0 flex flex-col bg-sky-50 border border-sky-100 rounded-lg px-2.5 py-1.5">
+            <div
+              key={i}
+              onClick={clickable ? () => onSightingClick(s) : undefined}
+              className={`shrink-0 flex flex-col bg-sky-50 border border-sky-100 rounded-lg px-2.5 py-1.5 ${clickable ? 'cursor-pointer hover:bg-sky-100 active:bg-sky-200 transition-colors' : ''}`}
+            >
               <p className="text-xs font-medium text-slate-700 leading-tight whitespace-nowrap">{loc.name}</p>
               <p className="text-[10px] text-slate-400 leading-tight whitespace-nowrap min-h-[1em]">{coords ?? ''}</p>
               <div className="flex items-center gap-1 mt-auto pt-0.5">

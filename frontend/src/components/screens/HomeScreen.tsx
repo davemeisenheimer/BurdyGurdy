@@ -13,6 +13,7 @@ interface Props {
   isDesktop: boolean;
   onStart: (config: QuizConfig) => void;
   onProgress: () => void;
+  onSightings: () => void;
   onSettings: () => void;
   onFriends: () => void;
   hasPendingInvites: boolean;
@@ -33,7 +34,7 @@ const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: 'sono',   label: 'Spectrogram' },
 ];
 
-export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSettings, onFriends, hasPendingInvites, onNotifications, hasUnreadNotifications, userEmail, onAuthClick, onSignOut, onQuizPrefsChange }: Props) {
+export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSightings, onSettings, onFriends, hasPendingInvites, onNotifications, hasUnreadNotifications, userEmail, onAuthClick, onSignOut, onQuizPrefsChange }: Props) {
   const [regionCode, setRegionCode] = useState(initialConfig.regionCode);
   const [selectedTypes, setSelectedTypes] = useState<QuestionType[]>(initialConfig.questionTypes);
   const [mode, setMode] = useState<GameMode>(initialConfig.mode);
@@ -181,12 +182,20 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSe
             >
               Play
             </button>
-            <button
-              onClick={onProgress}
-              className="flex-1 py-2 rounded-xl border-2 border-slate-300 hover:border-slate-400 text-slate-700 font-semibold transition-colors"
-            >
-              Life List
-            </button>
+            <div className="flex-1 flex flex-col gap-2">
+              <button
+                onClick={onProgress}
+                className="flex-1 py-1 rounded-xl border-2 border-slate-300 hover:border-slate-400 text-slate-700 text-sm font-semibold transition-colors"
+              >
+                Life List
+              </button>
+              <button
+                onClick={onSightings}
+                className="flex-1 py-1 rounded-xl border-2 border-slate-300 hover:border-slate-400 text-slate-700 text-sm font-semibold transition-colors"
+              >
+                Sightings
+              </button>
+            </div>
           </div>
 
           {/* Questions per round */}
