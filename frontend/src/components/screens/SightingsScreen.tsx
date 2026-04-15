@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
+import { useEffect, useMemo, useRef, useState, Suspense } from 'react';
 import type { RegionalSighting } from '../../services/remote/api';
 import { fetchRegionalSightings, fetchSpeciesSightings } from '../../services/remote/api';
 import { db } from '../../lib/db';
@@ -6,9 +6,10 @@ import type { BirdProgress } from '../../types';
 import type { MapMode } from '../bird/SightingsMap';
 import { MapModeToggle } from '../ui/MapModeToggle';
 import { ProgressTypePill } from '../ui/ProgressTypePill';
+import { lazyWithReload } from '../../lib/lazyWithReload';
 
 // Lazy-load the Leaflet map so its bundle is only fetched on first use.
-const SightingsMap = lazy(() =>
+const SightingsMap = lazyWithReload(() =>
   import('../bird/SightingsMap').then(m => ({ default: m.SightingsMap })),
 );
 

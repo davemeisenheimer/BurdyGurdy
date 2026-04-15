@@ -145,10 +145,9 @@ export const HELP_CONTENT: Record<string, HelpEntry> = {
     body: [
       'Determines which sightings are shown on the recent sightings map. The list of sightings includes only '
       + 'the most recent sighting for each species seen in the past 24 hours. By default, clicking on one of '
-      + 'these sightings will show you the location of that most recent sighting on the map. The map is '
-      + 'configurable, however.',
-      'Latest selected: Shows only the most recent sighting for the species indicated.',
-      'All for selected: Shows all sightings, in the past 24 hours, for the species indicated. If you select '
+      + 'these sightings will show you its location on the map but the map is configurable:',
+      'Latest selected: Shows only the most recent sighting for the species selected in the list.',
+      'All for selected: Shows all sightings, in the past 24 hours, for the species selected. If you select '
       + 'a different item from the list in this mode, all of the dots are replaced to show all of the places '
       + 'where the newly selected species has been seen in the past 24 hours.',
       'All species: Shows the most recent sighting for all species seen in the past 24 hours. When you select '

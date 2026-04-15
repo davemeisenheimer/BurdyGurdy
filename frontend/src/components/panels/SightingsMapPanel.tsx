@@ -1,10 +1,11 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import type { RegionalSighting } from '../../services/remote/api';
 import { fetchSpeciesSightings } from '../../services/remote/api';
 import type { MapMode } from '../bird/SightingsMap';
 import { MapModeToggle } from '../ui/MapModeToggle';
+import { lazyWithReload } from '../../lib/lazyWithReload';
 
-const SightingsMap = lazy(() =>
+const SightingsMap = lazyWithReload(() =>
   import('../bird/SightingsMap').then(m => ({ default: m.SightingsMap })),
 );
 
