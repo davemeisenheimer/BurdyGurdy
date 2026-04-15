@@ -4,6 +4,7 @@ import { fetchRegionalSightings, fetchSpeciesSightings } from '../../services/re
 import { db } from '../../lib/db';
 import type { BirdProgress } from '../../types';
 import type { MapMode } from '../bird/SightingsMap';
+import { MapModeToggle } from '../ui/MapModeToggle';
 import { ProgressTypePill } from '../ui/ProgressTypePill';
 
 // Lazy-load the Leaflet map so its bundle is only fetched on first use.
@@ -124,10 +125,6 @@ export function SightingsScreen({ regionCode, isDesktop, onBack, onSightingsLoad
 
   const activeSelected = isDesktop ? externalSelected : null;
 
-  const btnBase = 'px-3 py-1 text-xs font-semibold rounded-full border transition-colors whitespace-nowrap';
-  const btnActive = 'bg-sky-600 border-sky-600 text-white';
-  const btnInactive = 'bg-white border-slate-300 text-slate-600 hover:border-sky-400';
-
   // Mobile map screen — rendered on top of the list.
   if (!isDesktop && mobileSelected) {
     return (
@@ -148,13 +145,7 @@ export function SightingsScreen({ regionCode, isDesktop, onBack, onSightingsLoad
         </div>
 
         {/* Toggle — sits clearly above the Leaflet container */}
-        <div className="shrink-0 flex gap-2 px-3 py-2 border-b border-slate-200 bg-white overflow-x-auto">
-          <button className={`${btnBase} ${mapMode === 'single'  ? btnActive : btnInactive}`} onClick={() => setMapMode('single')}>Only this sighting</button>
-          <button className={`${btnBase} ${mapMode === 'species' ? btnActive : btnInactive}`} onClick={() => setMapMode('species')}>
-            {mapMode === 'species' && speciesLoading ? 'Loading…' : 'All for this species'}
-          </button>
-          <button className={`${btnBase} ${mapMode === 'all'     ? btnActive : btnInactive}`} onClick={() => setMapMode('all')}>All sightings</button>
-        </div>
+        <MapModeToggle mode={mapMode} onModeChange={setMapMode} speciesLoading={speciesLoading} />
 
         {/* Map fills remaining height */}
         <div className="flex-1 min-h-0 relative">
