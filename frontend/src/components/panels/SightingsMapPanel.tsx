@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import type { RegionalSighting } from '../../services/remote/api';
 import type { MapMode } from '../bird/SightingsMap';
 
@@ -17,11 +17,6 @@ const btnInactive = 'bg-white border-slate-300 text-slate-600 hover:border-sky-4
 
 export function SightingsMapPanel({ allSightings, selectedSighting }: Props) {
   const [mode, setMode] = useState<MapMode>('single');
-
-  // Reset to single-pin view whenever the user picks a different sighting.
-  useEffect(() => {
-    setMode('single');
-  }, [selectedSighting]);
 
   if (!selectedSighting) {
     return (

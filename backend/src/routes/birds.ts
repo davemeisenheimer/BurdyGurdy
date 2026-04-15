@@ -414,6 +414,8 @@ router.get('/recent-all', async (req, res) => {
   const regionCode = String(req.query.regionCode ?? '');
   if (!regionCode) return res.status(400).json({ error: 'regionCode required' });
 
+  res.set('Cache-Control', 'no-store');
+
   const cacheKey = `recent-all:${regionCode}`;
   const cached = cache.get<object[]>(cacheKey);
   if (cached) return res.json(cached);

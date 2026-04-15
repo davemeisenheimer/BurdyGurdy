@@ -34,9 +34,12 @@ function formatObsDt(obsDt: string): string {
  * so it is completely outside Leaflet's layout influence.
  */
 export function SightingsMap({ allSightings, selectedSighting, mode }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef       = useRef<L.Map | null>(null);
-  const layerRef     = useRef<L.LayerGroup | null>(null);
+  const containerRef  = useRef<HTMLDivElement>(null);
+  const mapRef        = useRef<L.Map | null>(null);
+  const layerRef      = useRef<L.LayerGroup | null>(null);
+  const markersRef    = useRef<Map<string, L.Marker>>(new Map());
+  const prevModeRef   = useRef<MapMode | null>(null);
+  const prevCountRef  = useRef<number>(-1);
   const [ready, setReady] = useState(false);
 
   const visibleSightings = (() => {
@@ -76,6 +79,7 @@ export function SightingsMap({ allSightings, selectedSighting, mode }: Props) {
     if (!ready || !mapRef.current || !layerRef.current) return;
 
     layerRef.current.clearLayers();
+    markersRef.current.clear();
     const bounds: [number, number][] = [];
 
     for (const s of visibleSightings) {
@@ -83,10 +87,10 @@ export function SightingsMap({ allSightings, selectedSighting, mode }: Props) {
       bounds.push([s.lat, s.lng]);
 
       const isSelected =
-        s.lat === selectedSighting.lat &&
-        s.lng === selectedSighting.lng &&
         s.speciesCode === selectedSighting.speciesCode &&
-        s.obsDt === selectedSighting.obsDt;
+        s.obsDt       === selectedSighting.obsDt &&
+        s.lat         === selectedSighting.lat &&
+        s.lng         === selectedSighting.lng;
 
       const icon = isSelected
         ? L.divIcon({
@@ -111,26 +115,38 @@ export function SightingsMap({ allSightings, selectedSighting, mode }: Props) {
         </div>
       `);
 
-      L.marker([s.lat, s.lng], { icon }).bindPopup(popup).addTo(layerRef.current!);
+      const markerKey = `${s.speciesCode}|${s.obsDt}|${s.lat}|${s.lng}`;
+      const marker = L.marker([s.lat, s.lng], { icon }).bindPopup(popup);
+      marker.addTo(layerRef.current!);
+      markersRef.current.set(markerKey, marker);
     }
 
-    if (bounds.length === 1) {
-      mapRef.current.setView(bounds[0], 13);
-    } else if (bounds.length > 1) {
-      mapRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+    // Decide whether to refit the viewport or just pan to the new selection.
+    // Refit when: first render, mode changed, or the number of visible pins changed.
+    // Only pan when the selection changed within the same mode+count (e.g. user clicked
+    // a different row while "All sightings" was active — keep the current zoom level).
+    const isFirstRun   = prevModeRef.current === null;
+    const modeChanged  = prevModeRef.current !== mode;
+    const countChanged = prevCountRef.current !== visibleSightings.length;
+    prevModeRef.current  = mode;
+    prevCountRef.current = visibleSightings.length;
+
+    if (isFirstRun || modeChanged || countChanged) {
+      if (bounds.length === 1) {
+        mapRef.current.setView(bounds[0], 13);
+      } else if (bounds.length > 1) {
+        mapRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+      }
+    } else if (selectedSighting.lat != null && selectedSighting.lng != null) {
+      // Selection changed — pan without resetting zoom.
+      mapRef.current.panTo([selectedSighting.lat, selectedSighting.lng]);
     }
 
-    // Auto-open the popup for the selected sighting in single mode.
-    if (mode === 'single' && selectedSighting.lat != null && selectedSighting.lng != null) {
-      layerRef.current.eachLayer(layer => {
-        if (layer instanceof L.Marker) {
-          const ll = layer.getLatLng();
-          if (Math.abs(ll.lat - selectedSighting.lat!) < 0.0001 &&
-              Math.abs(ll.lng - selectedSighting.lng!) < 0.0001) {
-            layer.openPopup();
-          }
-        }
-      });
+    // Open the popup for the selected sighting using its unique key,
+    // so co-located sightings (same lat/lng, different species) are distinguished correctly.
+    if (selectedSighting.lat != null && selectedSighting.lng != null) {
+      const key = `${selectedSighting.speciesCode}|${selectedSighting.obsDt}|${selectedSighting.lat}|${selectedSighting.lng}`;
+      markersRef.current.get(key)?.openPopup();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, visibleSightings.length, selectedSighting, mode]);

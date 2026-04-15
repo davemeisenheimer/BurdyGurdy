@@ -91,7 +91,6 @@ export function SightingsScreen({ regionCode, isDesktop, onBack, onSightingsLoad
     } else {
       setDirectMap(false);
       setMobileSelected(s);
-      setMapMode('single');
     }
   };
 
