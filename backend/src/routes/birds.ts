@@ -422,7 +422,7 @@ router.get('/recent-all', async (req, res) => {
 
   try {
     const result = await ebirdClient().get(`/data/obs/${regionCode}/recent`, {
-      params: { back: 1, detail: 'full' },
+      params: { back: 1, detail: 'full', maxResults: 10000 },
     });
     type EbirdObs = {
       speciesCode: string; comName: string; sciName: string;
