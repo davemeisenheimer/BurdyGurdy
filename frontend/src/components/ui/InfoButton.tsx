@@ -22,7 +22,7 @@ export function InfoButton({ title, body, imageUrl }: Props) {
 
       {open && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/50 p-4"
           onClick={() => setOpen(false)}
         >
           <div
