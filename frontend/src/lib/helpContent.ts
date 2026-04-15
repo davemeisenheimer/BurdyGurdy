@@ -140,4 +140,21 @@ export const HELP_CONTENT: Record<string, HelpEntry> = {
       'Advanced: The path to mastery will skip easy and medium difficulty questions.',
     ],
   },
+  mapScope: {
+    title: 'Map scope',
+    body: [
+      'Determines which sightings are shown on the recent sightings map. The list of sightings includes only '
+      + 'the most recent sighting for each species seen in the past 24 hours. By default, clicking on one of '
+      + 'these sightings will show you the location of that most recent sighting on the map. The map is '
+      + 'configurable, however.',
+      'Latest selected: Shows only the most recent sighting for the species indicated.',
+      'All for selected: Shows all sightings, in the past 24 hours, for the species indicated. If you select '
+      + 'a different item from the list in this mode, all of the dots are replaced to show all of the places '
+      + 'where the newly selected species has been seen in the past 24 hours.',
+      'All species: Shows the most recent sighting for all species seen in the past 24 hours. When you select '
+      + 'a sighting from the list, it will be highlighted on the map and the sighting details will be shown in '
+      + 'the info card, but the other dots on the map will continue to show the most recent sightings for all '
+      + 'the other species seen in the past 24 hours.',
+    ],
+  },
 };
