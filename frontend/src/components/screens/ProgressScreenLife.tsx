@@ -32,6 +32,37 @@ interface Props {
 
 // TYPE_LABELS lives in ProgressTypePill (shared with sightings screen)
 
+function recentWindowAccuracy(r: BirdProgress): number | null {
+  if (!(r.isMastered ?? false) || !r.recentAnswers || r.recentAnswers.length === 0) return null;
+  return r.recentAnswers.filter(Boolean).length / r.recentAnswers.length;
+}
+
+function masteryColor(accuracy: number) {
+  if (accuracy >= 0.85) return 'bg-green-500';
+  if (accuracy >= 0.6)  return 'bg-amber-400';
+  return 'bg-red-400';
+}
+
+/** Returns the question type that needs the most work: lowest mastery level,
+ *  ties broken by worst lifetime accuracy. Falls back to all records when
+ *  everything is mastered. */
+function findPoorestType(records: BirdProgress[]): QuestionType {
+  const nonMastered = records.filter(r => !(r.isMastered ?? false));
+  const pool = nonMastered.length > 0 ? nonMastered : records;
+  if (pool.length === 0) return 'song';
+  return pool.reduce((worst, r) => {
+    const wLvl = worst.masteryLevel ?? 0;
+    const rLvl = r.masteryLevel ?? 0;
+    if (rLvl < wLvl) return r;
+    if (rLvl > wLvl) return worst;
+    const wTotal = worst.correct + worst.incorrect;
+    const rTotal = r.correct + r.incorrect;
+    const wAcc = wTotal > 0 ? worst.correct / wTotal : 1;
+    const rAcc = rTotal > 0 ? r.correct / rTotal : 1;
+    return rAcc <= wAcc ? r : worst;
+  }).questionType;
+}
+
 interface BirdSummary {
   speciesCode: string;
   comName: string;
@@ -267,17 +298,6 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
   ];
   if (excludedCount > 0) filterTabs.push({ key: 'excluded', count: excludedCount, label: 'Hidden', color: 'text-slate-500', border: 'border-slate-400' });
 
-  const recentWindowAccuracy = (r: BirdProgress): number | null => {
-    if (!(r.isMastered ?? false) || !r.recentAnswers || r.recentAnswers.length === 0) return null;
-    return r.recentAnswers.filter(Boolean).length / r.recentAnswers.length;
-  };
-
-  const masteryColor = (accuracy: number) => {
-    if (accuracy >= 0.85) return 'bg-green-500';
-    if (accuracy >= 0.6)  return 'bg-amber-400';
-    return 'bg-red-400';
-  };
-
   return (
     <div className="h-dvh flex flex-col bg-slate-50">
       <div className="max-w-2xl mx-auto w-full px-4 flex flex-col flex-1 min-h-0">
@@ -468,100 +488,131 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
                   <span className="flex-1 h-px bg-slate-200" />
                 </h3>
               : null;
-
-            // Display accuracy: per-type record when filtered, overall when All
-            const lifetimeAcc = typeFilter !== 'all' && viewRecord
-              ? (viewRecord.correct + viewRecord.incorrect > 0
-                  ? viewRecord.correct / (viewRecord.correct + viewRecord.incorrect)
-                  : 0)
-              : bird.overallAccuracy;
-            const last10Acc = typeFilter !== 'all' && viewRecord
-              ? (recentWindowAccuracy(viewRecord) ?? lifetimeAcc)
-              : (bird.recentAccuracy ?? bird.overallAccuracy);
-            const displayAccuracy = accuracyMode === 'last10' ? last10Acc : lifetimeAcc;
-
-            return (<Fragment key={bird.speciesCode}>
-              {groupHeader}
-              <div
-                className={`rounded-xl border p-4 transition-shadow ${
-                  bird.excluded
-                    ? 'bg-white border-red-200 opacity-75'
-                    : bird.speciesCode === selectedSpeciesCode
-                      ? 'bg-sky-50 border-sky-400 shadow-sm'
-                      : 'bg-white border-slate-200'
-                } ${onSelectBird ? 'cursor-pointer hover:border-sky-300 hover:shadow-sm' : ''}`}
-                onClick={onSelectBird ? () => onSelectBird({ speciesCode: bird.speciesCode, comName: bird.comName }) : undefined}
-              >
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold text-slate-800">{bird.comName}</span>
-                  {bird.favourited && <span className="text-amber-500 text-sm">★</span>}
-                  {!bird.excluded && (() => {
-                    const leading = viewRecord && !(viewRecord.isMastered ?? false) ? viewRecord : null;
-                    if (!leading || (filter === 'mastered' && (viewRecord?.isMastered ?? bird.isMastered))) {
-                      return (
-                        <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-700">
-                          Mastered
-                        </span>
-                      );
-                    }
-                    const lvl = leading.masteryLevel ?? 0;
-                    const threshold = lvl >= 2 ? 5 : 3;
-                    const streak = leading.consecutiveCorrect ?? 0;
-                    return (
-                      <MasteryBadge
-                        className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${masteryBadgeClass(lvl)}`}
-                        isStruggling={false}
-                      >
-                        {streak}/{threshold} {MASTERY_LABELS[lvl] ?? 'Hard'} distractors
-                      </MasteryBadge>
-                    );
-                  })()}
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <div className="text-right">
-                    <span className="text-sm font-semibold text-slate-700">
-                      {Math.round(displayAccuracy * 100)}%
-                    </span>
-                    <span className="text-xs text-slate-400 ml-1">
-                      {typeFilter !== 'all'
-                        ? TYPE_LABELS[typeFilter] ?? typeFilter
-                        : accuracyMode === 'last10' ? 'last 10' : 'overall'}
-                    </span>
-                  </div>
-                  {bird.excluded && !readOnly && (
-                    <button
-                      onClick={() => handleUnexclude(bird.speciesCode)}
-                      className="text-xs px-2 py-1 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors shrink-0"
-                    >
-                      Show again
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="w-full bg-slate-100 rounded-full h-1.5 mb-3">
-                <div
-                  className={`h-1.5 rounded-full transition-all ${masteryColor(displayAccuracy)}`}
-                  style={{ width: `${Math.round(displayAccuracy * 100)}%` }}
+            return (
+              <Fragment key={bird.speciesCode}>
+                {groupHeader}
+                <BirdCard
+                  bird={bird}
+                  filter={filter}
+                  accuracyMode={accuracyMode}
+                  readOnly={readOnly}
+                  isSelected={bird.speciesCode === selectedSpeciesCode}
+                  onSelectBird={onSelectBird}
+                  onUnexclude={handleUnexclude}
                 />
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {bird.records.filter(r => (filter !== 'mastered' && !r.isMastered) || (filter === 'mastered' && r.isMastered)).map(r => (
-                  <ProgressTypePill key={r.questionType} record={r} useRecentAccuracy={accuracyMode === 'last10'} />
-                ))}
-                {filter !== 'mastered' && bird.records.some(r => r.isMastered) && (
-                  <span className="text-xs px-1.5 py-0.5 rounded-full font-medium">Mastered:</span>
-                )}
-                {bird.records.filter(r => r.isMastered && filter !== 'mastered').map(r => (
-                  <ProgressTypePill key={r.questionType} record={r} useRecentAccuracy={accuracyMode === 'last10'} />
-                ))}
-              </div>
-            </div>
-            </Fragment>);
+              </Fragment>
+            );
           })}
         </div>
         </div>{/* end scrollable list */}
+      </div>
+    </div>
+  );
+}
+
+// ── BirdCard ──────────────────────────────────────────────────────────────────
+
+interface BirdCardProps {
+  bird:          BirdSummary;
+  filter:        Filter;
+  accuracyMode:  AccuracyMode;
+  readOnly:      boolean;
+  isSelected:    boolean;
+  onSelectBird?: (species: { speciesCode: string; comName: string }) => void;
+  onUnexclude:   (speciesCode: string) => void;
+}
+
+function BirdCard({ bird, filter, accuracyMode, readOnly, isSelected, onSelectBird, onUnexclude }: BirdCardProps) {
+  const [selectedType, setSelectedType] = useState<QuestionType>(() => findPoorestType(bird.records));
+
+  const selectedRecord = bird.records.find(r => r.questionType === selectedType) ?? bird.records[0];
+  const total       = selectedRecord ? selectedRecord.correct + selectedRecord.incorrect : 0;
+  const lifetimeAcc = total > 0 ? selectedRecord.correct / total : 0;
+  const last10Acc   = selectedRecord ? (recentWindowAccuracy(selectedRecord) ?? lifetimeAcc) : lifetimeAcc;
+  const displayAccuracy = accuracyMode === 'last10' ? last10Acc : lifetimeAcc;
+
+  return (
+    <div
+      className={`rounded-xl border p-4 transition-shadow ${
+        bird.excluded
+          ? 'bg-white border-red-200 opacity-75'
+          : isSelected
+            ? 'bg-sky-50 border-sky-400 shadow-sm'
+            : 'bg-white border-slate-200'
+      } ${onSelectBird ? 'cursor-pointer hover:border-sky-300 hover:shadow-sm' : ''}`}
+      onClick={onSelectBird ? () => onSelectBird({ speciesCode: bird.speciesCode, comName: bird.comName }) : undefined}
+    >
+      <div className="flex items-start justify-between mb-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-semibold text-slate-800">{bird.comName}</span>
+          {bird.favourited && <span className="text-amber-500 text-sm">★</span>}
+          {!bird.excluded && selectedRecord && (() => {
+            if (selectedRecord.isMastered ?? false) {
+              return (
+                <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-700">
+                  Mastered
+                </span>
+              );
+            }
+            const lvl       = selectedRecord.masteryLevel ?? 0;
+            const threshold = lvl >= 2 ? 5 : 3;
+            const streak    = selectedRecord.consecutiveCorrect ?? 0;
+            return (
+              <MasteryBadge
+                className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${masteryBadgeClass(lvl)}`}
+                isStruggling={false}
+              >
+                {streak}/{threshold} {MASTERY_LABELS[lvl] ?? 'Hard'} distractors
+              </MasteryBadge>
+            );
+          })()}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="text-right">
+            <span className="text-sm font-semibold text-slate-700">{Math.round(displayAccuracy * 100)}%</span>
+            <span className="text-xs text-slate-400 ml-1">{TYPE_LABELS[selectedType] ?? selectedType}</span>
+          </div>
+          {bird.excluded && !readOnly && (
+            <button
+              onClick={e => { e.stopPropagation(); onUnexclude(bird.speciesCode); }}
+              className="text-xs px-2 py-1 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors shrink-0"
+            >
+              Show again
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="w-full bg-slate-100 rounded-full h-1.5 mb-3">
+        <div
+          className={`h-1.5 rounded-full transition-all ${masteryColor(displayAccuracy)}`}
+          style={{ width: `${Math.round(displayAccuracy * 100)}%` }}
+        />
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {bird.records
+          .filter(r => (filter !== 'mastered' && !(r.isMastered ?? false)) || (filter === 'mastered' && (r.isMastered ?? false)))
+          .map(r => (
+            <ProgressTypePill
+              key={r.questionType}
+              record={r}
+              useRecentAccuracy={accuracyMode === 'last10'}
+              selected={r.questionType === selectedType}
+              onClick={() => setSelectedType(r.questionType)}
+            />
+          ))}
+        {bird.records
+          .filter(r => (r.isMastered ?? false) && filter !== 'mastered')
+          .map(r => (
+            <ProgressTypePill
+              key={r.questionType}
+              record={r}
+              useRecentAccuracy={accuracyMode === 'last10'}
+              selected={r.questionType === selectedType}
+              onClick={() => setSelectedType(r.questionType)}
+            />
+          ))}
       </div>
     </div>
   );

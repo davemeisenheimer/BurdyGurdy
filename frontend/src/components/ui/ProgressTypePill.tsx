@@ -1,5 +1,6 @@
 import { isStrugglingByWindow } from '../../lib/struggling';
 import type { BirdProgress, QuestionType } from '../../types';
+import { MasteryLevelBadge, masteryBgColor } from './MasteryLevelBadge';
 
 export const TYPE_LABELS: Record<QuestionType, string> = {
   song:           'Song',
@@ -16,15 +17,6 @@ export const TYPE_LABELS: Record<QuestionType, string> = {
   'latin-song':   'LatinS',
 };
 
-/** Returns the label, background, and text colour for the mastery-level badge. */
-function masteryBadge(r: BirdProgress, struggling: boolean): { label: string; bg: string; text: string } {
-  if (struggling)   return { label: '!', bg: 'bg-red-500',   text: 'text-white'       };
-  if (r.isMastered) return { label: '★', bg: 'bg-green-600', text: 'text-yellow-300'  };
-  const level = r.masteryLevel ?? 0;
-  if (level >= 2)   return { label: 'H', bg: 'bg-sky-600',   text: 'text-white'       };
-  if (level === 1)  return { label: 'M', bg: 'bg-amber-500', text: 'text-white'       };
-  return                   { label: 'E', bg: 'bg-slate-400', text: 'text-white'       };
-}
 
 interface Props {
   record: BirdProgress;
@@ -34,9 +26,13 @@ interface Props {
    * When false (default), always uses lifetime accuracy.
    */
   useRecentAccuracy?: boolean;
+  /** Highlights this pill as the currently selected question type. */
+  selected?: boolean;
+  /** If provided the pill is interactive; stops propagation before calling. */
+  onClick?: () => void;
 }
 
-export function ProgressTypePill({ record: r, useRecentAccuracy = false }: Props) {
+export function ProgressTypePill({ record: r, useRecentAccuracy = false, selected = false, onClick }: Props) {
   const total       = r.correct + r.incorrect;
   const lifetimePct = total > 0 ? Math.round((r.correct / total) * 100) : null;
 
@@ -47,26 +43,24 @@ export function ProgressTypePill({ record: r, useRecentAccuracy = false }: Props
 
   const pct        = useRecentAccuracy ? (recentPct ?? lifetimePct) : lifetimePct;
   const struggling = (r.isMastered ?? false) && isStrugglingByWindow(r.recentAnswers ?? []);
-  const badge      = masteryBadge(r, struggling);
 
-  const pillColor =
-    pct === null  ? 'bg-slate-100 text-slate-400'
-    : pct >= 85   ? 'bg-green-100 text-green-700'
-    : pct >= 60   ? 'bg-amber-100 text-amber-700'
-    :               'bg-red-100 text-red-700';
+  const accuracyBorder =
+    pct === null  ? 'border-slate-300'
+    : pct >= 85   ? 'border-green-500'
+    : pct >= 60   ? 'border-amber-400'
+    :               'border-red-500';
 
   return (
     <span
-      className={`relative text-xs px-2 py-0.5 rounded-full ${pillColor} ${r.favourited ? 'ring-1 ring-amber-400' : ''}`}
+      className={`relative text-xs px-2 py-0.5 rounded-full border-2 ${masteryBgColor(r.isMastered ?? false, r.masteryLevel ?? 0, struggling)} ${accuracyBorder} ${selected ? 'ring-2 ring-offset-1 ring-slate-600' : r.favourited ? 'ring-1 ring-amber-400' : ''} ${onClick ? 'cursor-pointer' : ''}`}
+      onClick={onClick ? e => { e.stopPropagation(); onClick(); } : undefined}
     >
       {TYPE_LABELS[r.questionType]}: {pct !== null ? `${pct}%` : '-'}
-      {/* Mastery-level badge — half in / half out of the pill at the top-right corner */}
-      <span
-        className={`absolute -top-1.5 -right-1.5 w-4 h-4 ${badge.bg} ${badge.text} text-[8px] leading-none rounded-full flex items-center justify-center font-bold border border-white pointer-events-none select-none`}
-        aria-hidden
-      >
-        {badge.label}
-      </span>
+      <MasteryLevelBadge
+        isMastered={r.isMastered ?? false}
+        masteryLevel={r.masteryLevel ?? 0}
+        isStruggling={struggling}
+      />
     </span>
   );
 }

@@ -2,9 +2,8 @@ import { useEffect, useState, Fragment } from 'react';
 import { db } from '../../lib/db';
 import { categoriseRecentBirds, summariseCounts } from '../../lib/recentProgress';
 import { DEV_SHOW_PALETTE_SPLIT } from '../../lib/devFlags';
-import { MASTERY_LABELS, MASTERY_BADGE_COLORS, MASTERED_BADGE_COLOR, masteryThreshold } from '../../lib/mastery';
-import { isNonMasteredStruggling } from '../../lib/struggling';
-import { MasteryBadge } from '../ui/MasteryBadge';
+import { MASTERED_BADGE_COLOR } from '../../lib/mastery';
+import { ProgressTypePill, TYPE_LABELS } from '../ui/ProgressTypePill';
 import type { QuestionType, CachedSpecies, BirdProgress } from '../../types';
 import type { RecentBirdEntry, RecentProgressCategory } from '../../lib/recentProgress';
 
@@ -18,12 +17,6 @@ interface Props {
   overrideRecords?: BirdProgress[];
   friendDisplayName?: string;
 }
-
-const TYPE_LABELS: Record<QuestionType, string> = {
-  song: 'Song', image: 'Photo', latin: 'Latin', family: 'Family', order: 'Order', sono: 'Sono',
-  'image-latin': 'PhotoL', 'song-latin': 'SongL', 'family-latin': 'FamilyL',
-  'image-song': 'PhotoS', 'sono-song': 'SpectroS', 'latin-song': 'LatinS',
-};
 
 type TypeFilter = 'all' | QuestionType;
 
@@ -178,7 +171,7 @@ export function ProgressScreenRecent({ regionCode, recentDays, questionTypes, on
 
                 <div className="space-y-2">
                   {section.map(bird => (
-                    <BirdCard key={bird.speciesCode} bird={bird} questionTypes={activeTypes} onSelectBird={onSelectBird} isSelected={bird.speciesCode === selectedSpeciesCode} />
+                    <BirdCard key={bird.speciesCode} bird={bird} onSelectBird={onSelectBird} isSelected={bird.speciesCode === selectedSpeciesCode} />
                   ))}
                 </div>
               </Fragment>
@@ -192,7 +185,7 @@ export function ProgressScreenRecent({ regionCode, recentDays, questionTypes, on
 
 // ── BirdCard ──────────────────────────────────────────────────────────────────
 
-function BirdCard({ bird, questionTypes, onSelectBird, isSelected }: { bird: RecentBirdEntry; questionTypes: QuestionType[]; onSelectBird?: (species: { speciesCode: string; comName: string }) => void; isSelected?: boolean }) {
+function BirdCard({ bird, onSelectBird, isSelected }: { bird: RecentBirdEntry; onSelectBird?: (species: { speciesCode: string; comName: string }) => void; isSelected?: boolean }) {
   const baseCard = isSelected ? 'bg-sky-50 border-sky-400 shadow-sm' : 'bg-white border-slate-200';
   const clickProps = onSelectBird ? {
     onClick: () => onSelectBird({ speciesCode: bird.speciesCode, comName: bird.comName }),
@@ -239,39 +232,16 @@ function BirdCard({ bird, questionTypes, onSelectBird, isSelected }: { bird: Rec
   }
 
   // easy / medium / hard
-  const activeRecords = bird.records.filter(r => !r.isMastered);
-  const leading = activeRecords.reduce<(typeof activeRecords)[0] | null>((best, r) =>
-    (r.masteryLevel ?? 0) >= (best?.masteryLevel ?? -1) ? r : best, null,
-  );
-  const lvl       = leading?.masteryLevel ?? 0;
-  const streak    = leading?.consecutiveCorrect ?? 0;
-  const threshold = masteryThreshold(lvl);
-  const totalCorrect  = bird.records.reduce((s, r) => s + r.correct, 0);
-  const totalAttempts = bird.records.reduce((s, r) => s + r.correct + r.incorrect, 0);
-  const pct = totalAttempts > 0 ? Math.round((totalCorrect / totalAttempts) * 100) : null;
-
-  const typeCount = questionTypes.length;
-
   return (
     <div className={`${baseCard} rounded-xl border px-4 py-3 ${clickProps.className}`} onClick={clickProps.onClick}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-medium text-slate-700">{bird.comName}</span>
-          <MasteryBadge
-            className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${MASTERY_BADGE_COLORS[Math.min(lvl, 2)]}`}
-            isStruggling={leading !== null && isNonMasteredStruggling(leading.correct, leading.incorrect)}
-          >
-            {streak}/{threshold} {MASTERY_LABELS[Math.min(lvl, 2)]}
-          </MasteryBadge>
-          {typeCount > 1 && bird.records.some(r => r.isMastered) && (
-            <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${MASTERED_BADGE_COLOR}`}>
-              {bird.records.filter(r => r.isMastered).length}/{typeCount} mastered
-            </span>
-          )}
-        </div>
-        {pct !== null && (
-          <span className="text-sm font-semibold text-slate-500">{pct}%</span>
-        )}
+      <p className="font-medium text-slate-700 mb-1.5">{bird.comName}</p>
+      <div className="flex flex-wrap gap-2">
+        {bird.records.filter(r => !r.isMastered).map(r => (
+          <ProgressTypePill key={r.questionType} record={r} />
+        ))}
+{bird.records.filter(r => r.isMastered).map(r => (
+          <ProgressTypePill key={r.questionType} record={r} />
+        ))}
       </div>
     </div>
   );
