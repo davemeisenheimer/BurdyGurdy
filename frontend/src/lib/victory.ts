@@ -2,7 +2,8 @@ import { db } from './db';
 import { STRUGGLING_THRESHOLD } from './struggling';
 import type { QuestionType } from '../types';
 
-const VICTORY_KEY = 'birdygurdy_victories';
+const KEY        = 'victories';
+const LEGACY_KEY = 'birdygurdy_victories';
 
 /**
  * Victory is suppressed per snapshot, not per time period. The snapshotKey is
@@ -14,39 +15,46 @@ function victoryId(snapshotKey: string, types: QuestionType[]): string {
   return `${snapshotKey}:${[...types].sort().join(',')}`;
 }
 
-export function hasSeenVictory(snapshotKey: string, types: QuestionType[]): boolean {
+async function getSeen(): Promise<string[]> {
+  const legacy = localStorage.getItem(LEGACY_KEY);
+  if (legacy !== null) {
+    await db.keyValue.put({ key: KEY, value: legacy }).catch(() => {});
+    localStorage.removeItem(LEGACY_KEY);
+    return JSON.parse(legacy) as string[];
+  }
+  const row = await db.keyValue.get(KEY).catch(() => null);
+  return row ? JSON.parse(row.value) : [];
+}
+
+export async function hasSeenVictory(snapshotKey: string, types: QuestionType[]): Promise<boolean> {
   try {
-    const raw = localStorage.getItem(VICTORY_KEY);
-    const seen: string[] = raw ? JSON.parse(raw) : [];
+    const seen = await getSeen();
     return seen.includes(victoryId(snapshotKey, types));
   } catch { return false; }
 }
 
-export function markVictorySeen(snapshotKey: string, types: QuestionType[]): void {
+export async function markVictorySeen(snapshotKey: string, types: QuestionType[]): Promise<void> {
   try {
-    const raw = localStorage.getItem(VICTORY_KEY);
-    const seen: string[] = raw ? JSON.parse(raw) : [];
+    const seen = await getSeen();
     const id = victoryId(snapshotKey, types);
     if (!seen.includes(id)) {
       seen.push(id);
-      localStorage.setItem(VICTORY_KEY, JSON.stringify(seen));
+      await db.keyValue.put({ key: KEY, value: JSON.stringify(seen) });
     }
   } catch { /* non-fatal */ }
 }
 
-export function getVictorySeen(): string[] {
+export async function getVictorySeen(): Promise<string[]> {
   try {
-    const raw = localStorage.getItem(VICTORY_KEY);
-    return raw ? JSON.parse(raw) : [];
+    return await getSeen();
   } catch { return []; }
 }
 
-export function mergeVictorySeen(remoteKeys: string[]): void {
+export async function mergeVictorySeen(remoteKeys: string[]): Promise<void> {
   try {
-    const raw = localStorage.getItem(VICTORY_KEY);
-    const local: string[] = raw ? JSON.parse(raw) : [];
+    const local = await getSeen();
     const merged = Array.from(new Set([...local, ...remoteKeys]));
-    localStorage.setItem(VICTORY_KEY, JSON.stringify(merged));
+    await db.keyValue.put({ key: KEY, value: JSON.stringify(merged) });
   } catch { /* non-fatal */ }
 }
 

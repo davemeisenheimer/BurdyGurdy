@@ -265,6 +265,23 @@ export async function graduateNoAudio(
   return { levelUp, updatedMastery };
 }
 
+// ── Fast-track to hard ────────────────────────────────────────────────────────
+
+/**
+ * Advances a bird directly to level 2 (Hard) with a head-start streak of 2,
+ * equivalent to the position a user would reach after a perfect 3/3 easy +
+ * 3/3 medium + 2/5 hard run (8 correct total). Called when the user opts in
+ * via the fast-track dialog after acing easy on their first attempt.
+ */
+export async function fastTrackToHard(
+  speciesCode: string,
+  questionType: QuestionType,
+): Promise<void> {
+  const existing = await db.progress.get([speciesCode, questionType]);
+  if (!existing) return;
+  await db.progress.put({ ...existing, masteryLevel: 2, consecutiveCorrect: 2 });
+}
+
 // ── Favourite ─────────────────────────────────────────────────────────────────
 
 export async function setFavourite(

@@ -10,8 +10,8 @@ import { db } from './lib/db';
     db.progress.clear(),
     db.regionSpecies.clear(),
     db.blockedPhotos.clear(),
+    db.keyValue.clear(),
   ]);
-  localStorage.removeItem('birdygurdy_settings');
   console.log('BirdyGurdy: all client-side data cleared. Reload the page.');
 };
 

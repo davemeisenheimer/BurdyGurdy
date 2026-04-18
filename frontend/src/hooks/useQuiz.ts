@@ -15,7 +15,7 @@ import { db } from '../lib/db';
 import {
   recordAnswer, graduateNoAudio, setFavourite, getFavourited,
   setExcluded, getExcluded, getAdaptiveParams,
-  maintainLevel0Palette,
+  maintainLevel0Palette, fastTrackToHard,
 } from '../services/local/progress';
 import { isStrugglingByWindow } from '../lib/struggling';
 import { getRegionSpecies } from '../services/local/region';
@@ -38,7 +38,7 @@ function birderLevelToInitialMastery(level?: BirderLevel): number {
   return 0;
 }
 
-export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, userId?: string | null, birderLevel?: BirderLevel) {
+export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, userId?: string | null, birderLevel?: BirderLevel, alwaysFastTrack = false) {
   const [state, setState] = useState<QuizState>({
     status: 'idle',
     questions: [],
@@ -59,6 +59,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
   const prefetchedPhotoRef = useRef<{ questionId: string; photo: AttributedPhoto } | null>(null);
   const [roundLevelUps, setRoundLevelUps] = useState<LevelUpEvent[]>([]);
   const [roundNoLongerStruggling, setRoundNoLongerStruggling] = useState<NoLongerStrugglingEvent[]>([]);
+  const [pendingFastTrack, setPendingFastTrack] = useState<LevelUpEvent | null>(null);
   const [isFirstEncounter, setIsFirstEncounter] = useState(false);
   const [currentMastery, setCurrentMastery] = useState<{ masteryLevel: number; consecutiveCorrect: number; isMastered: boolean; correct: number; incorrect: number } | null>(null);
 
@@ -353,10 +354,23 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
         setRoundLevelUps(prev => [...prev, levelUp]);
         setCurrentMastery(updatedMastery);
       } else {
-        const { levelUp, noLongerStruggling, updatedMastery } = await recordAnswer(q.speciesCode, q.type, correct, q.comName, birderLevelToInitialMastery(birderLevel), q.familySciName);
+        const { levelUp, noLongerStruggling, updatedMastery, advancedFromLevel0 } = await recordAnswer(q.speciesCode, q.type, correct, q.comName, birderLevelToInitialMastery(birderLevel), q.familySciName);
         if (levelUp) setRoundLevelUps(prev => [...prev, levelUp]);
         if (noLongerStruggling) setRoundNoLongerStruggling(prev => [...prev, noLongerStruggling]);
         setCurrentMastery(updatedMastery);
+        if (advancedFromLevel0 && updatedMastery.incorrect === 0 && levelUp) {
+          if (alwaysFastTrack) {
+            await fastTrackToHard(q.speciesCode, q.type);
+            setCurrentMastery(m => m ? { ...m, masteryLevel: 2, consecutiveCorrect: 2 } : m);
+            setRoundLevelUps(prev => prev.map(e =>
+              e.speciesCode === q.speciesCode && e.questionType === q.type && e.newLevel === 1
+                ? { ...e, newLevel: 2 }
+                : e,
+            ));
+          } else {
+            setPendingFastTrack(levelUp);
+          }
+        }
       }
     }
   }, [state.questions, state.currentIndex, state.status, config]);
@@ -393,6 +407,22 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
     });
   }, []);
 
+  const confirmFastTrack = useCallback(async (accept: boolean) => {
+    if (!pendingFastTrack) return;
+    if (accept) {
+      await fastTrackToHard(pendingFastTrack.speciesCode, pendingFastTrack.questionType);
+      setCurrentMastery(m => m ? { ...m, masteryLevel: 2, consecutiveCorrect: 2 } : m);
+      setRoundLevelUps(prev => prev.map(e =>
+        e.speciesCode === pendingFastTrack.speciesCode &&
+        e.questionType === pendingFastTrack.questionType &&
+        e.newLevel === 1
+          ? { ...e, newLevel: 2 }
+          : e,
+      ));
+    }
+    setPendingFastTrack(null);
+  }, [pendingFastTrack]);
+
   const removeOptionalPhoto = useCallback(async (url: string) => {
     await db.blockedPhotos.put({ url });
     if (userId) uploadUserBlockedPhoto(userId, url).catch(() => {});
@@ -414,11 +444,13 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
     roundNoLongerStruggling,
     isFirstEncounter,
     currentMastery,
+    pendingFastTrack,
     startQuiz,
     submitAnswer,
     toggleFavourite,
     toggleExcluded,
     nextQuestion,
+    confirmFastTrack,
     removeOptionalPhoto,
   };
 }

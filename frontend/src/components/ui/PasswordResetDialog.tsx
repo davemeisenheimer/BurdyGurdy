@@ -26,7 +26,7 @@ export function PasswordResetDialog({ onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-sm p-6">
+      <div className="bg-sky-50 rounded-2xl shadow-xl border border-slate-200 w-full max-w-sm p-6">
         <p className="font-semibold text-slate-800 text-base mb-4">Set new password</p>
 
         {done ? (
@@ -71,7 +71,7 @@ export function PasswordResetDialog({ onClose }: Props) {
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-slate-600 border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-sky-100 border border-sky-200 rounded-xl hover:bg-sky-200 transition-colors"
               >
                 Cancel
               </button>

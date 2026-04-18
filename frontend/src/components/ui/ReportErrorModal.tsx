@@ -51,7 +51,7 @@ export function ReportErrorModal({ mediaType, mediaUrl, comName, onSubmit, onClo
       onClick={onClose}
     >
       <form
-        className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5"
+        className="bg-sky-50 rounded-2xl shadow-xl w-full max-w-sm p-5"
         onClick={e => e.stopPropagation()}
         onSubmit={handleSubmit}
       >
@@ -126,7 +126,7 @@ export function ReportErrorModal({ mediaType, mediaUrl, comName, onSubmit, onClo
         <div className="flex gap-2">
           <button
             onClick={onClose}
-            className="flex-1 py-2 border border-slate-300 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+            className="flex-1 py-2 bg-sky-100 border border-sky-200 rounded-xl text-sm text-slate-700 hover:bg-sky-200 transition-colors"
           >
             Cancel
           </button>

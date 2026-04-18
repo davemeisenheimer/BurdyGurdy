@@ -13,6 +13,7 @@ class BirdyGurdyDB extends Dexie {
   regionSpecies!:     Table<RegionSpeciesCache>;
   blockedPhotos!:     Table<{ url: string }>;
   adminBlockedMedia!: Table<AdminBlockedMediaEntry>;
+  keyValue!:          Table<{ key: string; value: string }>;
 
   constructor(name: string) {
     super(name);
@@ -137,6 +138,16 @@ class BirdyGurdyDB extends Dexie {
         r.masteredAt = r.lastAsked;
       }),
     );
+    // v13: add keyValue table for per-user settings storage (settings, quizPrefs,
+    //      regionSnapshot, victories, focusStruggling). Replaces the single shared
+    //      localStorage keys that leaked between user accounts.
+    this.version(13).stores({
+      progress: '[speciesCode+questionType], speciesCode, weight, lastAsked',
+      regionSpecies: 'regionCode',
+      blockedPhotos: 'url',
+      adminBlockedMedia: '[url+speciesCode]',
+      keyValue: 'key',
+    });
   }
 }
 

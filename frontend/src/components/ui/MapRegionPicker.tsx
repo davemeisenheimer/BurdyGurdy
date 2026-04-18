@@ -63,7 +63,7 @@ export function MapRegionPicker({ onSelect, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
       <div
-        className="relative flex flex-col bg-white rounded-2xl overflow-hidden shadow-2xl w-full max-w-2xl"
+        className="relative flex flex-col bg-sky-50 rounded-2xl overflow-hidden shadow-2xl w-full max-w-2xl"
         style={{ height: 'min(90dvh, 600px)' }}
       >
         {/* Header */}

@@ -82,7 +82,7 @@ export function TrimProgressDialog({ regionCode, recentDays, questionTypes, onCl
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col max-h-[85vh]">
+      <div className="bg-sky-50 rounded-2xl shadow-xl w-full max-w-md flex flex-col max-h-[85vh]">
 
         {/* Header */}
         <div className="shrink-0 px-6 pt-5 pb-4 border-b border-slate-100">
@@ -172,7 +172,7 @@ export function TrimProgressDialog({ regionCode, recentDays, questionTypes, onCl
           <button
             onClick={onClose}
             disabled={working}
-            className="flex-1 px-4 py-2 border border-slate-300 text-slate-600 rounded-xl text-sm hover:bg-slate-50 transition-colors disabled:opacity-50"
+            className="flex-1 px-4 py-2 bg-sky-100 border border-sky-200 text-slate-700 rounded-xl text-sm hover:bg-sky-200 transition-colors disabled:opacity-50"
           >
             Cancel
           </button>

@@ -140,6 +140,19 @@ export const HELP_CONTENT: Record<string, HelpEntry> = {
       'Advanced: The path to mastery will skip easy and medium difficulty questions.',
     ],
   },
+  alwaysFastTrack: {
+    title: 'Always fast-track birds I ace on easy',
+    body: [
+      'When enabled, any bird you identify correctly on all three of your first-ever attempts automatically '
+      + 'skips medium difficulty and goes straigth to hard difficulty, without showing a confirmation dialog.',
+      'At hard difficulty you need 5 consecutive correct answers to master a bird, but you start with a '
+      + '2-answer head-start — so just 3 more correct in a row.',
+      'You can turn this off at any time to return to the using the confirmation dialog, or to let birds '
+      + 'follow the normal easy → medium → hard progression. Be aware that for photo questions you are missing '
+      + 'the progression from single photo on easy to dual photos on medium and up to a dozen different photos '
+      + 'on hard, which can make it harder to master the bird in the long run, even if you ace it on easy.',
+    ],
+  },
   mapScope: {
     title: 'Map scope',
     body: [

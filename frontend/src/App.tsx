@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { QuizConfig } from './types';
 import type { BirdProgress } from './types';
 import { HomeScreen } from './components/screens/HomeScreen';
@@ -23,7 +23,7 @@ import { Toast } from './components/ui/Toast';
 import { DialogGeneric } from './components/ui/DialogGeneric';
 import { useQuiz } from './hooks/useQuiz';
 import { useNotifications } from './hooks/useNotifications';
-import { loadSettings, saveSettings, loadQuizPrefs, saveQuizPrefs, resetUserSettings } from './lib/settings';
+import { loadSettings, saveSettings, loadQuizPrefs, saveQuizPrefs, resetUserSettings, loadFocusStruggling, saveFocusStruggling, DEFAULTS as SETTINGS_DEFAULTS } from './lib/settings';
 import type { AppSettings } from './lib/settings';
 import { checkVictoryCondition, hasSeenVictory, markVictorySeen, getVictorySeen, mergeVictorySeen, describeMastery, describeWindow } from './lib/victory';
 import { locateRegion } from './services/remote/api';
@@ -41,6 +41,7 @@ import { computeStrugglingCount } from './lib/struggling';
 import { expandQuestionTypes } from './lib/questionTypes';
 import type { ReportErrorData } from './components/ui/ReportErrorModal';
 import { MasteryFactDialog } from './components/ui/MasteryFactDialog';
+import { FastTrackDialog } from './components/ui/FastTrackDialog';
 import { PasswordResetDialog } from './components/ui/PasswordResetDialog';
 import { CloudSyncOverlay } from './components/ui/CloudSyncOverlay';
 import type { LevelUpEvent } from './types';
@@ -53,7 +54,7 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 const RECENT_DAYS: Record<'day' | 'week' | 'month', number> = { day: 1, week: 7, month: 30 };
-const ACTIVITY_KEY = 'lastActivity';
+const activityKey = (userId: string) => `lastActivity_${userId}`;
 
 const DEFAULT_CONFIG: QuizConfig = {
   regionCode: 'CA-ON-OT',
@@ -76,22 +77,11 @@ const DEFAULT_CONFIG: QuizConfig = {
 })();
 
 export default function App() {
-  const [config, setConfig] = useState<QuizConfig>(() => {
-    const prefs = loadQuizPrefs();
-    const s = loadSettings();
-    return {
-      ...DEFAULT_CONFIG,
-      recentDays: RECENT_DAYS[s.recentWindow ?? 'month'],
-      ...(prefs.questionTypes ? { questionTypes: prefs.questionTypes as QuizConfig['questionTypes'] } : {}),
-      ...(prefs.mode          ? { mode: prefs.mode as QuizConfig['mode'] }                          : {}),
-      ...(prefs.questionsPerRound != null ? { questionsPerRound: prefs.questionsPerRound }           : {}),
-      ...(prefs.regionCode    ? { regionCode: prefs.regionCode }                                     : {}),
-      ...(prefs.groupId       ? { groupId: prefs.groupId }                                           : {}),
-    };
-  });
+  const [config, setConfig] = useState<QuizConfig>(DEFAULT_CONFIG);
   const [geoPrompt, setGeoPrompt] = useState<LocateResult | null>(null);
-  const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
-  const [focusStruggling, setFocusStruggling] = useState(() => localStorage.getItem('birdygurdy_focus_struggling') === 'true');
+  const [settings, setSettings] = useState<AppSettings>({ ...SETTINGS_DEFAULTS });
+  const [focusStruggling, setFocusStruggling] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   const [strugglingCount, setStrugglingCount] = useState(0);
   const [user, setUser]               = useState<SupabaseUser | null>(null);
   const [showAuth, setShowAuth]           = useState(false);
@@ -133,6 +123,31 @@ export default function App() {
   const hasShownFactThisRoundRef = useRef(false);
   const prevGraduatedCountRef    = useRef(0);
 
+  // Loads all per-user settings from IndexedDB and populates React state.
+  // Called once on mount (via getSession) and again after every switchToUserDb
+  // so that signing in or out immediately reflects the correct user's data.
+  const initAppData = useCallback(async () => {
+    const [s, prefs, focus] = await Promise.all([
+      loadSettings(),
+      loadQuizPrefs(),
+      loadFocusStruggling(),
+      getVictorySeen(),   // triggers one-time migration of birdygurdy_victories
+      loadSnapshot(),     // triggers one-time migration of birdygurdy_region_snapshot
+    ]);
+    setSettings(s);
+    setConfig({
+      ...DEFAULT_CONFIG,
+      recentDays: RECENT_DAYS[s.recentWindow ?? 'day'],
+      ...(prefs.questionTypes     ? { questionTypes: prefs.questionTypes as QuizConfig['questionTypes'] } : {}),
+      ...(prefs.mode              ? { mode: prefs.mode as QuizConfig['mode'] }                          : {}),
+      ...(prefs.questionsPerRound != null ? { questionsPerRound: prefs.questionsPerRound }               : {}),
+      ...(prefs.regionCode        ? { regionCode: prefs.regionCode }                                     : {}),
+      ...(prefs.groupId           ? { groupId: prefs.groupId }                                           : {}),
+    });
+    setFocusStruggling(focus);
+    setIsInitialized(true);
+  }, []);
+
   const {
     notifications,
     setNotifications,
@@ -149,7 +164,7 @@ export default function App() {
   } = useNotifications({ user, screen, onViewNotifications: () => setScreen('notifications') });
 
   const isAdmin = user?.user_metadata?.is_admin === true;
-  const { state, currentQuestion, isCorrect, currentFavourited, currentExcluded, revealPhotos, revealRangeMapUrl, revealSightings, questionPhoto, questionPhotoFetching, roundLevelUps, roundNoLongerStruggling, isFirstEncounter, currentMastery, startQuiz, submitAnswer, toggleFavourite, toggleExcluded, nextQuestion, removeOptionalPhoto } = useQuiz(config, settings.randomizeQuestionPhotos, user?.id, settings.birderLevel);
+  const { state, currentQuestion, isCorrect, currentFavourited, currentExcluded, revealPhotos, revealRangeMapUrl, revealSightings, questionPhoto, questionPhotoFetching, roundLevelUps, roundNoLongerStruggling, isFirstEncounter, currentMastery, pendingFastTrack, startQuiz, submitAnswer, toggleFavourite, toggleExcluded, nextQuestion, confirmFastTrack, removeOptionalPhoto } = useQuiz(config, settings.randomizeQuestionPhotos, user?.id, settings.birderLevel, settings.alwaysFastTrack);
 
   // Reset mastery-fact tracking at the start of each new round
   useEffect(() => {
@@ -203,20 +218,21 @@ export default function App() {
   useEffect(() => {
     if (user) {
       setWasAutoSignedOut(false);
-      localStorage.setItem(ACTIVITY_KEY, String(Date.now()));
+      localStorage.setItem(activityKey(user.id), String(Date.now()));
     }
   }, [user]);
 
   // Stable helper: apply downloaded cloud settings/prefs into local state.
   // Only uses stable React setters and module-level functions — safe to call
   // from any closure regardless of capture time.
-  const applyCloudSettings = (remote: Awaited<ReturnType<typeof downloadSettings>>) => {
+  const applyCloudSettings = async (remote: Awaited<ReturnType<typeof downloadSettings>>) => {
     if (!remote) return;
-    const mergedSettings = { ...loadSettings(), ...remote.appSettings };
+    const [localSettings, localPrefs] = await Promise.all([loadSettings(), loadQuizPrefs()]);
+    const mergedSettings = { ...localSettings, ...remote.appSettings };
     setSettings(mergedSettings);
-    saveSettings(mergedSettings);
-    const mergedPrefs = { ...loadQuizPrefs(), ...remote.quizPrefs };
-    saveQuizPrefs(mergedPrefs);
+    await saveSettings(mergedSettings);
+    const mergedPrefs = { ...localPrefs, ...remote.quizPrefs };
+    await saveQuizPrefs(mergedPrefs);
     setConfig(c => ({
       ...c,
       ...(mergedPrefs.questionTypes     ? { questionTypes: mergedPrefs.questionTypes as QuizConfig['questionTypes'] } : {}),
@@ -225,7 +241,7 @@ export default function App() {
       ...(mergedPrefs.regionCode        ? { regionCode: mergedPrefs.regionCode }                                     : {}),
       ...(mergedPrefs.groupId           ? { groupId: mergedPrefs.groupId }                                           : {}),
     }));
-    mergeVictorySeen(remote.victorySeen);
+    await mergeVictorySeen(remote.victorySeen);
   };
 
   // Auto sign-out after 30 minutes of inactivity.
@@ -239,7 +255,10 @@ export default function App() {
   const INACTIVITY_MS = 30 * 60 * 1000;
   const SYNC_IDLE_MS  = 60_000;
   useEffect(() => {
-    const touch = () => localStorage.setItem(ACTIVITY_KEY, String(Date.now()));
+    const touch = () => {
+      const u = userRef.current;
+      if (u) localStorage.setItem(activityKey(u.id), String(Date.now()));
+    };
     let throttle: ReturnType<typeof setTimeout> | null = null;
 
     const doIdleSync = async () => {
@@ -268,7 +287,8 @@ export default function App() {
     };
 
     const onActivity = () => {
-      const last = Number(localStorage.getItem(ACTIVITY_KEY) ?? Date.now());
+      const u = userRef.current;
+      const last = u ? Number(localStorage.getItem(activityKey(u.id)) ?? Date.now()) : Date.now();
       if (userRef.current) {
         if (Date.now() - last > INACTIVITY_MS) {
           performSignOut();
@@ -296,18 +316,18 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleQuizPrefsChange = (prefs: { questionTypes: QuizConfig['questionTypes']; mode: QuizConfig['mode']; questionsPerRound: number; groupId: string; regionCode: string }) => {
+  const handleQuizPrefsChange = async (prefs: { questionTypes: QuizConfig['questionTypes']; mode: QuizConfig['mode']; questionsPerRound: number; groupId: string; regionCode: string }) => {
     const newPrefs = { questionTypes: prefs.questionTypes, mode: prefs.mode, questionsPerRound: prefs.questionsPerRound, groupId: prefs.groupId, regionCode: prefs.regionCode };
-    saveQuizPrefs(newPrefs);
+    await saveQuizPrefs(newPrefs);
     setConfig(c => ({ ...c, ...newPrefs }));
-    if (user) uploadSettings(user.id, settings, newPrefs, getVictorySeen()).catch(() => {});
+    if (user) uploadSettings(user.id, settings, newPrefs, await getVictorySeen()).catch(() => {});
   };
 
-  const handleRegionChange = (code: string) => {
+  const handleRegionChange = async (code: string) => {
     setConfig(c => ({ ...c, regionCode: code }));
-    const prefs = { ...loadQuizPrefs(), regionCode: code };
-    saveQuizPrefs(prefs);
-    if (user) uploadSettings(user.id, settings, prefs, getVictorySeen()).catch(() => {});
+    const prefs = { ...await loadQuizPrefs(), regionCode: code };
+    await saveQuizPrefs(prefs);
+    if (user) uploadSettings(user.id, settings, prefs, await getVictorySeen()).catch(() => {});
   };
 
   // On load, fetch admin-blocked media for all users (including guests)
@@ -328,11 +348,13 @@ export default function App() {
       prevAuthUserIdRef.current = data.session?.user?.id ?? null;
       switchToUserDb(data.session?.user?.id ?? null);
       setUser(data.session?.user ?? null);
+      void initAppData();
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       // Switch DB first - all subsequent reads/writes go to the correct store.
       switchToUserDb(session?.user?.id ?? null);
+      void initAppData();
       setUser(session?.user ?? null);
       // Password-reset link redirects back here — show the set-new-password dialog.
       if (event === 'PASSWORD_RECOVERY') { setShowPasswordReset(true); return; }
@@ -381,16 +403,17 @@ export default function App() {
         // Capture now - prevAuthUserIdRef will be updated before the promise resolves.
         const isNewSignIn = event === 'SIGNED_IN' && prevAuthUserIdRef.current === null;
         if (isInitialLoad || isGenuineSignIn) {
-          downloadSettings(userId).then(remote => {
+          downloadSettings(userId).then(async remote => {
             if (remote) {
               // Returning user with cloud settings - import prefs and skip the wizard.
               localStorage.setItem('burdygurdy_onboarding_complete', '1');
               setShowOnboarding(false);
-              const mergedSettings = { ...loadSettings(), ...remote.appSettings };
+              const [localSettings, localPrefs] = await Promise.all([loadSettings(), loadQuizPrefs()]);
+              const mergedSettings = { ...localSettings, ...remote.appSettings };
               setSettings(mergedSettings);
-              saveSettings(mergedSettings);
-              const mergedPrefs = { ...loadQuizPrefs(), ...remote.quizPrefs };
-              saveQuizPrefs(mergedPrefs);
+              await saveSettings(mergedSettings);
+              const mergedPrefs = { ...localPrefs, ...remote.quizPrefs };
+              await saveQuizPrefs(mergedPrefs);
               setConfig(c => ({
                 ...c,
                 ...(mergedPrefs.questionTypes     ? { questionTypes: mergedPrefs.questionTypes as QuizConfig['questionTypes'] } : {}),
@@ -399,11 +422,11 @@ export default function App() {
                 ...(mergedPrefs.regionCode        ? { regionCode: mergedPrefs.regionCode }                                     : {}),
                 ...(mergedPrefs.groupId           ? { groupId: mergedPrefs.groupId }                                           : {}),
               }));
-              mergeVictorySeen(remote.victorySeen);
+              await mergeVictorySeen(remote.victorySeen);
             } else if (isNewSignIn) {
               // Brand-new user, no cloud settings anywhere - reset stale local prefs
               // (which may belong to a previous user on this device) and run the wizard.
-              const freshSettings = resetUserSettings();
+              const freshSettings = await resetUserSettings();
               setSettings(freshSettings);
               setShowOnboarding(true);
             }
@@ -549,8 +572,8 @@ export default function App() {
       regionCode: newConfig.regionCode,
       groupId: newConfig.groupId,
     };
-    saveQuizPrefs(newPrefs);
-    if (user) uploadSettings(user.id, settings, newPrefs, getVictorySeen()).catch(() => {});
+    await saveQuizPrefs(newPrefs);
+    if (user) uploadSettings(user.id, settings, newPrefs, await getVictorySeen()).catch(() => {});
     const fullConfig = { ...newConfig, recentDays: RECENT_DAYS[settings.recentWindow] };
 
     if (settings.expireMasteredBirds && newConfig.mode === 'adaptive') {
@@ -566,12 +589,12 @@ export default function App() {
     if (newConfig.mode === 'adaptive') {
       const back = fullConfig.recentDays ?? 30;
       const currentSpecies = await getRegionSpecies(fullConfig.regionCode, back);
-      const snapshot = loadSnapshot();
+      const snapshot = await loadSnapshot();
       const snapshotMatches = snapshot?.regionCode === fullConfig.regionCode && snapshot?.back === back;
       if (!snapshotMatches) {
         // First run or region/back changed - save baseline silently
         const newSnap = buildSnapshot(fullConfig.regionCode, back, currentSpecies);
-        saveSnapshot(newSnap);
+        void saveSnapshot(newSnap);
         if (user) uploadRegionSnapshot(user.id, newSnap).catch(() => {});
       } else {
         const updateInfo = computeRegionUpdate(currentSpecies, snapshot!);
@@ -600,7 +623,7 @@ export default function App() {
     // currentSpecies is already cached in memory from handleStart; rebuild snapshot from it
     getRegionSpecies(pendingConfig.regionCode, back).then(currentSpecies => {
       const newSnap = buildSnapshot(pendingConfig.regionCode, back, currentSpecies);
-      saveSnapshot(newSnap);
+      void saveSnapshot(newSnap);
       if (user) uploadRegionSnapshot(user.id, newSnap).catch(() => {});
     }).catch(() => {});
     setPendingRegionUpdate(null);
@@ -618,10 +641,10 @@ export default function App() {
     if (user) await deleteAllUserBlockedPhotos(user.id).catch(() => {});
   };
 
-  const handleSaveSettings = (s: AppSettings) => {
+  const handleSaveSettings = async (s: AppSettings) => {
     setSettings(s);
-    saveSettings(s);
-    if (user) uploadSettings(user.id, s, loadQuizPrefs(), getVictorySeen()).catch(() => {});
+    await saveSettings(s);
+    if (user) uploadSettings(user.id, s, await loadQuizPrefs(), await getVictorySeen()).catch(() => {});
   };
 
   const handleUpdateSettings = (updates: Partial<AppSettings>) => {
@@ -660,30 +683,29 @@ export default function App() {
   useEffect(() => {
     if (state.status !== 'complete' || screen !== 'quiz') return;
     const expandedTypes = expandQuestionTypes(config.questionTypes, settings);
-    const snapshot = loadSnapshot();
-    const snapshotKey = snapshot?.savedAt ?? new Date().toISOString();
-    checkVictoryCondition(config.regionCode, config.recentDays ?? 30, expandedTypes)
-      .then(won => {
-        if (won && roundLevelUps.some(e => e.graduated) && !hasSeenVictory(snapshotKey, expandedTypes)) {
-          markVictorySeen(snapshotKey, expandedTypes);
-          sendFriendNotification('victory', {
-            masteryDesc: describeMastery(expandedTypes),
-            windowDesc: describeWindow(settings.recentWindow),
-            regionCode: config.regionCode,
-          });
-          setScreen('victory');
-        } else {
-          setScreen('result');
-        }
-      })
-      .catch(() => setScreen('result'));
+    (async () => {
+      const snapshot = await loadSnapshot();
+      const snapshotKey = snapshot?.savedAt ?? new Date().toISOString();
+      const won = await checkVictoryCondition(config.regionCode, config.recentDays ?? 30, expandedTypes);
+      if (won && roundLevelUps.some(e => e.graduated) && !await hasSeenVictory(snapshotKey, expandedTypes)) {
+        await markVictorySeen(snapshotKey, expandedTypes);
+        sendFriendNotification('victory', {
+          masteryDesc: describeMastery(expandedTypes),
+          windowDesc: describeWindow(settings.recentWindow),
+          regionCode: config.regionCode,
+        });
+        setScreen('victory');
+      } else {
+        setScreen('result');
+      }
+    })().catch(() => setScreen('result'));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.status]);
 
   const showFocusModeToggle = strugglingCount >= Math.round(config.questionsPerRound * 0.5);
-  // Persist focus mode to localStorage
+  // Persist focus mode to IndexedDB (per-user store)
   useEffect(() => {
-    localStorage.setItem('birdygurdy_focus_struggling', String(focusStruggling));
+    void saveFocusStruggling(focusStruggling);
   }, [focusStruggling]);
   // Auto-disable focus mode when there are no longer enough struggling birds
   useEffect(() => {
@@ -733,6 +755,14 @@ export default function App() {
     setAllSightings([]);
     setSightingsBack(screen);
     setScreen('sightings');
+  }
+
+  if (!isInitialized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <img src="/BurdyGurdyProgress.gif" alt="" className="h-16 w-auto" />
+      </div>
+    );
   }
 
   return (
@@ -1076,7 +1106,7 @@ export default function App() {
       {/* Upload local progress prompt - shown after a new registration */}
       {showUploadPrompt && user && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center">
+          <div className="bg-sky-50 rounded-2xl shadow-xl w-full max-w-sm p-6 text-center">
             <p className="text-lg font-bold text-slate-800 mb-2">Upload your progress?</p>
             <p className="text-sm text-slate-500 mb-5">
               You have local progress saved on this device. Would you like to upload it to your new account so it's backed up and available on all your devices?
@@ -1085,7 +1115,7 @@ export default function App() {
               <button
                 onClick={async () => {
                   await uploadProgress(user.id).catch(() => {});
-                  await uploadSettings(user.id, settings, loadQuizPrefs(), getVictorySeen());
+                  await uploadSettings(user.id, settings, await loadQuizPrefs(), await getVictorySeen());
                   const blocked = await db.blockedPhotos.toArray();
                   await Promise.all(blocked.map(p => uploadUserBlockedPhoto(user.id, p.url)));
                   setShowUploadPrompt(false);
@@ -1097,7 +1127,7 @@ export default function App() {
               </button>
               <button
                 onClick={() => { setShowUploadPrompt(false); setShowAuth(false); }}
-                className="px-5 py-2 border border-slate-300 text-slate-600 rounded-xl text-sm hover:bg-slate-50"
+                className="px-5 py-2 bg-sky-100 border border-sky-200 text-slate-700 rounded-xl text-sm hover:bg-sky-200"
               >
                 Start fresh
               </button>
@@ -1111,6 +1141,17 @@ export default function App() {
 
       {/* Cloud sync overlay - blocks interaction while downloading from cloud */}
       {cloudSyncing && <CloudSyncOverlay />}
+
+      {/* Fast-track dialog - shown mid-quiz when user aces easy on their first attempt */}
+      {pendingFastTrack && (
+        <FastTrackDialog
+          candidate={pendingFastTrack}
+          onConfirm={(accept, always) => {
+            confirmFastTrack(accept);
+            if (accept && always) handleUpdateSettings({ alwaysFastTrack: true });
+          }}
+        />
+      )}
 
       {/* Mastery fact dialog - shown mid-quiz the first time a bird graduates in a round */}
       {masteryFactEvent && (
@@ -1133,7 +1174,7 @@ export default function App() {
       {/* Mastery expiry confirmation dialog */}
       {expiryDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 flex flex-col gap-4">
+          <div className="bg-sky-50 rounded-2xl shadow-xl w-full max-w-sm p-6 flex flex-col gap-4">
             <div>
               <h2 className="text-lg font-bold text-slate-800 mb-2">Mastered birds expiring</h2>
               <p className="text-sm text-slate-600 leading-relaxed">
@@ -1159,7 +1200,7 @@ export default function App() {
                   setExpiryDialog(null);
                   doStart(cfg);
                 }}
-                className="flex-1 py-2.5 rounded-xl border border-slate-300 text-slate-600 font-medium text-sm hover:bg-slate-50 transition-colors"
+                className="flex-1 py-2.5 rounded-xl bg-sky-100 border border-sky-200 text-slate-700 font-medium text-sm hover:bg-sky-200 transition-colors"
               >
                 Cancel - turn off expiry
               </button>

@@ -94,7 +94,7 @@ export function RegionUpdateDialog({ info, progressRecords, questionTypes, onDis
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[80vh] flex flex-col">
+      <div className="bg-sky-50 rounded-2xl shadow-xl w-full max-w-md max-h-[80vh] flex flex-col">
 
         {/* Header */}
         <div className="px-5 pt-5 pb-3 shrink-0">

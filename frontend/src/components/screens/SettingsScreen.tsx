@@ -188,6 +188,12 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
             checked={settings.expireMasteredBirds ?? false}
             onChange={v => update('expireMasteredBirds', v)}
           />
+          <ToggleRow
+            label="Always fast-track birds I ace first try"
+            infoId="alwaysFastTrack"
+            checked={settings.alwaysFastTrack ?? false}
+            onChange={v => update('alwaysFastTrack', v)}
+          />
           {isDesktop && (
             <ToggleRow
               label="Auto-scroll related species"

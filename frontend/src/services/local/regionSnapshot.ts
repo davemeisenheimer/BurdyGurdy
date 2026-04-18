@@ -1,6 +1,8 @@
 import type { CachedSpecies } from '../../types';
+import { db } from '../../lib/db';
 
-const SNAPSHOT_KEY = 'birdygurdy_region_snapshot';
+const KEY        = 'regionSnapshot';
+const LEGACY_KEY = 'birdygurdy_region_snapshot';
 
 export interface SnapshotSpecies {
   speciesCode: string;
@@ -23,17 +25,23 @@ export interface RegionUpdateInfo {
   savedAt?: string;
 }
 
-export function loadSnapshot(): RegionSnapshot | null {
+export async function loadSnapshot(): Promise<RegionSnapshot | null> {
   try {
-    const raw = localStorage.getItem(SNAPSHOT_KEY);
-    return raw ? (JSON.parse(raw) as RegionSnapshot) : null;
+    const legacy = localStorage.getItem(LEGACY_KEY);
+    if (legacy !== null) {
+      await db.keyValue.put({ key: KEY, value: legacy });
+      localStorage.removeItem(LEGACY_KEY);
+      return JSON.parse(legacy) as RegionSnapshot;
+    }
+    const row = await db.keyValue.get(KEY);
+    return row ? JSON.parse(row.value) as RegionSnapshot : null;
   } catch {
     return null;
   }
 }
 
-export function saveSnapshot(snapshot: RegionSnapshot): void {
-  localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snapshot));
+export async function saveSnapshot(snapshot: RegionSnapshot): Promise<void> {
+  await db.keyValue.put({ key: KEY, value: JSON.stringify(snapshot) }).catch(() => {});
 }
 
 export function buildSnapshot(

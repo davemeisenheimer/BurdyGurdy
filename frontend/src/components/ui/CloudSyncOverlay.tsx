@@ -1,7 +1,7 @@
 export function CloudSyncOverlay() {
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/70 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 flex flex-col items-center gap-4">
+      <div className="bg-sky-50 rounded-2xl shadow-2xl px-10 py-8 flex flex-col items-center gap-4">
         {/* Cloud ↔ device sync icon */}
         <svg
           viewBox="0 0 64 40"

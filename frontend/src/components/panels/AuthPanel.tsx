@@ -74,7 +74,7 @@ export function AuthPanel({ onClose, onSignIn, onSignUp }: Props) {
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6"
+        className="bg-sky-50 rounded-2xl shadow-xl w-full max-w-sm p-6"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
