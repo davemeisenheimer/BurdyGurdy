@@ -4,7 +4,7 @@ export interface AppNotification {
   id: string;
   senderUserId: string;
   senderDisplayName: string;
-  type: 'login' | 'victory' | 'logout';
+  type: 'login' | 'victory' | 'logout' | 'session';
   data: Record<string, unknown>;
   createdAt: string;
   read: boolean;
@@ -59,6 +59,14 @@ export function formatNotificationMessage(n: AppNotification): string {
       const m = d.birdsMasteredCount ?? 0;
       const masteryPart = m > 0 ? `, mastering ${m} bird${m !== 1 ? 's' : ''}` : '';
       return `${name} signed out after answering ${q} question${q !== 1 ? 's' : ''} in ${r} round${r !== 1 ? 's' : ''}${masteryPart}.`;
+    }
+    case 'session': {
+      const d = n.data as { questionsAnswered?: number; roundsCompleted?: number; birdsMasteredCount?: number };
+      const q = d.questionsAnswered ?? 0;
+      const r = d.roundsCompleted ?? 0;
+      const m = d.birdsMasteredCount ?? 0;
+      const masteryPart = m > 0 ? `, mastering ${m} bird${m !== 1 ? 's' : ''}` : '';
+      return `${name} played ${r} round${r !== 1 ? 's' : ''}, answering ${q} question${q !== 1 ? 's' : ''}${masteryPart}.`;
     }
     default:
       return `New notification from ${name}.`;

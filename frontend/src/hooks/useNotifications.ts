@@ -35,7 +35,7 @@ export function useNotifications({
   useEffect(() => { onViewNotificationsRef.current = onViewNotifications; });
 
   async function sendFriendNotification(
-    type: 'login' | 'victory' | 'logout',
+    type: 'login' | 'victory' | 'logout' | 'session',
     data: Record<string, unknown>,
     accessToken?: string,
   ) {
@@ -91,12 +91,24 @@ export function useNotifications({
     }
   }
 
-  async function performSignOut() {
-    await sendFriendNotification('logout', {
+  async function sendSessionNotification() {
+    if (sessionRoundsRef.current === 0) return;
+    await sendFriendNotification('session', {
       questionsAnswered:  sessionQuestionsRef.current,
       roundsCompleted:    sessionRoundsRef.current,
       birdsMasteredCount: sessionMasteredRef.current,
     });
+    sessionQuestionsRef.current = 0;
+    sessionRoundsRef.current    = 0;
+    sessionMasteredRef.current  = 0;
+  }
+
+  async function performSignOut() {
+    if (sessionRoundsRef.current > 0) {
+      await sendSessionNotification();
+    } else {
+      await sendFriendNotification('logout', {});
+    }
     supabase.auth.signOut();
   }
 
@@ -127,6 +139,7 @@ export function useNotifications({
     currentToast,
     setCurrentToast,
     sendFriendNotification,
+    sendSessionNotification,
     performSignOut,
     sessionQuestionsRef,
     sessionRoundsRef,

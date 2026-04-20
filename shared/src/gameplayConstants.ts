@@ -33,6 +33,24 @@ export const MAX_LEVEL_0_SIZE_THIRD  = 11;
 /** Maximum palette size (reached after mastering 13+ birds). */
 export const MAX_LEVEL_0_SIZE        = 12;
 
+/**
+ * Maximum palette size for advanced (expert) birders — deliberately larger than
+ * MAX_LEVEL_0_SIZE.
+ *
+ * For novice and intermediate, the palette naturally grows beyond the entry-level
+ * cap because birds at levels 1 and 2 are still in active learning and accumulate
+ * on top of the capped entry level (0 for novice, 1 for intermediate).  A novice
+ * can easily have 30–40 birds in active rotation across all three levels.
+ *
+ * For advanced birders, birds start at level 2 (Hard) and graduate directly to
+ * Mastered — there are no higher active levels to overflow into.  This means the
+ * entry-level cap IS the total palette cap, and 12 birds would make the expert
+ * experience much easier than intended (small palette → fewer distractors to
+ * discriminate between, faster cycling).  We therefore use a higher ceiling so
+ * that advanced users face a palette comparable in size to other birder levels.
+ */
+export const MAX_LEVEL_ADVANCED_SIZE = 25;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // MASTERY PROGRESSION - streaks required to advance through levels
 // ─────────────────────────────────────────────────────────────────────────────
@@ -198,6 +216,20 @@ export const DISTRACTOR_COUNT = 3;
  * distractor than a non-palette bird of equal weight.
  */
 export const PALETTE_DISTRACTOR_WEIGHT = 10;
+
+/**
+ * Multiplier applied to a mastered bird's weight when it shares a genus with
+ * any unmastered or struggling-mastered bird in the current quiz (advanced mode only).
+ * Intentionally very high so genus relatives almost always win the slot.
+ */
+export const AFFINITY_GENUS_BOOST = 15;
+
+/**
+ * Multiplier applied to a mastered bird's weight when it shares a family (but not
+ * genus) with any unmastered or struggling-mastered bird (advanced mode only).
+ * Weaker than AFFINITY_GENUS_BOOST — used only when no genus-level relatives exist.
+ */
+export const AFFINITY_FAMILY_BOOST = 4;
 
 /**
  * Maximum allowed difference in taxonomic size class between the correct bird

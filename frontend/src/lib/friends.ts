@@ -213,11 +213,29 @@ export async function fetchFriendProgress(friendUserId: string): Promise<BirdPro
 
 /** Sends a notification to the current user's friends via the backend. Best-effort. */
 export async function notifyFriends(
-  type: 'login' | 'victory' | 'logout',
+  type: 'login' | 'victory' | 'logout' | 'session',
   data: Record<string, unknown>,
   accessToken: string,
 ): Promise<void> {
   await api.post('/friends/notify', { type, data }, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
+}
+
+/**
+ * Sends a notification via navigator.sendBeacon — safe to call from a pagehide
+ * handler where the page may be unloading. Uses a separate backend endpoint that
+ * accepts the auth token in the request body (sendBeacon cannot set headers).
+ */
+export function sendBeaconNotification(
+  type: string,
+  data: Record<string, unknown>,
+  accessToken: string,
+): void {
+  const base = (import.meta.env.VITE_API_URL ?? '') + '/api';
+  const blob = new Blob(
+    [JSON.stringify({ type, data, token: accessToken })],
+    { type: 'application/json' },
+  );
+  navigator.sendBeacon(`${base}/friends/notify-beacon`, blob);
 }

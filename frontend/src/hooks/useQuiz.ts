@@ -306,6 +306,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
         level0Keys,
         historyKeys,
         bannedAudioUrls,
+        birderLevel,
       );
 
       if (questions.length === 0) {

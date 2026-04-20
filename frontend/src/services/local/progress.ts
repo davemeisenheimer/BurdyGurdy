@@ -3,7 +3,7 @@ import { getRegionSpecies } from './region';
 import {
   calcWeight, applyAnswer,
   PALETTE_WEIGHT, HISTORY_WEIGHT,
-  MAX_LEVEL_0_SIZE, MAX_LEVEL_0_SIZE_FIRST, MAX_LEVEL_0_SIZE_SECOND, MAX_LEVEL_0_SIZE_THIRD,
+  MAX_LEVEL_0_SIZE, MAX_LEVEL_0_SIZE_FIRST, MAX_LEVEL_0_SIZE_SECOND, MAX_LEVEL_0_SIZE_THIRD, MAX_LEVEL_ADVANCED_SIZE,
 } from '../../lib/adaptive';
 import type { AdaptiveParams, RecordAnswerResult } from '../../lib/adaptive';
 import type { QuestionType, CachedSpecies, LevelUpEvent, BirdProgress } from '../../types';
@@ -152,18 +152,24 @@ async function promoteNextForType(
  * Returns how many species should be promoted for a given type.
  * The target palette size grows as the user graduates more birds of that type.
  */
-export function typeLevel0MaxSize(graduateCount: number): number {
+export function typeLevel0MaxSize(graduateCount: number, initialMasteryLevel = 0): number {
+  // Advanced birders (initialMasteryLevel === 2) start at Hard and graduate directly
+  // to Mastered — there are no higher active levels to overflow into, so the entry-level
+  // cap IS the total palette cap.  We use a higher ceiling to give them a palette
+  // comparable in size to novice/intermediate users.  See MAX_LEVEL_ADVANCED_SIZE in
+  // gameplayConstants.ts for the full explanation.
+  if (initialMasteryLevel === 2) return MAX_LEVEL_ADVANCED_SIZE;
   return graduateCount > 3 ? MAX_LEVEL_0_SIZE
     : graduateCount > 2    ? MAX_LEVEL_0_SIZE_THIRD
     : graduateCount > 1    ? MAX_LEVEL_0_SIZE_SECOND
     :                        MAX_LEVEL_0_SIZE_FIRST;
 }
 
-async function getTypePromotionCount(type: QuestionType, level0Count: number): Promise<number> {
+async function getTypePromotionCount(type: QuestionType, level0Count: number, initialMasteryLevel = 0): Promise<number> {
   const graduateCount = await db.progress
     .filter(record => record.questionType === type && (record.isMastered ?? false))
     .count();
-  return typeLevel0MaxSize(graduateCount) - level0Count;
+  return typeLevel0MaxSize(graduateCount, initialMasteryLevel) - level0Count;
 }
 
 /**
@@ -183,7 +189,7 @@ export async function maintainLevel0Palette(
     const level0Count = records.filter(
       r => r.questionType === type && (r.masteryLevel ?? 0) === initialMasteryLevel && !(r.isMastered ?? false) && !(r.excluded ?? false),
     ).length;
-    const promotionCount = await getTypePromotionCount(type, level0Count);
+    const promotionCount = await getTypePromotionCount(type, level0Count, initialMasteryLevel);
     if (promotionCount > 0) {
       const seededCodes = new Set(records.filter(r => r.questionType === type).map(r => r.speciesCode));
       await promoteNextForType(regionCode, type, promotionCount, back, seededCodes, initialMasteryLevel);

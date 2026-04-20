@@ -7,6 +7,7 @@ import {
   MAX_LEVEL_0_SIZE_FIRST,
   MAX_LEVEL_0_SIZE_SECOND,
   MAX_LEVEL_0_SIZE_THIRD,
+  MAX_LEVEL_ADVANCED_SIZE,
 } from '../../lib/adaptive';
 
 // ── selectSpeciesToPromote ────────────────────────────────────────────────────
@@ -227,5 +228,15 @@ describe('typeLevel0MaxSize', () => {
     expect(MAX_LEVEL_0_SIZE_FIRST).toBeLessThan(MAX_LEVEL_0_SIZE_SECOND);
     expect(MAX_LEVEL_0_SIZE_SECOND).toBeLessThan(MAX_LEVEL_0_SIZE_THIRD);
     expect(MAX_LEVEL_0_SIZE_THIRD).toBeLessThan(MAX_LEVEL_0_SIZE);
+  });
+
+  it('returns MAX_LEVEL_ADVANCED_SIZE for advanced birders regardless of graduate count', () => {
+    // Advanced birds start at level 2 and graduate directly to mastered — no
+    // overflow levels, so the entry-level cap is the total palette cap.
+    // MAX_LEVEL_ADVANCED_SIZE is deliberately larger than MAX_LEVEL_0_SIZE to
+    // give experts a palette comparable in size to novice/intermediate users.
+    expect(typeLevel0MaxSize(0,   2)).toBe(MAX_LEVEL_ADVANCED_SIZE);
+    expect(typeLevel0MaxSize(100, 2)).toBe(MAX_LEVEL_ADVANCED_SIZE);
+    expect(MAX_LEVEL_ADVANCED_SIZE).toBeGreaterThan(MAX_LEVEL_0_SIZE);
   });
 });

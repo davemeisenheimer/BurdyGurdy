@@ -9,6 +9,7 @@ import type { QuestionType } from '../routes/quiz';
 import {
   NON_RECENT_MULTIPLIER, NEW_ENCOUNTER_WEIGHT, MASTERED_FLOOR_WEIGHT,
   ACTIVE_PALETTE_MIN_WEIGHT, UNMASTERED_FLOOR_RATIO,
+  AFFINITY_GENUS_BOOST, AFFINITY_FAMILY_BOOST,
 } from '@birdygurdy/shared';
 
 export interface PoolSpecies {
@@ -162,4 +163,38 @@ export function applyRecentUnmasteredGuarantee<T extends { speciesCode: string; 
   }
 
   return result.sort(() => Math.random() - 0.5).slice(0, count);
+}
+
+/**
+ * Returns a new array of candidates with weights boosted for birds that are
+ * taxonomically related to the anchor species (ru/sm birds already in the quiz).
+ * Only applied in advanced (hard) mode.
+ *
+ *   Shares genus with any anchor  → weight × AFFINITY_GENUS_BOOST
+ *   Shares family (not genus)     → weight × AFFINITY_FAMILY_BOOST
+ *   No relation                   → weight unchanged
+ */
+export function applyAffinityBoosts(
+  candidates: Candidate[],
+  anchors: PoolSpecies[],
+): Candidate[] {
+  if (anchors.length === 0) return candidates;
+
+  const anchorGenera   = new Set(anchors.map(a => a.sciName.split(' ')[0]));
+  const anchorFamilies = new Set(
+    anchors.map(a => a.tax?.familySciName).filter((f): f is string => Boolean(f)),
+  );
+
+  return candidates.map(c => {
+    const genus  = c.species.sciName.split(' ')[0];
+    const family = c.species.tax?.familySciName;
+
+    if (anchorGenera.has(genus)) {
+      return { ...c, weight: c.weight * AFFINITY_GENUS_BOOST };
+    }
+    if (family && anchorFamilies.has(family)) {
+      return { ...c, weight: c.weight * AFFINITY_FAMILY_BOOST };
+    }
+    return c;
+  });
 }

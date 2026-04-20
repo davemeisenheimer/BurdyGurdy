@@ -73,6 +73,25 @@ function toFakeCached(s: SnapshotSpecies): CachedSpecies {
   return { speciesCode: s.speciesCode, comName: s.comName, sciName: s.sciName };
 }
 
+const QUESTION_TYPE_LABEL: Partial<Record<QuestionType, string>> = {
+  image:        'Photo',
+  song:         'Song',
+  latin:        'Scientific name',
+  family:       'Family',
+  order:        'Order',
+  sono:         'Spectrogram',
+  'image-latin':  'Photo → Latin',
+  'song-latin':   'Song → Latin',
+  'family-latin': 'Family → Latin',
+  'image-song':   'Photo + Song',
+  'sono-song':    'Spectrogram + Song',
+  'latin-song':   'Latin + Song',
+};
+
+function formatQuestionTypes(types: QuestionType[]): string {
+  return types.map(t => QUESTION_TYPE_LABEL[t] ?? t).join(', ');
+}
+
 function formatWindowDate(date: Date): string {
   return date.toLocaleString('en-US', {
     month: 'short', day: 'numeric',
@@ -110,6 +129,9 @@ export function RegionUpdateDialog({ info, progressRecords, questionTypes, onDis
               info.added.length   > 0 && `${info.added.length} new`,
               info.dropped.length > 0 && `${info.dropped.length} dropped`,
             ].filter(Boolean).join(' · ')}
+          </p>
+          <p className="mt-1 text-xs font-semibold tracking-wide text-sky-700">
+            Question types: <span className="uppercase">{formatQuestionTypes(questionTypes)}</span>
           </p>
         </div>
 

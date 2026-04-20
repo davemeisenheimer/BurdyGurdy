@@ -129,4 +129,50 @@ router.post('/notify', async (req, res) => {
   return res.json({ ok: true, notified: friendIds.length });
 });
 
+// POST /api/friends/notify-beacon
+// Beacon variant of /notify — accepts the auth token in the request body so it
+// can be called from navigator.sendBeacon() (which cannot set custom headers).
+router.post('/notify-beacon', async (req, res) => {
+  const { type, data, token } = req.body as { type: string; data: Record<string, unknown>; token: string };
+  if (!type || !token) return res.status(400).json({ error: 'type and token are required' });
+
+  const payload = decodeJwt(token);
+  if (!payload?.sub) return res.status(401).json({ error: 'Invalid token' });
+  const userId = payload.sub;
+
+  let admin;
+  try { admin = getSupabaseAdmin(); }
+  catch (e) { return res.status(500).json({ error: (e as Error).message }); }
+
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('display_name')
+    .eq('id', userId)
+    .single();
+  const displayName: string = (profile as { display_name: string } | null)?.display_name ?? 'A friend';
+
+  const { data: friendships } = await admin
+    .from('friendships')
+    .select('user_id_a, user_id_b')
+    .or(`user_id_a.eq.${userId},user_id_b.eq.${userId}`);
+
+  if (!friendships?.length) return res.json({ ok: true, notified: 0 });
+
+  const friendIds = (friendships as Array<{ user_id_a: string; user_id_b: string }>)
+    .map(f => f.user_id_a === userId ? f.user_id_b : f.user_id_a);
+
+  const rows = friendIds.map(recipientId => ({
+    recipient_user_id:   recipientId,
+    sender_user_id:      userId,
+    sender_display_name: displayName,
+    type,
+    data: data ?? {},
+  }));
+
+  const { error } = await admin.from('notifications').insert(rows);
+  if (error) return res.status(500).json({ error: error.message });
+
+  return res.json({ ok: true, notified: friendIds.length });
+});
+
 export default router;

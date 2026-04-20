@@ -16,6 +16,7 @@ export async function fetchQuizQuestions(
   level0Keys: string[] = [],
   historyKeys: string[] = [],
   bannedAudioUrls: string[] = [],
+  birderLevel?: string,
 ): Promise<QuizQuestion[]> {
   const res = await api.post<QuizQuestion[]>('/quiz/questions', {
     regionCode,
@@ -30,6 +31,7 @@ export async function fetchQuizQuestions(
     level0Keys,
     historyKeys,
     bannedAudioUrls,
+    birderLevel,
   });
   return res.data;
 }

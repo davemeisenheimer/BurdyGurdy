@@ -46,7 +46,7 @@ import { PasswordResetDialog } from './components/ui/PasswordResetDialog';
 import { CloudSyncOverlay } from './components/ui/CloudSyncOverlay';
 import type { LevelUpEvent } from './types';
 import { markNotificationsRead } from './lib/notifications';
-import { fetchFriendProgress, getReceivedPendingInvites } from './lib/friends';
+import { fetchFriendProgress, getReceivedPendingInvites, sendBeaconNotification } from './lib/friends';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -117,8 +117,9 @@ export default function App() {
   const [hasPendingInvites, setHasPendingInvites]         = useState(false);
   const [syncVersion, setSyncVersion]           = useState(0);
   const [cloudSyncing, setCloudSyncing]         = useState(false);
-  const cloudSyncingRef = useRef(false);
-  const quizActiveRef   = useRef(false);
+  const cloudSyncingRef  = useRef(false);
+  const quizActiveRef    = useRef(false);
+  const accessTokenRef   = useRef<string | null>(null);
   const [masteryFactEvent, setMasteryFactEvent] = useState<LevelUpEvent | null>(null);
   const hasShownFactThisRoundRef = useRef(false);
   const prevGraduatedCountRef    = useRef(0);
@@ -156,6 +157,7 @@ export default function App() {
     currentToast,
     setCurrentToast,
     sendFriendNotification,
+    sendSessionNotification,
     performSignOut,
     sessionQuestionsRef,
     sessionRoundsRef,
@@ -244,22 +246,27 @@ export default function App() {
     await mergeVictorySeen(remote.victorySeen);
   };
 
-  // Auto sign-out after 30 minutes of inactivity.
-  // The check runs on every user interaction - if more than 30 minutes have
-  // passed since the last interaction, sign out and show the modal instead
-  // of performing the action.  No visibility-change check needed.
+  // Three debounced inactivity timers — all reset on any user interaction.
+  // Timers fire proactively between interactions (not on the next user action),
+  // so sign-out and sync never interrupt a user gesture.
   //
-  // Also: after 60 s of inactivity check whether another device uploaded newer
-  // data. If so, abort any in-progress quiz and download-replace so this idle
-  // device mirrors the cloud without waiting for a visibility event.
-  const INACTIVITY_MS = 30 * 60 * 1000;
-  const SYNC_IDLE_MS  = 60_000;
+  //   60 s  → background cloud sync (check for updates from other devices)
+  //   5 min → send 'session' notification if the user played any rounds
+  //  30 min → auto sign-out
+  //
+  // pagehide covers tab-close / navigate-away via sendBeacon.
+  const INACTIVITY_MS  = 30 * 60 * 1000;
+  const NOTIFY_IDLE_MS =  5 * 60 * 1000;
+  const SYNC_IDLE_MS   =       60_000;
   useEffect(() => {
     const touch = () => {
       const u = userRef.current;
       if (u) localStorage.setItem(activityKey(u.id), String(Date.now()));
     };
-    let throttle: ReturnType<typeof setTimeout> | null = null;
+    let throttle:    ReturnType<typeof setTimeout> | null = null;
+    let syncTimer:   ReturnType<typeof setTimeout> | null = null;
+    let notifyTimer: ReturnType<typeof setTimeout> | null = null;
+    let signOutTimer: ReturnType<typeof setTimeout> | null = null;
 
     const doIdleSync = async () => {
       const u = userRef.current;
@@ -286,32 +293,49 @@ export default function App() {
       } catch { /* non-fatal */ }
     };
 
-    const onActivity = () => {
-      const u = userRef.current;
-      const last = u ? Number(localStorage.getItem(activityKey(u.id)) ?? Date.now()) : Date.now();
+    const resetTimers = () => {
+      if (syncTimer)    { clearTimeout(syncTimer);    syncTimer    = null; }
+      if (notifyTimer)  { clearTimeout(notifyTimer);  notifyTimer  = null; }
+      if (signOutTimer) { clearTimeout(signOutTimer); signOutTimer = null; }
       if (userRef.current) {
-        if (Date.now() - last > INACTIVITY_MS) {
-          performSignOut();
-          setWasAutoSignedOut(true);
-          return; // don't update lastActivity - leave it stale until sign-in
-        }
-        // First interaction after 60 s of inactivity — check for updates from other devices.
-        if (Date.now() - last > SYNC_IDLE_MS) {
-          doIdleSync();
-        }
+        syncTimer    = setTimeout(doIdleSync, SYNC_IDLE_MS);
+        notifyTimer  = setTimeout(sendSessionNotification, NOTIFY_IDLE_MS);
+        signOutTimer = setTimeout(() => { performSignOut(); setWasAutoSignedOut(true); }, INACTIVITY_MS);
       }
-      if (!throttle) throttle = setTimeout(() => { touch(); throttle = null; }, 15_000);
     };
+
+    const onActivity = () => {
+      if (!throttle) throttle = setTimeout(() => { touch(); throttle = null; }, 15_000);
+      resetTimers();
+    };
+
+    const onPageHide = () => {
+      if (sessionRoundsRef.current > 0 && accessTokenRef.current) {
+        sendBeaconNotification('session', {
+          questionsAnswered:  sessionQuestionsRef.current,
+          roundsCompleted:    sessionRoundsRef.current,
+          birdsMasteredCount: sessionMasteredRef.current,
+        }, accessTokenRef.current);
+      }
+    };
+
     touch();
+    resetTimers();
     document.addEventListener('click',      onActivity);
     document.addEventListener('keydown',    onActivity);
     document.addEventListener('touchstart', onActivity);
     document.addEventListener('scroll',     onActivity, { passive: true });
+    window.addEventListener('pagehide',     onPageHide);
     return () => {
+      if (syncTimer)    clearTimeout(syncTimer);
+      if (notifyTimer)  clearTimeout(notifyTimer);
+      if (signOutTimer) clearTimeout(signOutTimer);
+      if (throttle)     clearTimeout(throttle);
       document.removeEventListener('click',      onActivity);
       document.removeEventListener('keydown',    onActivity);
       document.removeEventListener('touchstart', onActivity);
       document.removeEventListener('scroll',     onActivity);
+      window.removeEventListener('pagehide',     onPageHide);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -449,7 +473,8 @@ export default function App() {
           sessionMasteredRef.current = 0;
         }
       }
-      // Keep ref current so subsequent events see the correct previous state.
+      // Keep refs current so subsequent events see the correct previous state.
+      accessTokenRef.current = session?.access_token ?? null;
       if (event === 'SIGNED_OUT') prevAuthUserIdRef.current = null;
       else if (session?.user)      prevAuthUserIdRef.current = session.user.id;
     });

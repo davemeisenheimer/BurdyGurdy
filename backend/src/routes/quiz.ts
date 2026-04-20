@@ -6,7 +6,7 @@ import { BACKYARD_FAMILIES, GROUP_ORDERS, ORDER_COMMON_NAMES } from '../constant
 import {
   PALETTE_DISTRACTOR_WEIGHT, RECENT_UNMASTERED_RATIO, XC_FETCH_BATCH_SIZE,
 } from '@birdygurdy/shared';
-import { buildCandidates, applyRecentUnmasteredGuarantee } from '../lib/candidateLogic';
+import { buildCandidates, applyRecentUnmasteredGuarantee, applyAffinityBoosts } from '../lib/candidateLogic';
 import { filterRecordings, weightedSampleByDuration } from '../lib/recordingFilter';
 import type { PoolSpecies, Candidate } from '../lib/candidateLogic';
 
@@ -306,6 +306,7 @@ router.post('/questions', async (req, res) => {
       level0Keys           = [],
       historyKeys          = [],
       bannedAudioUrls      = [],
+      birderLevel          = 'novice',
     } = req.body;
 
     const bannedAudioSet = new Set<string>(bannedAudioUrls as string[]);
@@ -406,7 +407,11 @@ router.post('/questions', async (req, res) => {
 
       const pickedRU    = pickFromPool(ruCandidates,    ruCandidates.length);
       const pickedSM    = pickFromPool(smCandidates,    smCandidates.length);
-      const pickedOther = pickFromPool(otherCandidates, count + 5);
+      const anchorSpecies = [...ruCandidates, ...smCandidates].map(c => c.species);
+      const boostedOther  = birderLevel === 'advanced'
+        ? applyAffinityBoosts(otherCandidates, anchorSpecies)
+        : otherCandidates;
+      const pickedOther = pickFromPool(boostedOther, count + 5);
       console.log(`[quiz] RU: ${ruCandidates.length}, SM: ${smCandidates.length}, other: ${otherCandidates.length}, min: ${recentUnmasteredMin}/${count}`);
       picked = [...pickedRU, ...pickedSM, ...pickedOther];
     } else {
@@ -452,9 +457,16 @@ router.post('/questions', async (req, res) => {
         const isSongAnswer  = (type as string).endsWith('-song');
         const needsPhoto    = ['image', 'image-latin', 'image-song'].includes(type as string);
 
-        // Shuffle all 4 option species together so correctAnswer position is random
+        // Shuffle all 4 option species together so correctAnswer position is random.
+        // Fisher-Yates produces a uniform permutation; sort(() => Math.random() - 0.5)
+        // is biased because V8's sort makes repeated comparisons per element, causing
+        // the original first element (always the correct answer) to stay near index 0.
         const allOptionSpecies = [species, ...distractorSpecies];
-        const shuffled = [...allOptionSpecies].sort(() => Math.random() - 0.5);
+        const shuffled = [...allOptionSpecies];
+        for (let j = shuffled.length - 1; j > 0; j--) {
+          const k = Math.floor(Math.random() * (j + 1));
+          [shuffled[j], shuffled[k]] = [shuffled[k], shuffled[j]];
+        }
         const options      = shuffled.map(s => isLatinAnswer ? s.sciName : s.comName);
         const correctAnswer = isLatinAnswer ? species.sciName : species.comName;
 
