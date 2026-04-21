@@ -324,7 +324,7 @@ export function QuizScreen({
                   ✨ New bird!
                 </span>
               )}
-              <div className="flex-1 min-h-0 flex flex-col items-center px-5">
+              <div className="flex-1 min-h-0 flex flex-col items-center">
                 {/* Space above stimulus */}
                 <div className="flex-1" />
                 {stimType === 'song' && question.audioUrl && (

@@ -151,13 +151,16 @@ export async function getSpeciesPhotoUrl(
   comName?: string,
   sciName?: string,
   masteryLevel?: number,
+  blockedUrls: Set<string> = new Set(),
 ): Promise<AttributedPhoto | null> {
   const { primary, optional } = await loadPhotoSet(speciesCode, comName, sciName);
 
   const allPhotos = [primary, ...optional].filter((p): p is AttributedPhoto => !!p);
-  const suitable = allPhotos.filter(p => !QUESTION_EXCLUDE.test(filenameFromUrl(p.url)));
+  const suitable = allPhotos.filter(p =>
+    !QUESTION_EXCLUDE.test(filenameFromUrl(p.url)) && !blockedUrls.has(p.url),
+  );
 
-  if (suitable.length === 0) return primary;
+  if (suitable.length === 0) return null;
 
   const ebirdPhoto = suitable.find(p => p.source === 'macaulay') ?? null;
   const inatPhoto  = suitable.find(p => p.source === 'inat')     ?? null;
@@ -181,21 +184,6 @@ export async function getSpeciesPhotoUrl(
     return candidates[candidates.length - 1].photo;
   }
 
-  // Level 2+: 1/3 iNat, 1/3 Macaulay, 1/3 Wiki (split equally among wiki photos)
-  const wikiWeight = wikiPhotos.length > 0 ? 1 / wikiPhotos.length : 0;
-  const candidates: Array<{ photo: AttributedPhoto; weight: number }> = [
-    ...(inatPhoto  ? [{ photo: inatPhoto,  weight: 1          }] : []),
-    ...(ebirdPhoto ? [{ photo: ebirdPhoto, weight: 1          }] : []),
-    ...wikiPhotos.map(p => ({ photo: p,   weight: wikiWeight })),
-  ];
-
-  if (candidates.length === 0) return null;
-
-  const total = candidates.reduce((s, c) => s + c.weight, 0);
-  let r = Math.random() * total;
-  for (const c of candidates) {
-    r -= c.weight;
-    if (r <= 0) return c.photo;
-  }
-  return candidates[candidates.length - 1].photo;
+  // Level 2+: equal probability across all suitable photos regardless of source
+  return suitable[Math.floor(Math.random() * suitable.length)];
 }

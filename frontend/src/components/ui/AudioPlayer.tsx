@@ -141,7 +141,7 @@ export function AudioPlayer({ url, tracks, onAudioUnavailable, durationSeconds }
         </div>
 
         {/* AudioPlayer overlay — covers the spectrogram area */}
-        <div className="absolute top-0 inset-x-0 h-[140px] sm:h-[160px]">
+        <div className={`absolute top-0 inset-x-0 h-[140px] sm:h-[160px] ${playing ? 'pointer-events-none' : ''}`}>
           <div
             className={`absolute inset-0 flex items-center justify-center bg-black/40 transition-opacity duration-200 ${
               playing ? 'opacity-0 pointer-events-none' : 'opacity-100'

@@ -372,6 +372,9 @@ export default function App() {
       prevAuthUserIdRef.current = data.session?.user?.id ?? null;
       switchToUserDb(data.session?.user?.id ?? null);
       setUser(data.session?.user ?? null);
+      // Pre-raise the overlay so the UI never flashes enabled before INITIAL_SESSION fires.
+      // The INITIAL_SESSION handler always calls setCloudSyncing(false) in its finally block.
+      if (data.session?.user) setCloudSyncing(true);
       void initAppData();
     });
 
@@ -509,6 +512,7 @@ export default function App() {
     const handleShow = async () => {
       if (hiddenAt > 0 && Date.now() - hiddenAt < MIN_HIDDEN_MS) { hiddenAt = 0; return; }
       hiddenAt = 0;
+      if (cloudSyncingRef.current) return;  // login or idle sync already in progress
       const cloudTs = await getCloudUploadTime(userId).catch(() => null);
       if (cloudTs !== null) {
         const localSyncedAt = getLocalSyncedAt(userId) ?? 0;

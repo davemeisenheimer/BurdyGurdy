@@ -18,7 +18,10 @@ router.get('/users', async (req, res) => {
 
   // Verify the token and check admin flag.
   const { data: { user: caller }, error: authErr } = await admin.auth.getUser(token);
-  if (authErr || !caller) return res.status(401).json({ error: 'Invalid token' });
+  if (authErr || !caller) {
+    console.error('[admin] getUser failed:', authErr?.message ?? 'no user returned');
+    return res.status(401).json({ error: 'Invalid token', detail: authErr?.message });
+  }
   if (caller.user_metadata?.is_admin !== true) return res.status(403).json({ error: 'Forbidden' });
 
   // Fetch all auth users (up to 1 000 — increase if needed).

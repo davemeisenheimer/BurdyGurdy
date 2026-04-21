@@ -150,6 +150,10 @@ export async function getWikipediaPhotos(sciName: string, comName: string): Prom
 
   const EXCLUDE   = /range|distribution|map|license|plate|iucn|mhnt|flag|logo|icon|symbol|chart|graph|diagram|coat_of_arms|silhouette|feather/i;
   const PHOTO_EXT = /\.(jpg|jpeg|png)$/i;
+  // Known bad files that appear across many unrelated articles (e.g. via shared templates)
+  const BAD_FILES = new Set([
+    'Spiza_americana_male_94_231051626_13e01e8125_o_cropped_flipped.png',
+  ]);
 
   for (const title of candidates) {
     try {
@@ -167,6 +171,8 @@ export async function getWikipediaPhotos(sciName: string, comName: string): Prom
       for (const item of items) {
         if (!item.title || EXCLUDE.test(item.title)) continue;
         if (!PHOTO_EXT.test(item.title)) continue;
+        const basename = item.title.replace(/^File:/i, '');
+        if (BAD_FILES.has(basename)) continue;
 
         // Prefer original.source (full-res direct URL); fall back to the largest srcset entry.
         // Some Wikimedia items omit original.source and only provide srcset thumbnails.

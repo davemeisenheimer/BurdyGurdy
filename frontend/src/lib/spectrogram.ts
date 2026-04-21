@@ -66,26 +66,73 @@ function fft(re: Float32Array, im: Float32Array): void {
   }
 }
 
+/** Raw FFT data returned by drawSpectrogram, used for zoom re-renders. */
+export interface SpectrogramData {
+  dbs: Float32Array;
+  numFrames: number;
+  maxBin: number;
+  globalMax: number;
+}
+
 /**
- * Fetches audio from `audioUrl`, decodes it, computes an STFT, and renders
- * the spectrogram onto `canvas`.  The canvas `width` and `height` must already
- * be set to the desired drawing resolution before calling.
+ * Renders a time window of a computed spectrogram onto `canvas`.
+ * startFrac and endFrac are fractions of the total audio duration [0, 1].
+ * Calling with (0, 1) reproduces the full view.
+ */
+export function renderSpectrogramWindow(
+  canvas: HTMLCanvasElement,
+  data: SpectrogramData,
+  startFrac: number,
+  endFrac: number,
+): void {
+  const { dbs, numFrames, maxBin, globalMax } = data;
+  const cw    = canvas.width;
+  const ch    = canvas.height;
+  const ctx2d = canvas.getContext('2d');
+  if (!ctx2d) return;
+
+  const floor   = globalMax - MAX_DB_RANGE;
+  const range   = Math.max(globalMax - floor, 1);
+  const imgData = ctx2d.createImageData(cw, ch);
+  const d       = imgData.data;
+
+  for (let x = 0; x < cw; x++) {
+    const frameFrac  = startFrac + (x / cw) * (endFrac - startFrac);
+    const frameIndex = Math.min(numFrames - 1, Math.floor(frameFrac * numFrames));
+    for (let y = 0; y < ch; y++) {
+      const binIndex   = Math.min(maxBin - 1, Math.floor((ch - 1 - y) * maxBin / ch));
+      const intensity  = Math.pow(Math.max(0, (dbs[frameIndex * maxBin + binIndex] - floor) / range), 0.7);
+      const pixelIndex = (y * cw + x) * 4;
+      const lutIndex   = Math.round(intensity * 255) * 3;
+      d[pixelIndex]     = INFERNO_LUT[lutIndex];
+      d[pixelIndex + 1] = INFERNO_LUT[lutIndex + 1];
+      d[pixelIndex + 2] = INFERNO_LUT[lutIndex + 2];
+      d[pixelIndex + 3] = 255;
+    }
+  }
+  ctx2d.putImageData(imgData, 0, 0);
+}
+
+/**
+ * Fetches audio from `audioUrl`, decodes it, computes an STFT, renders the
+ * full spectrogram onto `canvas`, and returns the raw FFT data so callers
+ * can re-render sub-windows (zoom) without re-fetching.
  *
- * Resolves when drawing is complete.  Rejects on network or decode failure.
- * Returns early (without drawing) if `signal` is aborted.
+ * The canvas `width` and `height` must already be set to the desired drawing
+ * resolution before calling. Rejects on network/decode failure or abort.
  */
 export async function drawSpectrogram(
   audioUrl: string,
   canvas: HTMLCanvasElement,
   signal?: AbortSignal,
-): Promise<void> {
+): Promise<SpectrogramData> {
   // Protocol-relative URLs need a scheme for fetch()
   const url = audioUrl.startsWith('//') ? `https:${audioUrl}` : audioUrl;
 
   const resp = await fetch(url, { signal });
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   const arrayBuffer = await resp.arrayBuffer();
-  if (signal?.aborted) return;
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const AudioCtx = window.AudioContext ?? (window as any).webkitAudioContext as typeof AudioContext;
@@ -96,7 +143,7 @@ export async function drawSpectrogram(
   } finally {
     void actx.close();
   }
-  if (signal?.aborted) return;
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
   // Mix down to mono if stereo
   const ch0 = decoded.getChannelData(0);
@@ -107,7 +154,7 @@ export async function drawSpectrogram(
 
   const sampleRate = decoded.sampleRate;
   const numFrames  = Math.floor((samples.length - FFT_SIZE) / HOP_SIZE);
-  if (numFrames <= 0) return;
+  if (numFrames <= 0) throw new Error('Audio too short to generate spectrogram');
 
   // Cap at 10 kHz — covers virtually all bird vocalizations
   const maxBin = Math.min(FFT_SIZE >> 1, Math.round(10_000 / (sampleRate / FFT_SIZE)));
@@ -132,34 +179,9 @@ export async function drawSpectrogram(
       if (db > globalMax) globalMax = db;
     }
   }
-  if (signal?.aborted) return;
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
-  // ── Render ────────────────────────────────────────────────────────────────
-  const cw    = canvas.width;
-  const ch    = canvas.height;
-  const ctx2d = canvas.getContext('2d');
-  if (!ctx2d) return;
-
-  const floor   = globalMax - MAX_DB_RANGE;
-  const range   = Math.max(globalMax - floor, 1);
-  const imgData = ctx2d.createImageData(cw, ch);
-  const d       = imgData.data;
-
-  for (let x = 0; x < cw; x++) {
-    const frameIndex = Math.min(numFrames - 1, Math.floor(x * numFrames / cw));
-    for (let y = 0; y < ch; y++) {
-      // y = 0 → top of canvas → highest displayed frequency
-      // FFT output is divided into frequency "bins", each representing a narrow band of frequencies.
-      // We map the vertical pixel coordinate to the corresponding bin index.
-      const binIndex     = Math.min(maxBin - 1, Math.floor((ch - 1 - y) * maxBin / ch));
-      const intensity    = Math.pow(Math.max(0, (dbs[frameIndex * maxBin + binIndex] - floor) / range), 0.7);
-      const pixelIndex   = (y * cw + x) * 4;
-      const lutIndex     = Math.round(intensity * 255) * 3; // Index within the inferno lookup table
-      d[pixelIndex]     = INFERNO_LUT[lutIndex];
-      d[pixelIndex + 1] = INFERNO_LUT[lutIndex + 1];
-      d[pixelIndex + 2] = INFERNO_LUT[lutIndex + 2];
-      d[pixelIndex + 3] = 255;
-    }
-  }
-  ctx2d.putImageData(imgData, 0, 0);
+  const data: SpectrogramData = { dbs, numFrames, maxBin, globalMax };
+  renderSpectrogramWindow(canvas, data, 0, 1);
+  return data;
 }

@@ -55,6 +55,10 @@ export interface AllSpeciesEntry {
   comName: string;
   sciName: string;
   isNorthAmerican: boolean;
+  isGreatBritain: boolean;
+  isEuropean: boolean;
+  isSouthAmerican: boolean;
+  isAfrican: boolean;
 }
 
 export async function fetchAllSpecies(): Promise<AllSpeciesEntry[]> {

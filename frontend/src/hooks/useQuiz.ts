@@ -272,16 +272,9 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
             paletteSpeciesCodes = paletteSpeciesCodes.filter(c => strugglingSpecies.has(c));
             level0Keys  = level0Keys.filter(k  => strugglingSpecies.has(k.split(':')[0]));
             historyKeys = historyKeys.filter(k => strugglingSpecies.has(k.split(':')[0]));
-
-            // Also add every non-struggling species to banned so the backend cannot
-            // fall back to NEW_ENCOUNTER_WEIGHT for species missing from weightsMap.
-            const regionCache = await db.regionSpecies.get(`${cfg.regionCode}:${back}`);
-            const allKnown = new Set([
-              ...allRecords.map(r => r.speciesCode),
-              ...(regionCache?.species.map(s => s.speciesCode) ?? []),
-            ]);
-            const nonStruggling = [...allKnown].filter(c => !strugglingSpecies.has(c));
-            banned = [...new Set([...banned, ...nonStruggling])];
+            // Non-struggling species are not added to banned: weights+level0Keys filtering already
+            // prevents them from being chosen as question subjects, and keeping them in the pool
+            // allows the backend to use them as distractors to fill out 4 answer options.
           }
         }
       } else {

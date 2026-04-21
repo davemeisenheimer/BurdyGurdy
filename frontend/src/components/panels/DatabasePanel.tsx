@@ -69,7 +69,7 @@ export function DatabasePanel() {
       setLoading(true);
       setError(null);
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session } } = await supabase.auth.refreshSession();
         const token = session?.access_token;
         if (!token) { setError('Not authenticated'); return; }
         const res = await api.get<UserRow[]>('/admin/users', {

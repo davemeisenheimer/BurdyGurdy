@@ -6,13 +6,24 @@ import type { AllSpeciesEntry } from '../../services/remote/api';
 
 interface PhotoEntry { url: string; label: string; }
 
-const MAX_LIST = 400;
+const MAX_LIST = 5000;
 const DOUBLE_CLICK_MS = 250;
+
+type Continent = 'na' | 'gb' | 'eu' | 'sa' | 'af';
+
+const CONTINENTS: { id: Continent; label: string; flag: keyof AllSpeciesEntry; desc: string }[] = [
+  { id: 'na', label: 'N. America', flag: 'isNorthAmerican', desc: 'N. American' },
+  { id: 'gb', label: 'Gt. Britain', flag: 'isGreatBritain',  desc: 'British'     },
+  { id: 'eu', label: 'Europe',     flag: 'isEuropean',      desc: 'European'    },
+  { id: 'sa', label: 'S. America', flag: 'isSouthAmerican', desc: 'S. American' },
+  { id: 'af', label: 'Africa',     flag: 'isAfrican',       desc: 'African'     },
+];
 
 export function PhotoCurationPanel() {
   const [allSpecies, setAllSpecies]       = useState<AllSpeciesEntry[]>([]);
   const [loadingList, setLoadingList]     = useState(true);
   const [search, setSearch]               = useState('');
+  const [continent, setContinent]         = useState<Continent>('na');
   const [selected, setSelected]           = useState<AllSpeciesEntry | null>(null);
   const [photos, setPhotos]               = useState<PhotoEntry[]>([]);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
@@ -39,13 +50,14 @@ export function PhotoCurationPanel() {
 
   const visibleSpecies = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const { flag } = CONTINENTS.find(c => c.id === continent)!;
     const filtered = q.length < 2
-      ? allSpecies.filter(s => s.isNorthAmerican)
+      ? allSpecies.filter(s => s[flag])
       : allSpecies.filter(s =>
           s.comName.toLowerCase().includes(q) || s.sciName.toLowerCase().includes(q),
         );
     return filtered.slice(0, MAX_LIST);
-  }, [allSpecies, search]);
+  }, [allSpecies, search, continent]);
 
   const selectBird = useCallback(async (bird: AllSpeciesEntry) => {
     setSelected(bird);
@@ -147,7 +159,16 @@ export function PhotoCurationPanel() {
 
         {/* Bird list */}
         <div className="w-56 shrink-0 border-r border-slate-200 flex flex-col bg-white">
-          <div className="shrink-0 p-2 border-b border-slate-100">
+          <div className="shrink-0 p-2 border-b border-slate-100 flex flex-col gap-1.5">
+            <select
+              value={continent}
+              onChange={e => setContinent(e.target.value as Continent)}
+              className="w-full text-xs px-2 py-1 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-forest-500"
+            >
+              {CONTINENTS.map(c => (
+                <option key={c.id} value={c.id}>{c.label}</option>
+              ))}
+            </select>
             <input
               type="text"
               value={search}
@@ -155,9 +176,9 @@ export function PhotoCurationPanel() {
               placeholder="Search birds…"
               className="w-full text-sm px-2 py-1.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-forest-500"
             />
-            <p className="text-xs text-slate-400 mt-1 px-0.5">
+            <p className="text-xs text-slate-400 px-0.5">
               {search.length < 2
-                ? `${visibleSpecies.length} N. American birds`
+                ? `${visibleSpecies.length} ${CONTINENTS.find(c => c.id === continent)!.desc} birds`
                 : `${visibleSpecies.length} results${visibleSpecies.length === MAX_LIST ? ' (refine search)' : ''}`}
             </p>
           </div>

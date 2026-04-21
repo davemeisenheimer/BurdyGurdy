@@ -106,29 +106,60 @@ router.get('/region/:regionCode', async (req, res) => {
   }
 });
 
+const EUROPE_CODES = [
+  'FR', 'DE', 'ES', 'PT', 'IT', 'NL', 'BE', 'SE', 'NO', 'FI',
+  'DK', 'PL', 'AT', 'CH', 'IE', 'GR', 'HR', 'CZ', 'HU', 'RO',
+  'SK', 'SI', 'BG', 'LT', 'LV', 'EE', 'UA', 'MT', 'CY', 'LU', 'IS',
+];
+const S_AMERICA_CODES = [
+  'BR', 'AR', 'CL', 'CO', 'PE', 'EC', 'BO', 'VE', 'PY', 'UY', 'GY', 'SR',
+];
+const AFRICA_CODES = [
+  'ZA', 'KE', 'TZ', 'ET', 'GH', 'NG', 'SN', 'CM', 'CD', 'MG',
+  'MW', 'ZM', 'ZW', 'UG', 'RW', 'MZ', 'BW', 'NA', 'AO', 'CI', 'MA', 'EG',
+];
+
 // GET /api/birds/all-species
-// Returns the full eBird species taxonomy sorted: North American (US+CA) first, then the rest.
-// Both groups sorted alphabetically by common name. Cached 24h.
+// Returns the full eBird species taxonomy with per-continent flags, sorted NA-first then
+// alphabetically. Country lists are individually cached 24h; combined result cached 24h.
 router.get('/all-species', async (req, res) => {
-  const cacheKey = 'all-species-sorted';
+  const cacheKey = 'all-species-v2';
   const cached = cache.get<object[]>(cacheKey);
   if (cached) return res.json(cached);
 
+  const safe = (code: string) => getSpeciesList(code).catch(() => [] as string[]);
+
   try {
-    const [taxonomy, usCodes, caCodes] = await Promise.all([
+    const [
+      [usCodes, caCodes, gbCodes],
+      europeLists,
+      sAmericaLists,
+      africaLists,
+      taxonomy,
+    ] = await Promise.all([
+      Promise.all(['US', 'CA', 'GB'].map(safe)),
+      Promise.all(EUROPE_CODES.map(safe)),
+      Promise.all(S_AMERICA_CODES.map(safe)),
+      Promise.all(AFRICA_CODES.map(safe)),
       getTaxonomy(),
-      getSpeciesList('US'),
-      getSpeciesList('CA'),
     ]);
 
     const naSet = new Set([...usCodes, ...caCodes]);
+    const gbSet = new Set(gbCodes);
+    const euSet = new Set(europeLists.flat());
+    const saSet = new Set(sAmericaLists.flat());
+    const afSet = new Set(africaLists.flat());
 
     const result = taxonomy
       .map(t => ({
-        speciesCode: t.speciesCode,
-        comName: t.comName,
-        sciName: t.sciName,
+        speciesCode:    t.speciesCode,
+        comName:        t.comName,
+        sciName:        t.sciName,
         isNorthAmerican: naSet.has(t.speciesCode),
+        isGreatBritain:  gbSet.has(t.speciesCode),
+        isEuropean:      euSet.has(t.speciesCode),
+        isSouthAmerican: saSet.has(t.speciesCode),
+        isAfrican:       afSet.has(t.speciesCode),
       }))
       .sort((a, b) => {
         if (a.isNorthAmerican !== b.isNorthAmerican) return a.isNorthAmerican ? -1 : 1;

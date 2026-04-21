@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { SpectrogramCanvas } from './SpectrogramCanvas';
 import { useAudioProgress } from '../../hooks/useAudioProgress';
 import { toProxyUrl } from '../../lib/audioProxy';
@@ -51,6 +51,12 @@ export function SpectrogramPlayer({
 
   const { progress, displayDuration } = useAudioProgress(effectiveRef, audioUrl);
 
+  const [zoomWindow, setZoomWindow] = useState<[number, number]>([0, 1]);
+  const onZoomChange = useCallback((w: [number, number]) => setZoomWindow(w), []);
+
+  // Reset zoom window tracking when the audio changes
+  useEffect(() => { setZoomWindow([0, 1]); }, [audioUrl]);
+
   // Uncontrolled: autoplay after spectrogram renders, with a fallback timeout
   const startAudio = () => { internalRef.current?.play().catch(() => {}); };
 
@@ -90,13 +96,21 @@ export function SpectrogramPlayer({
           audioUrl={audioUrl}
           className="w-full h-full"
           onReady={isControlled ? undefined : startAudio}
+          onZoomChange={onZoomChange}
         />
 
-        {/* Playback position line */}
-        <div
-          className="absolute top-0 bottom-0 w-0.5 bg-cyan-400 pointer-events-none"
-          style={{ left: `calc(${progress * 100}% - 1px)` }}
-        />
+        {/* Playback position line — adjusted for zoom window */}
+        {(() => {
+          const [zStart, zEnd] = zoomWindow;
+          const adj = (progress - zStart) / (zEnd - zStart);
+          if (adj < 0 || adj > 1) return null;
+          return (
+            <div
+              className="absolute top-0 bottom-0 w-0.5 bg-cyan-400 pointer-events-none"
+              style={{ left: `calc(${adj * 100}% - 1px)` }}
+            />
+          );
+        })()}
 
         {/* Duration pill */}
         {shownDuration !== null && (

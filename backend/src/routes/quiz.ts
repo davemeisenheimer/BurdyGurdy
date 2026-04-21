@@ -3,6 +3,8 @@ import { getTaxonomy, getRegionalSpecies, getCommonSpeciesCodes, getBackyardSpec
 import { getRecordings, parseXCLength } from '../services/xenocanto';
 import { getSpeciesPhotoUrl } from '../services/macaulay';
 import { BACKYARD_FAMILIES, GROUP_ORDERS, ORDER_COMMON_NAMES } from '../constants';
+import { getSupabaseAdmin } from '../lib/supabase';
+import { cache } from '../cache';
 import {
   PALETTE_DISTRACTOR_WEIGHT, RECENT_UNMASTERED_RATIO, XC_FETCH_BATCH_SIZE,
 } from '@birdygurdy/shared';
@@ -287,6 +289,27 @@ function pickWeighted<T extends { speciesCode: string }>(
   return result;
 }
 
+// ── Blocked photo URLs ────────────────────────────────────────────────────────
+
+async function getBlockedPhotoUrls(): Promise<Set<string>> {
+  const CACHE_KEY = 'blocked_photo_urls';
+  const cached = cache.get<Set<string>>(CACHE_KEY);
+  if (cached) return cached;
+  try {
+    const admin = getSupabaseAdmin();
+    const { data } = await admin
+      .from('media_reports')
+      .select('url')
+      .eq('status', 'blocked')
+      .eq('media_type', 'photo');
+    const urls = new Set<string>((data ?? []).map((r: { url: string }) => r.url));
+    cache.set(CACHE_KEY, urls, 5 * 60 * 1000);
+    return urls;
+  } catch {
+    return new Set();  // non-fatal: don't block quiz generation on Supabase errors
+  }
+}
+
 // ── Route ────────────────────────────────────────────────────────────────────
 
 // POST /api/quiz/questions
@@ -313,12 +336,13 @@ router.post('/questions', async (req, res) => {
 
     const paletteCodes = new Set<string>(paletteSpeciesCodes as string[]);
 
-    const [observations, taxonomy, backyardCodes, top100Codes, historicalCodes] = await Promise.all([
+    const [observations, taxonomy, backyardCodes, top100Codes, historicalCodes, blockedPhotoUrls] = await Promise.all([
       getRegionalSpecies(regionCode, back),
       getTaxonomy(),
       getBackyardSpeciesRanking(regionCode),
       getCommonSpeciesCodes(regionCode),
       getSpeciesList(regionCode),
+      getBlockedPhotoUrls(),
     ]);
 
     // Use backyard (private location) ranking as primary; fall back to top100 if too sparse
@@ -489,7 +513,7 @@ router.post('/questions', async (req, res) => {
 
         const [recordings, photoUrl] = await Promise.all([
           getRecordings(species.sciName),
-          needsPhoto ? getSpeciesPhotoUrl(species.speciesCode, species.comName, species.sciName, masteryLevels[`${species.speciesCode}:${type}`]) : Promise.resolve(null),
+          needsPhoto ? getSpeciesPhotoUrl(species.speciesCode, species.comName, species.sciName, masteryLevels[`${species.speciesCode}:${type}`], blockedPhotoUrls) : Promise.resolve(null),
         ]);
 
         const availableRecordings = filterRecordings(recordings, bannedAudioSet);
