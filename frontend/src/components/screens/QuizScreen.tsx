@@ -151,7 +151,12 @@ export function QuizScreen({
   // Fade-in: track whether the current question photo has finished loading
   const [questionPhotoLoaded, setQuestionPhotoLoaded] = useState(false);
   const questionPhotoUrl = questionDisplayPhoto?.url ?? null;
-  useEffect(() => { setQuestionPhotoLoaded(false); }, [questionPhotoUrl]);
+  const questionImgRef = useRef<HTMLImageElement>(null);
+  useEffect(() => {
+    setQuestionPhotoLoaded(false);
+    // For cached images the browser fires onLoad before the effect runs, so check synchronously too.
+    if (questionImgRef.current?.complete) setQuestionPhotoLoaded(true);
+  }, [questionPhotoUrl]);
 
 
   // Reveal-state audio
@@ -207,7 +212,11 @@ export function QuizScreen({
   // Fade-in: track whether the current reveal carousel photo has finished loading
   const [revealPhotoLoaded, setRevealPhotoLoaded] = useState(false);
   const revealPhotoUrl = currentRevealPhoto?.url ?? null;
-  useEffect(() => { setRevealPhotoLoaded(false); }, [revealPhotoUrl]);
+  const revealImgRef = useRef<HTMLImageElement>(null);
+  useEffect(() => {
+    setRevealPhotoLoaded(false);
+    if (revealImgRef.current?.complete) setRevealPhotoLoaded(true);
+  }, [revealPhotoUrl]);
 
   const getOptionStatus = (option: string) => {
     if (!answered) return 'default';
@@ -262,6 +271,7 @@ export function QuizScreen({
             <div className="relative h-full bg-slate-900 flex items-center justify-center">
               {questionDisplayPhoto && (
                 <img
+                  ref={questionImgRef}
                   key={questionDisplayPhoto.url}
                   src={questionDisplayPhoto.url}
                   alt="Mystery bird"
@@ -405,6 +415,7 @@ export function QuizScreen({
                 {currentRevealPhoto.isSonoPlayer
                   ? <SpectrogramPlayer audioUrl={currentRevealPhoto.url} className="w-full" height={140} durationHint={question.audioDuration} />
                   : <img
+                      ref={revealImgRef}
                       src={currentRevealPhoto.url}
                       alt={question.comName}
                       className={`max-h-full max-w-full object-contain transition-opacity duration-500 ${revealPhotoLoaded ? 'opacity-100' : 'opacity-0'} ${showMediaInCarousel ? 'cursor-zoom-in' : ''}`}

@@ -47,10 +47,16 @@ async function fetchMacaulayPhoto(speciesCode: string): Promise<AttributedPhoto 
 /** Fetches the hand-picked representative photo from the iNaturalist taxa API. */
 async function fetchInatPhoto(sciName: string): Promise<AttributedPhoto | null> {
   const res = await axios.get(INAT_TAXA_API, {
-    params: { q: sciName, is_active: true, per_page: 1 },
+    params: { q: sciName, is_active: true, per_page: 20 },
     headers: HEADERS,
   });
-  const photo = res.data?.results?.[0]?.default_photo;
+  type InatTaxon = { name: string; default_photo?: { large_url?: string; medium_url?: string; attribution?: string } };
+  const results: InatTaxon[] = res.data?.results ?? [];
+  // The text search does prefix matching on individual words, not the full binomial, so tautonyms
+  // and other false positives can rank above the correct taxon. Find the exact match explicitly.
+  const result = results.find(r => r.name.toLowerCase() === sciName.toLowerCase());
+  if (!result) return null;
+  const photo = result.default_photo;
   if (!photo) return null;
   const url = (photo.large_url ?? photo.medium_url ?? null) as string | null;
   if (!url) return null;

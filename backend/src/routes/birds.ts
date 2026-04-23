@@ -204,7 +204,10 @@ router.get('/info/:speciesCode', async (req, res) => {
 
     let conservationStatus: { code: string; name: string } | null = null;
     if (taxaRes.status === 'fulfilled') {
-      const cs = taxaRes.value.data?.results?.[0]?.conservation_status;
+      const taxaResult = taxaRes.value.data?.results?.[0];
+      const cs = taxaResult?.name?.toLowerCase() === sciName?.toLowerCase()
+        ? taxaResult?.conservation_status
+        : undefined;
       if (cs?.status) {
         conservationStatus = {
           code: (cs.status as string).toUpperCase(),
