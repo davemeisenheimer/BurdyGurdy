@@ -7,6 +7,7 @@ import { getWikipediaSummary, getWikipediaRangeMap, getWikipediaRangeMapLegend, 
 import { cache } from '../cache';
 import { BACKYARD_FAMILIES, ORDER_COMMON_NAMES } from '../constants';
 import { filterObservationsToKnownSpecies } from '../lib/speciesFilter';
+import { getSupabaseAdmin } from '../lib/supabase';
 
 const router = Router();
 
@@ -573,6 +574,66 @@ router.get('/photos/:speciesCode', async (req, res) => {
     res.json(photos);
   } catch {
     res.json({ primary: null, optional: [] });
+  }
+});
+
+// POST /api/birds/report-media
+// Submits a media error report. Uses direct table inserts via the service-role
+// admin client so both guest and authenticated users can report.
+// NOTE: requires media_report_submissions.reporter_id to be nullable in Supabase
+// (guests have no user ID).
+router.post('/report-media', async (req, res) => {
+  const { url, mediaType, service, speciesCode, comName, issueType, wrongBird, description } = req.body ?? {};
+  if (!url || !mediaType || !speciesCode || !comName || !issueType) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+  try {
+    const admin = getSupabaseAdmin();
+
+    // Find or create the media_reports row for this URL + species.
+    const { data: existing } = await admin
+      .from('media_reports')
+      .select('id')
+      .eq('url', url)
+      .eq('species_code', speciesCode)
+      .maybeSingle();
+
+    let reportId: string;
+    if (existing) {
+      reportId = (existing as { id: string }).id;
+    } else {
+      const { data: created, error: createErr } = await admin
+        .from('media_reports')
+        .insert({ url, media_type: mediaType, service: service ?? null, species_code: speciesCode, com_name: comName, status: 'pending' })
+        .select('id')
+        .single();
+      if (createErr || !created) {
+        console.error('[report-media] create report:', createErr?.message);
+        return res.status(500).json({ error: createErr?.message ?? 'Failed to create report' });
+      }
+      reportId = (created as { id: string }).id;
+    }
+
+    // Insert the submission. reporter_id is null for guests.
+    const { error: subErr } = await admin
+      .from('media_report_submissions')
+      .insert({
+        media_report_id: reportId,
+        reporter_id:     null,
+        issue_type:      issueType,
+        wrong_bird:      wrongBird ?? null,
+        description:     description ?? null,
+      });
+    if (subErr) {
+      console.error('[report-media] create submission:', subErr.message);
+      return res.status(500).json({ error: subErr.message });
+    }
+
+    res.json({ ok: true });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Internal error';
+    console.error('[report-media]', msg);
+    res.status(500).json({ error: msg });
   }
 });
 

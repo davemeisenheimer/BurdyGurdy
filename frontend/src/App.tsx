@@ -695,7 +695,6 @@ export default function App() {
   }
 
   const handleReportError = (data: ReportErrorData & { mediaUrl: string; mediaType: 'photo' | 'audio'; speciesCode: string; comName: string }) => {
-    if (!user) return;
     submitMediaReport({
       url: data.mediaUrl,
       mediaType: data.mediaType,
@@ -705,7 +704,7 @@ export default function App() {
       issueType: data.issueType,
       wrongBird: data.wrongBird || null,
       description: data.description || null,
-    }).catch(() => {});
+    }).catch(err => console.error('[report-media]', err));
   };
 
   // When a round completes, check for victory before showing result screen
@@ -1011,7 +1010,7 @@ export default function App() {
           onToggleExcluded={toggleExcluded}
           onNext={handleNext}
           onSkip={nextQuestion}
-          onReportError={user ? (data) => handleReportError({ ...data, speciesCode: currentQuestion.speciesCode, comName: currentQuestion.comName }) : undefined}
+          onReportError={(data) => handleReportError({ ...data, speciesCode: currentQuestion.speciesCode, comName: currentQuestion.comName })}
           onSightingClick={handleSightingClick}
         />
       )}

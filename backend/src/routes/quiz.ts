@@ -8,7 +8,7 @@ import { cache } from '../cache';
 import {
   PALETTE_DISTRACTOR_WEIGHT, RECENT_UNMASTERED_RATIO, XC_FETCH_BATCH_SIZE,
 } from '@birdygurdy/shared';
-import { buildCandidates, applyRecentUnmasteredGuarantee, applyAffinityBoosts } from '../lib/candidateLogic';
+import { buildCandidates, applyRecentUnmasteredGuarantee, applyAffinityBoosts, pickFromPool, splitCandidates } from '../lib/candidateLogic';
 import { filterRecordings, weightedSampleByDuration } from '../lib/recordingFilter';
 import type { PoolSpecies, Candidate } from '../lib/candidateLogic';
 
@@ -144,35 +144,6 @@ function similarOrAll(target: PoolSpecies, pool: PoolSpecies[], count: number): 
 }
 
 // PoolSpecies and Candidate are imported from ../lib/candidateLogic
-
-function pickFromPool(pool: Candidate[], target: number): Candidate[] {
-  const picked: Candidate[] = [];
-  const remaining = [...pool];
-  while (picked.length < target && remaining.length > 0) {
-    const total = remaining.reduce((s, c) => s + c.weight, 0);
-    let rand = Math.random() * total;
-    let idx  = 0;
-    for (let i = 0; i < remaining.length; i++) {
-      rand -= remaining[i].weight;
-      if (rand <= 0) { idx = i; break; }
-    }
-    picked.push(remaining.splice(idx, 1)[0]);
-  }
-  // Fill with replacement when pool is smaller than target
-  if (picked.length < target && pool.length > 0) {
-    while (picked.length < target) {
-      const total = pool.reduce((s, c) => s + c.weight, 0);
-      let rand = Math.random() * total;
-      let idx  = 0;
-      for (let i = 0; i < pool.length; i++) {
-        rand -= pool[i].weight;
-        if (rand <= 0) { idx = i; break; }
-      }
-      picked.push(pool[idx]);
-    }
-  }
-  return picked;
-}
 
 /**
  * Select distractor common names scaled to the player's mastery level for this bird:
@@ -400,9 +371,11 @@ router.post('/questions', async (req, res) => {
       })
       .filter(s => groupOrders.length === 0 || groupOrders.includes(s.tax!.order));
     // Historical extras supplement the distractor pool only - not question subjects.
-    // This prevents extinct/rare historical species (e.g. Passenger Pigeon) from
-    // appearing as correct answers while still providing taxonomic variety for distractors.
-    filteredPool  = [...filteredPool,  ...historicalExtras];
+    // Filtered to species in the annual top-100 frequency list to exclude accidentals
+    // (one-off vagrants that eBird's all-time species list includes but users would never
+    // recognise as belonging to their region).
+    const top100Set = new Set(top100Codes);
+    filteredPool = [...filteredPool, ...historicalExtras.filter(s => top100Set.has(s.speciesCode))];
 
     const adaptiveMode = Object.keys(weights as object).length > 0;
     const weightsMap = weights as Record<string, number>;
@@ -414,29 +387,27 @@ router.post('/questions', async (req, res) => {
       questionPool, filteredPool, recentCodes, weightsMap, types as QuestionType[], adaptiveMode, level0KeySet, paletteCodes,
     );
 
-    const recentUnmasteredMin = adaptiveMode ? Math.ceil(count * RECENT_UNMASTERED_RATIO) : 0;
+    const palettePlusStrugglingMin = adaptiveMode ? Math.ceil(count * RECENT_UNMASTERED_RATIO) : 0;
 
     let picked: Candidate[];
-    if (adaptiveMode && recentUnmasteredMin > 0) {
-      const isUnmastered = (c: Candidate) =>
-        recentCodes.has(c.species.speciesCode) && c.weight >= 5 &&
-        !historyKeySet.has(`${c.species.speciesCode}:${c.type}`);
-      const isStruggling = (c: Candidate) =>
-        recentCodes.has(c.species.speciesCode) && c.weight >= 5 &&
-        historyKeySet.has(`${c.species.speciesCode}:${c.type}`);
+    if (adaptiveMode && palettePlusStrugglingMin > 0) {
+      const { ruCandidates, smCandidates, otherCandidates } = splitCandidates(
+        candidates, recentCodes, level0KeySet, historyKeySet,
+      );
 
-      const ruCandidates    = candidates.filter(isUnmastered);
-      const smCandidates    = candidates.filter(isStruggling);
-      const otherCandidates = candidates.filter(c => !isUnmastered(c) && !isStruggling(c));
-
-      const pickedRU    = pickFromPool(ruCandidates,    ruCandidates.length);
-      const pickedSM    = pickFromPool(smCandidates,    smCandidates.length);
+      // Unmastered birds use target=count+5 so replacement fill lets them repeat naturally
+      // to fill a round (e.g. 8 palette birds across 25 questions).
+      // Mastered birds use target=pool size so no replacement fill — each mastered bird
+      // appears at most once, preventing a single recently-mastered species from
+      // crowding out all the review slots.
+      const pickedRU    = pickFromPool(ruCandidates, count + 5);
+      const pickedSM    = pickFromPool(smCandidates, smCandidates.length);
       const anchorSpecies = [...ruCandidates, ...smCandidates].map(c => c.species);
       const boostedOther  = birderLevel === 'advanced'
         ? applyAffinityBoosts(otherCandidates, anchorSpecies)
         : otherCandidates;
-      const pickedOther = pickFromPool(boostedOther, count + 5);
-      console.log(`[quiz] RU: ${ruCandidates.length}, SM: ${smCandidates.length}, other: ${otherCandidates.length}, min: ${recentUnmasteredMin}/${count}`);
+      const pickedOther = pickFromPool(boostedOther, boostedOther.length);
+      console.log(`[quiz] RU: ${ruCandidates.length}, SM: ${smCandidates.length}, other: ${otherCandidates.length}, min: ${palettePlusStrugglingMin}/${count}`);
       picked = [...pickedRU, ...pickedSM, ...pickedOther];
     } else {
       picked = pickFromPool(candidates, count + 5);
@@ -587,7 +558,7 @@ router.post('/questions', async (req, res) => {
     });
 
     let finalQuestions: QuizQuestion[];
-    if (adaptiveMode && recentUnmasteredMin > 0) {
+    if (adaptiveMode && palettePlusStrugglingMin > 0) {
       const ruValidCount = allValid.filter(q => {
         const k = `${q.speciesCode}:${q.type}`;
         const wt = (weightsMap[k] ?? 20);
@@ -600,9 +571,9 @@ router.post('/questions', async (req, res) => {
         const np = recentCodes.has(q.speciesCode) && wt >= 5;
         return np && historyKeySet.has(k);
       }).length;
-      console.log(`[quiz] allValid: ${allValid.length}, ruValid: ${ruValidCount}, smValid: ${smValidCount}, target: ${recentUnmasteredMin}/${count}`);
+      console.log(`[quiz] allValid: ${allValid.length}, ruValid: ${ruValidCount}, smValid: ${smValidCount}, target: ${palettePlusStrugglingMin}/${count}`);
       finalQuestions = applyRecentUnmasteredGuarantee(
-        allValid, recentCodes, weightsMap, count, recentUnmasteredMin, level0KeySet, historyKeySet,
+        allValid, recentCodes, weightsMap, count, palettePlusStrugglingMin, level0KeySet, historyKeySet,
       );
     } else {
       finalQuestions = allValid.slice(0, count);

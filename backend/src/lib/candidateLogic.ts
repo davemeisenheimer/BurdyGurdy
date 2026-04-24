@@ -102,7 +102,7 @@ export function buildCandidates(
  *   - Truly unmastered (active palette, not yet graduated)
  *   - Struggling mastered (graduated but accuracy below threshold)
  *
- * total    = recentUnmasteredMin  (≈ 67% of count)
+ * total    = palettePlusStrugglingMin  (≈ 67% of count)
  * ruFloor  = ceil(total / 2)      - minimum unmastered
  * smFloor  = total − ruFloor      - minimum struggling-mastered
  *
@@ -114,7 +114,7 @@ export function applyRecentUnmasteredGuarantee<T extends { speciesCode: string; 
   recentCodes: Set<string>,
   weightsMap: Record<string, number>,
   count: number,
-  recentUnmasteredMin: number,
+  palettePlusStrugglingMin: number,
   level0Keys: Set<string> = new Set(),
   historyKeySet: Set<string> = new Set(),
 ): T[] {
@@ -133,7 +133,7 @@ export function applyRecentUnmasteredGuarantee<T extends { speciesCode: string; 
   const smValid    = allValid.filter(isStruggling);
   const otherValid = allValid.filter(q => !needsPractice(q));
 
-  const total   = recentUnmasteredMin;
+  const total   = palettePlusStrugglingMin;
   const ruFloor = Math.ceil(total * UNMASTERED_FLOOR_RATIO);
   const smFloor = total - ruFloor;
 
@@ -163,6 +163,78 @@ export function applyRecentUnmasteredGuarantee<T extends { speciesCode: string; 
   }
 
   return result.sort(() => Math.random() - 0.5).slice(0, count);
+}
+
+/**
+ * Weighted sampling without replacement up to `target`.
+ * If the pool is smaller than target, round-robin replacement fill is used so
+ * every bird appears floor(target/pool.size) or ceil(...) times — weighted
+ * within each pass via Efraimidis-Spirakis reservoir sampling so higher-weight
+ * birds get the extra slot on uneven cycles.
+ *
+ * When target ≤ pool.length no fill fires and every picked bird is unique.
+ * When target > pool.length fill fires and some birds will repeat — this is the
+ * intended behaviour for a learning palette smaller than the round size.
+ */
+export function pickFromPool(pool: Candidate[], target: number): Candidate[] {
+  const picked: Candidate[] = [];
+  const remaining = [...pool];
+  while (picked.length < target && remaining.length > 0) {
+    const total = remaining.reduce((s, c) => s + c.weight, 0);
+    let rand = Math.random() * total;
+    let idx  = 0;
+    for (let i = 0; i < remaining.length; i++) {
+      rand -= remaining[i].weight;
+      if (rand <= 0) { idx = i; break; }
+    }
+    picked.push(remaining.splice(idx, 1)[0]);
+  }
+  if (picked.length < target && pool.length > 0) {
+    while (picked.length < target) {
+      const pass = [...pool]
+        .map(c => ({ c, key: Math.random() ** (1 / c.weight) }))
+        .sort((a, b) => b.key - a.key)
+        .map(({ c }) => c);
+      for (const item of pass) {
+        if (picked.length >= target) break;
+        picked.push(item);
+      }
+    }
+  }
+  return picked;
+}
+
+/**
+ * Splits a flat candidate list into the three buckets used by the quiz engine:
+ *   ruCandidates    – unmastered palette birds (weight ≥ 5, not yet graduated)
+ *   smCandidates    – struggling-mastered birds (weight ≥ 5, already graduated)
+ *   otherCandidates – everything else (review-only mastered birds)
+ *
+ * A bird qualifies for ru/sm when it is either in the recent eBird sighting
+ * window OR in level0Keys (palette birds that happen to be outside the current
+ * observation window still need practice).
+ */
+export function splitCandidates(
+  candidates: Candidate[],
+  recentCodes: Set<string>,
+  level0KeySet: Set<string>,
+  historyKeySet: Set<string>,
+): { ruCandidates: Candidate[]; smCandidates: Candidate[]; otherCandidates: Candidate[] } {
+  const isUnmastered = (c: Candidate) => {
+    const key = `${c.species.speciesCode}:${c.type}`;
+    return (recentCodes.has(c.species.speciesCode) || level0KeySet.has(key)) &&
+      c.weight >= ACTIVE_PALETTE_MIN_WEIGHT && !historyKeySet.has(key);
+  };
+  const isStruggling = (c: Candidate) => {
+    const key = `${c.species.speciesCode}:${c.type}`;
+    return (recentCodes.has(c.species.speciesCode) || level0KeySet.has(key)) &&
+      c.weight >= ACTIVE_PALETTE_MIN_WEIGHT && historyKeySet.has(key);
+  };
+  return {
+    ruCandidates:    candidates.filter(isUnmastered),
+    smCandidates:    candidates.filter(isStruggling),
+    otherCandidates: candidates.filter(c => !isUnmastered(c) && !isStruggling(c)),
+  };
 }
 
 /**

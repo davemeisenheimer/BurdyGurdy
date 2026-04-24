@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildCandidates, applyRecentUnmasteredGuarantee } from './candidateLogic';
-import type { PoolSpecies } from './candidateLogic';
+import { buildCandidates, applyRecentUnmasteredGuarantee, pickFromPool, splitCandidates } from './candidateLogic';
+import type { PoolSpecies, Candidate } from './candidateLogic';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -16,6 +16,10 @@ function makeSpecies(code: string): PoolSpecies {
 // Minimal question stub - only fields used by the guarantee logic
 function makeQ(code: string, type = 'image') {
   return { speciesCode: code, type };
+}
+
+function makeCandidate(code: string, weight: number, type = 'song'): Candidate {
+  return { species: makeSpecies(code), type: type as Candidate['type'], weight };
 }
 
 const TYPES = ['image'] as const;
@@ -41,8 +45,8 @@ describe('buildCandidates', () => {
 
   it('adaptive: palette bird not yet in weightsMap gets weight 20', () => {
     const pool = [makeSpecies('newbird')];
-    const paletteCodes = new Set(['newbird']);
-    const candidates = buildCandidates(pool, pool, new Set(['newbird']), {}, TYPES, true, new Set(), paletteCodes);
+    const level0Keys = new Set(['newbird:image']);
+    const candidates = buildCandidates(pool, pool, new Set(['newbird']), {}, TYPES, true, level0Keys);
     expect(candidates[0].weight).toBe(20);
   });
 
@@ -103,8 +107,8 @@ describe('buildCandidates', () => {
   it('adaptive: multiple question types produce one candidate entry per type', () => {
     const pool = [makeSpecies('amero')];
     const types = ['image', 'song'] as const;
-    const paletteCodes = new Set(['amero']);
-    const candidates = buildCandidates(pool, pool, new Set(['amero']), {}, types, true, new Set(), paletteCodes);
+    const level0Keys = new Set(['amero:image', 'amero:song']);
+    const candidates = buildCandidates(pool, pool, new Set(['amero']), {}, types, true, level0Keys);
     expect(candidates).toHaveLength(2);
     expect(candidates.map(c => c.type).sort()).toEqual(['image', 'song'].sort());
   });
@@ -193,7 +197,7 @@ describe('palette cap enforcement (26 over-seeded level-0 birds)', () => {
 // ── applyRecentUnmasteredGuarantee ────────────────────────────────────────────
 
 describe('applyRecentUnmasteredGuarantee', () => {
-  it('guarantees at least recentUnmasteredMin questions from recent-unmastered pool', () => {
+  it('guarantees at least palettePlusStrugglingMin questions from recent-unmastered pool', () => {
     const recentCodes = new Set(['a', 'b', 'c', 'd', 'e']);
     // a–e are recent unmastered (no weight = default 20)
     // f–j are recent mastered (weight = 1, boosted to 3, still < 5)
@@ -224,7 +228,7 @@ describe('applyRecentUnmasteredGuarantee', () => {
     const recentCodes = new Set(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']);
     const weightsMap: Record<string, number> = {}; // all unmastered
     const allValid = ['a','b','c','d','e','f','g','h'].map(c => makeQ(c)); // 8 RU, 0 others
-    // count=10, recentUnmasteredMin=5, but otherValid is empty so backfill from RU
+    // count=10, palettePlusStrugglingMin=5, but otherValid is empty so backfill from RU
     const result = applyRecentUnmasteredGuarantee(allValid, recentCodes, weightsMap, 8, 5);
     expect(result).toHaveLength(8); // can't exceed allValid.length
   });
@@ -266,5 +270,96 @@ describe('applyRecentUnmasteredGuarantee', () => {
     // 'struggling' has w=20 ≥ 5 → counts as unmastered → should be in guaranteed slot
     expect(result).toHaveLength(2);
     expect(result.some(q => q.speciesCode === 'struggling')).toBe(true);
+  });
+});
+
+// ── splitCandidates ───────────────────────────────────────────────────────────
+
+describe('splitCandidates', () => {
+  it('REGRESSION: non-recent palette bird in level0Keys goes to ruCandidates, not otherCandidates', () => {
+    // Reproduces the advanced-birder bug where 13 palette birds outside the
+    // 1-day eBird window were silently dropped from ruCandidates, leaving only
+    // the 2 newly-observed birds and causing those 2 to repeat every round.
+    const candidates = [makeCandidate('palettebird', 20)];
+    const recentCodes  = new Set<string>();              // NOT in recent window
+    const level0KeySet = new Set(['palettebird:song']);  // IS in learning palette
+    const historyKeySet = new Set<string>();
+    const { ruCandidates, otherCandidates } = splitCandidates(candidates, recentCodes, level0KeySet, historyKeySet);
+    expect(ruCandidates).toHaveLength(1);
+    expect(otherCandidates).toHaveLength(0);
+  });
+
+  it('non-recent bird NOT in level0Keys goes to otherCandidates regardless of weight', () => {
+    const candidates = [makeCandidate('oldbird', 20)];
+    const recentCodes  = new Set<string>();
+    const level0KeySet = new Set<string>(); // not a palette bird
+    const { ruCandidates, otherCandidates } = splitCandidates(candidates, recentCodes, level0KeySet, new Set());
+    expect(ruCandidates).toHaveLength(0);
+    expect(otherCandidates).toHaveLength(1);
+  });
+
+  it('recent unmastered bird (in recentCodes, weight ≥ 5, not in historyKeySet) goes to ruCandidates', () => {
+    const candidates = [makeCandidate('recentbird', 20)];
+    const { ruCandidates } = splitCandidates(candidates, new Set(['recentbird']), new Set(), new Set());
+    expect(ruCandidates).toHaveLength(1);
+  });
+
+  it('recent struggling-mastered bird (weight ≥ 5, in historyKeySet) goes to smCandidates', () => {
+    const candidates = [makeCandidate('strugglingbird', 20)];
+    const recentCodes   = new Set(['strugglingbird']);
+    const historyKeySet = new Set(['strugglingbird:song']); // mastered
+    const { smCandidates, ruCandidates } = splitCandidates(candidates, recentCodes, new Set(), historyKeySet);
+    expect(smCandidates).toHaveLength(1);
+    expect(ruCandidates).toHaveLength(0);
+  });
+
+  it('mastered review bird (weight < 5) goes to otherCandidates', () => {
+    const candidates = [makeCandidate('masteredbird', 1)]; // HISTORY_WEIGHT
+    const recentCodes   = new Set(['masteredbird']);
+    const historyKeySet = new Set(['masteredbird:song']);
+    const { otherCandidates } = splitCandidates(candidates, recentCodes, new Set(), historyKeySet);
+    expect(otherCandidates).toHaveLength(1);
+  });
+});
+
+// ── pickFromPool ──────────────────────────────────────────────────────────────
+
+describe('pickFromPool', () => {
+  it('REGRESSION (Redwing): target = pool.length returns each bird exactly once, no replacement fill', () => {
+    // Reproduces the bug where pickedOther used target=count+5, causing a single
+    // recently-mastered bird (Redwing) to fill up to 9/25 question slots via
+    // replacement fill.  Fix: use target=pool.length for mastered birds.
+    const pool = Array.from({ length: 10 }, (_, i) => makeCandidate(`bird${i}`, 1));
+    const result = pickFromPool(pool, pool.length);
+    expect(result).toHaveLength(10);
+    expect(new Set(result.map(c => c.species.speciesCode)).size).toBe(10);
+  });
+
+  it('target < pool.length returns the requested count with no duplicates', () => {
+    const pool = Array.from({ length: 15 }, (_, i) => makeCandidate(`bird${i}`, 20));
+    const result = pickFromPool(pool, 10);
+    expect(result).toHaveLength(10);
+    expect(new Set(result.map(c => c.species.speciesCode)).size).toBe(10);
+  });
+
+  it('target > pool.length triggers replacement fill so palette birds repeat (small palette)', () => {
+    // For a new user with only 2 palette birds and a 5-question round,
+    // birds must repeat - that is the intended behaviour.
+    const pool = [makeCandidate('bird0', 20), makeCandidate('bird1', 20)];
+    const result = pickFromPool(pool, 10);
+    expect(result).toHaveLength(10);
+    expect(new Set(result.map(c => c.species.speciesCode)).size).toBe(2);
+    // Each bird should appear multiple times
+    expect(result.filter(c => c.species.speciesCode === 'bird0').length).toBeGreaterThan(1);
+  });
+
+  it('replacement fill: first pool.length entries are always the unique first-pass picks', () => {
+    // The first pass picks all pool birds exactly once (weighted sampling w/o replacement).
+    // Repeats are appended after.  This ensures the guarantee's .slice(0, ruTake) draws
+    // unique birds first when the palette is large enough to satisfy ruTake.
+    const pool = Array.from({ length: 5 }, (_, i) => makeCandidate(`bird${i}`, 20));
+    const result = pickFromPool(pool, 10);
+    const firstFive = result.slice(0, 5).map(c => c.species.speciesCode);
+    expect(new Set(firstFive).size).toBe(5); // all unique in first pass
   });
 });

@@ -4,6 +4,7 @@
  * `lastAsked` timestamp is considered more recent and wins.
  */
 import { supabase } from '../../lib/supabase';
+import { api } from './api';
 import { db } from '../../lib/db';
 import { STRUGGLING_WINDOW } from '../../lib/struggling';
 import type { BirdProgress } from '../../types';
@@ -353,17 +354,16 @@ export interface SubmitReportParams {
 }
 
 export async function submitMediaReport(p: SubmitReportParams): Promise<void> {
-  const { error } = await supabase.rpc('submit_media_report', {
-    p_url:          p.url,
-    p_media_type:   p.mediaType,
-    p_service:      p.service,
-    p_species_code: p.speciesCode,
-    p_com_name:     p.comName,
-    p_issue_type:   p.issueType,
-    p_wrong_bird:   p.wrongBird,
-    p_description:  p.description,
+  await api.post('/birds/report-media', {
+    url:         p.url,
+    mediaType:   p.mediaType,
+    service:     p.service,
+    speciesCode: p.speciesCode,
+    comName:     p.comName,
+    issueType:   p.issueType,
+    wrongBird:   p.wrongBird,
+    description: p.description,
   });
-  if (error) throw error;
 }
 
 /** Downloads all admin-blocked media and caches in IndexedDB. Called for all signed-in users. */

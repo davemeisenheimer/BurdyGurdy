@@ -62,7 +62,7 @@ export async function deleteBirdFact(id: string): Promise<void> {
 
 export interface MediaReportSubmission {
   id:            string;
-  reporterId:    string;
+  reporterId:    string | null;
   reporterEmail: string | null;
   issueType:     'wrong_bird' | 'poor_quality' | 'confusing' | 'nest' | 'egg' | 'other';
   wrongBird:     string | null;

@@ -178,7 +178,7 @@ export const ACTIVE_PALETTE_MIN_WEIGHT = 5;
 // These are split roughly evenly to prevent one group from crowding out the other.
 //
 // Example with 10 questions:
-//   recentUnmasteredMin = ceil(10 × 0.67) = 7
+//   palettePlusStrugglingMin = ceil(10 × 0.67) = 7
 //   ruFloor (unmastered) = ceil(7 / 2)    = 4
 //   smFloor (struggling)  = 7 − 4          = 3
 //   Remaining 3 slots → any valid candidate (often mastered review)
