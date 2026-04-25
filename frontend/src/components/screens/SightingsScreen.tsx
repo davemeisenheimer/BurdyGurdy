@@ -5,7 +5,7 @@ import { db } from '../../lib/db';
 import type { BirdProgress } from '../../types';
 import type { MapMode } from '../bird/SightingsMap';
 import { MapModeToggle } from '../ui/MapModeToggle';
-import { ProgressTypePill } from '../ui/ProgressTypePill';
+import { BirdMasteryCard } from '../ui/BirdMasteryCard';
 import { lazyWithReload } from '../../lib/lazyWithReload';
 
 // Lazy-load the Leaflet map so its bundle is only fetched on first use.
@@ -24,15 +24,6 @@ function buildProgressMap(records: BirdProgress[]): Map<string, BirdProgress[]> 
   return map;
 }
 
-function formatObsDt(obsDt: string): string {
-  const d = new Date(obsDt.replace(' ', 'T'));
-  if (isNaN(d.getTime())) return obsDt;
-  const now = new Date();
-  const sameDay = d.toDateString() === now.toDateString();
-  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  if (sameDay) return time;
-  return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${time}`;
-}
 
 interface Props {
   regionCode:        string;
@@ -198,50 +189,32 @@ export function SightingsScreen({ regionCode, isDesktop, onBack, onSightingsLoad
         {!loading && !error && displaySightings.length === 0 && (
           <p className="text-sm text-slate-400 text-center mt-8">No sightings in the past 24 hours</p>
         )}
-        {!loading && !error && displaySightings.map((s, i) => {
-          const records = progressMap.get(s.speciesCode) ?? [];
-          const isActive = activeSelected != null &&
-            activeSelected.speciesCode === s.speciesCode &&
-            activeSelected.obsDt === s.obsDt &&
-            activeSelected.locName === s.locName;
-          return (
-            <button
-              key={i}
-              onClick={() => handleSelectSighting(s)}
-              className={`w-full text-left rounded-xl border p-4 mb-2 transition-shadow flex items-start gap-2 cursor-pointer ${
-                isActive
-                  ? 'bg-sky-50 border-sky-400 shadow-sm'
-                  : 'bg-white border-slate-200 hover:border-sky-300 hover:shadow-sm'
-              }`}
-            >
-              {/* Left: species + location */}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-slate-800 truncate">{s.comName}</p>
-                {records.length > 0 && (
-                  <div className="flex flex-wrap gap-x-3 gap-y-1.5 mt-1 mb-0.5">
-                    {records.map(r => (
-                      <ProgressTypePill key={r.questionType} record={r} />
-                    ))}
-                  </div>
-                )}
-                {records.length === 0 && (
-                  <span className="text-[10px] text-slate-400">Not studied</span>
-                )}
-                <p className="text-xs text-slate-500 truncate mt-0.5">{s.locName}</p>
-                {s.userDisplayName && (
-                  <p className="text-[10px] text-slate-400 truncate">Reported by {s.userDisplayName}</p>
-                )}
-              </div>
-              {/* Right: time + count */}
-              <div className="shrink-0 text-right">
-                <p className="text-xs text-slate-500 whitespace-nowrap">{formatObsDt(s.obsDt)}</p>
-                {s.howMany != null && (
-                  <span className="text-[10px] bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded-full">×{s.howMany}</span>
-                )}
-              </div>
-            </button>
-          );
-        })}
+        {!loading && !error && (
+          <div className="space-y-2">
+            {displaySightings.map((s, i) => {
+              const records  = progressMap.get(s.speciesCode) ?? [];
+              const isActive = activeSelected != null &&
+                activeSelected.speciesCode === s.speciesCode &&
+                activeSelected.obsDt       === s.obsDt &&
+                activeSelected.locName     === s.locName;
+              return (
+                <BirdMasteryCard
+                  key={i}
+                  comName={s.comName}
+                  records={records}
+                  sighting={{
+                    locName:         s.locName,
+                    obsDt:           s.obsDt,
+                    howMany:         s.howMany,
+                    userDisplayName: s.userDisplayName,
+                  }}
+                  isSelected={isActive}
+                  onClick={() => handleSelectSighting(s)}
+                />
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

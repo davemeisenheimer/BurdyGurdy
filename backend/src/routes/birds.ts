@@ -7,9 +7,29 @@ import { getWikipediaSummary, getWikipediaRangeMap, getWikipediaRangeMapLegend, 
 import { cache } from '../cache';
 import { BACKYARD_FAMILIES, ORDER_COMMON_NAMES } from '../constants';
 import { filterObservationsToKnownSpecies } from '../lib/speciesFilter';
+import { filterRecordings } from '../lib/recordingFilter';
 import { getSupabaseAdmin } from '../lib/supabase';
 
 const router = Router();
+
+async function getBannedAudioUrls(): Promise<Set<string>> {
+  const CACHE_KEY = 'birds:banned-audio';
+  const cached = cache.get<Set<string>>(CACHE_KEY);
+  if (cached) return cached;
+  try {
+    const admin = getSupabaseAdmin();
+    const { data } = await admin
+      .from('media_reports')
+      .select('url')
+      .eq('status', 'blocked')
+      .eq('media_type', 'audio');
+    const urls = new Set<string>((data ?? []).map((r: { url: string }) => r.url));
+    cache.set(CACHE_KEY, urls, 5 * 60 * 1000);
+    return urls;
+  } catch {
+    return new Set();
+  }
+}
 
 const PRIORITY_GROUPS = ['recentCommon', 'recentUncommon', 'regionCommon', 'regionUncommon', 'rareUncommon'] as const;
 
@@ -252,12 +272,18 @@ router.get('/info/:speciesCode', async (req, res) => {
 });
 
 // GET /api/birds/audio/:sciName
-// Returns xeno-canto recordings for a species
+// Returns the 5 shortest non-banned xeno-canto recordings for a species,
+// matching the duration-weighted bias of quiz question selection.
 router.get('/audio/:sciName', async (req, res) => {
   try {
     const sciName = req.params.sciName.replace(/_/g, ' ');
-    const recordings = await getRecordings(sciName);
-    res.json(recordings.slice(0, 5)); // Return top 5
+    const [recordings, bannedUrls] = await Promise.all([
+      getRecordings(sciName),
+      getBannedAudioUrls(),
+    ]);
+    const filtered = filterRecordings(recordings, bannedUrls);
+    const sorted   = [...filtered].sort((a, b) => parseXCLength(a.length) - parseXCLength(b.length));
+    res.json(sorted.slice(0, 5));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch audio' });

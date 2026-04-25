@@ -3,7 +3,8 @@ import { db } from '../../lib/db';
 import { categoriseRecentBirds, summariseCounts } from '../../lib/recentProgress';
 import { DEV_SHOW_PALETTE_SPLIT } from '../../lib/devFlags';
 import { MASTERED_BADGE_COLOR } from '../../lib/mastery';
-import { ProgressTypePill, TYPE_LABELS } from '../ui/ProgressTypePill';
+import { TYPE_LABELS } from '../ui/ProgressTypePill';
+import { BirdMasteryCard } from '../ui/BirdMasteryCard';
 import type { QuestionType, CachedSpecies, BirdProgress } from '../../types';
 import type { RecentBirdEntry, RecentProgressCategory } from '../../lib/recentProgress';
 
@@ -186,24 +187,22 @@ export function ProgressScreenRecent({ regionCode, recentDays, questionTypes, on
 // ── BirdCard ──────────────────────────────────────────────────────────────────
 
 function BirdCard({ bird, onSelectBird, isSelected }: { bird: RecentBirdEntry; onSelectBird?: (species: { speciesCode: string; comName: string }) => void; isSelected?: boolean }) {
-  const baseCard = isSelected ? 'bg-sky-50 border-sky-400 shadow-sm' : 'bg-white border-slate-200';
-  const clickProps = onSelectBird ? {
-    onClick: () => onSelectBird({ speciesCode: bird.speciesCode, comName: bird.comName }),
-    className: 'cursor-pointer hover:border-sky-300 hover:shadow-sm transition-shadow',
-  } : { className: '' };
+  const baseCard   = isSelected ? 'bg-sky-50 border-sky-400 shadow-sm' : 'bg-white border-slate-200';
+  const handleClick = onSelectBird
+    ? () => onSelectBird({ speciesCode: bird.speciesCode, comName: bird.comName })
+    : undefined;
+  const clickClass  = handleClick ? 'cursor-pointer hover:border-sky-300 hover:shadow-sm transition-shadow' : '';
 
   if (bird.category === 'notAsked') {
     return (
-      <div className={`${baseCard} rounded-xl border px-4 py-3 flex items-center justify-between ${clickProps.className}`} onClick={clickProps.onClick}>
+      <div className={`${baseCard} rounded-xl border px-4 py-3 flex items-center justify-between ${clickClass}`} onClick={handleClick}>
         <div>
           <span className="font-medium text-slate-700">{bird.comName}</span>
           <span className="text-xs text-slate-400 ml-2 italic">{bird.sciName}</span>
         </div>
         {DEV_SHOW_PALETTE_SPLIT && (
           <span className={`text-xs px-2 py-0.5 rounded-full ${
-            bird.isSeeded
-              ? 'bg-amber-100 text-amber-700'
-              : 'bg-slate-100 text-slate-500'
+            bird.isSeeded ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'
           }`}>
             {bird.isSeeded ? 'Seeded' : 'Unseen'}
           </span>
@@ -217,7 +216,7 @@ function BirdCard({ bird, onSelectBird, isSelected }: { bird: RecentBirdEntry; o
     const totalAttempts = bird.records.reduce((s, r) => s + r.correct + r.incorrect, 0);
     const pct = totalAttempts > 0 ? Math.round((totalCorrect / totalAttempts) * 100) : null;
     return (
-      <div className={`${baseCard} rounded-xl border px-4 py-3 flex items-center justify-between ${clickProps.className}`} onClick={clickProps.onClick}>
+      <div className={`${baseCard} rounded-xl border px-4 py-3 flex items-center justify-between ${clickClass}`} onClick={handleClick}>
         <div className="flex items-center gap-2">
           <span className="font-medium text-slate-700">{bird.comName}</span>
           <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${MASTERED_BADGE_COLOR}`}>
@@ -233,16 +232,11 @@ function BirdCard({ bird, onSelectBird, isSelected }: { bird: RecentBirdEntry; o
 
   // easy / medium / hard
   return (
-    <div className={`${baseCard} rounded-xl border px-4 py-3 ${clickProps.className}`} onClick={clickProps.onClick}>
-      <p className="font-medium text-slate-700 mb-1.5">{bird.comName}</p>
-      <div className="flex flex-wrap gap-2">
-        {bird.records.filter(r => !r.isMastered).map(r => (
-          <ProgressTypePill key={r.questionType} record={r} />
-        ))}
-{bird.records.filter(r => r.isMastered).map(r => (
-          <ProgressTypePill key={r.questionType} record={r} />
-        ))}
-      </div>
-    </div>
+    <BirdMasteryCard
+      comName={bird.comName}
+      records={bird.records}
+      isSelected={isSelected}
+      onClick={handleClick}
+    />
   );
 }
