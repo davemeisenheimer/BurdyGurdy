@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, Fragment } from 'react';
 import { db } from '../../lib/db';
 import { setExcluded } from '../../services/local/progress';
+import { loadQuizPrefs, saveQuizPrefs } from '../../lib/settings';
 import { getRegionSpecies } from '../../services/local/region';
 import { isStrugglingByWindow, STRUGGLING_WINDOW } from '../../lib/struggling';
 import { MASTERY_LABELS, masteryBadgeClass } from '../../lib/mastery';
@@ -28,6 +29,8 @@ interface Props {
   overrideRecords?: BirdProgress[];
   /** Display name shown in the header when viewing a friend's list. */
   friendDisplayName?: string;
+  /** Called after the user clears their entire progress history. */
+  onHistoryCleared?: () => void;
 }
 
 // TYPE_LABELS lives in ProgressTypePill (shared with sightings screen)
@@ -102,7 +105,7 @@ function getGroupLabel(bird: BirdSummary, viewRecord: BirdProgress | null, typeF
   return MASTERY_LABELS[maxMastery] ?? 'Hard';
 }
 
-export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggling, showFocusModeToggle, onToggleFocusStruggling, onSelectBird, selectedSpeciesCode, regionCode, recentDays, onRecentProgress, syncKey, overrideRecords, friendDisplayName }: Props) {
+export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggling, showFocusModeToggle, onToggleFocusStruggling, onSelectBird, selectedSpeciesCode, regionCode, recentDays, onRecentProgress, syncKey, overrideRecords, friendDisplayName, onHistoryCleared }: Props) {
   const readOnly = overrideRecords !== undefined;
   const [birds, setBirds]               = useState<BirdSummary[]>([]);
   const [filter, setFilter]             = useState<Filter>('learning');
@@ -218,6 +221,9 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
     await db.progress.clear();
     await db.regionSpecies.toCollection().modify({ promotionIndex: 0 });
     if (clearCloud && userId) await deleteCloudProgress(userId);
+    const prefs = await loadQuizPrefs();
+    await saveQuizPrefs({ ...prefs, selectionMode: 'all', selectedSpeciesCodes: [], selectedFamilies: [], selectedOrders: [] });
+    onHistoryCleared?.();
     setBirds([]);
     setConfirmClear(false);
   };
@@ -300,80 +306,80 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
 
   return (
     <div className="h-dvh flex flex-col bg-slate-50">
-      <div className="max-w-2xl mx-auto w-full px-4 flex flex-col flex-1 min-h-0">
 
-        {/* Fixed: header, stats, tabs */}
-        <div className="shrink-0 pt-6">
-
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-4">
-            <button onClick={onBack} className="text-slate-500 hover:text-slate-700 text-5xl">←</button>
-            <div>
-              <h1 className="text-2xl font-bold text-slate-800 text-nowrap">
-                {friendDisplayName ? `${friendDisplayName}'s Life List` : 'Life List'}
-              </h1>
-              {nonExcluded.length > 0 && (
-                <p className="text-xs text-slate-400">{nonExcluded.length} birds seen in BirdyGurdy</p>
-              )}
-            </div>
+      {/* Header */}
+      <div className="shrink-0 flex items-center justify-between px-4 py-4 bg-sky-700">
+        <div className="flex items-center gap-3">
+          <button onClick={onBack} className="text-white/80 hover:text-white text-4xl leading-none">←</button>
+          <div>
+            <h1 className="font-semibold text-white text-nowrap">
+              {friendDisplayName ? `${friendDisplayName}'s Life List` : 'Life List'}
+            </h1>
+            {nonExcluded.length > 0 && (
+              <p className="text-xs text-sky-100">{nonExcluded.length} birds seen in BirdyGurdy</p>
+            )}
           </div>
-          {!readOnly && (
-            confirmClear ? (
-              <div className="flex flex-col items-end gap-1.5 ml-4">
-                {userId ? (
-                  <>
-                    <span className="text-xs text-slate-500 text-right">Cloud data will resync on next sign-in unless you clear both.</span>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleClearHistory(false)}
-                        className="text-xs px-2 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600"
-                      >
-                        Local only
-                      </button>
-                      <button
-                        onClick={() => handleClearHistory(true)}
-                        className="text-xs px-2 py-1 bg-red-700 text-white rounded-lg hover:bg-red-800"
-                      >
-                        Local + cloud
-                      </button>
-                      <button
-                        onClick={() => setConfirmClear(false)}
-                        className="text-xs px-2 py-1 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-100"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-500">Are you sure you want to start over?</span>
+        </div>
+        {!readOnly && (
+          confirmClear ? (
+            <div className="flex flex-col items-end gap-1.5 ml-4">
+              {userId ? (
+                <>
+                  <span className="text-xs text-white/80 text-right">Cloud data will resync on next sign-in unless you clear both.</span>
+                  <div className="flex gap-2">
                     <button
                       onClick={() => handleClearHistory(false)}
                       className="text-xs px-2 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600"
                     >
-                      Yes
+                      Local only
+                    </button>
+                    <button
+                      onClick={() => handleClearHistory(true)}
+                      className="text-xs px-2 py-1 bg-red-700 text-white rounded-lg hover:bg-red-800"
+                    >
+                      Local + cloud
                     </button>
                     <button
                       onClick={() => setConfirmClear(false)}
-                      className="text-xs px-2 py-1 border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-100"
+                      className="text-xs px-2 py-1 border border-white/40 rounded-lg text-white hover:bg-white/20"
                     >
                       Cancel
                     </button>
                   </div>
-                )}
-              </div>
-            ) : (
-              <button
-                onClick={() => setConfirmClear(true)}
-                className="text-xs text-slate-400 hover:text-red-500 transition-colors"
-              >
-                Clear history
-              </button>
-            )
-          )}
-        </div>
+                </>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-white/80">Are you sure you want to start over?</span>
+                  <button
+                    onClick={() => handleClearHistory(false)}
+                    className="text-xs px-2 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600"
+                  >
+                    Yes
+                  </button>
+                  <button
+                    onClick={() => setConfirmClear(false)}
+                    className="text-xs px-2 py-1 border border-white/40 rounded-lg text-white hover:bg-white/20"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmClear(true)}
+              className="text-xs text-white/60 hover:text-white transition-colors"
+            >
+              Clear history
+            </button>
+          )
+        )}
+      </div>
 
+      <div className="max-w-2xl mx-auto w-full px-4 flex flex-col flex-1 min-h-0">
+
+        {/* Fixed: stats, tabs */}
+        <div className="shrink-0 pt-4">
 
         {/* Recent mastery summary */}
         {masteryStats !== null && (

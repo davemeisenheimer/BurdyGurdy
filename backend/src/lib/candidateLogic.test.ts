@@ -114,6 +114,55 @@ describe('buildCandidates', () => {
   });
 });
 
+// ── buildCandidates: speciesFilterSet ─────────────────────────────────────────
+
+describe('buildCandidates - speciesFilterSet', () => {
+  it('non-recent bird outside the filter is excluded from candidates', () => {
+    const recentPool  = [];
+    const allPool     = [makeSpecies('inFilter'), makeSpecies('outFilter')];
+    const recentCodes = new Set<string>();
+    const weightsMap  = { 'inFilter:image': 20, 'outFilter:image': 20 };
+    const speciesFilterSet = new Set(['inFilter']);
+    const candidates = buildCandidates(recentPool, allPool, recentCodes, weightsMap, TYPES, true, new Set(), new Set(), speciesFilterSet);
+    expect(candidates.find(c => c.species.speciesCode === 'outFilter')).toBeUndefined();
+    expect(candidates.find(c => c.species.speciesCode === 'inFilter')).toBeDefined();
+  });
+
+  it('non-recent bird inside the filter is still included (with NON_RECENT discount)', () => {
+    const recentPool  = [];
+    const allPool     = [makeSpecies('inFilter')];
+    const recentCodes = new Set<string>();
+    const weightsMap  = { 'inFilter:image': 20 };
+    const speciesFilterSet = new Set(['inFilter']);
+    const candidates = buildCandidates(recentPool, allPool, recentCodes, weightsMap, TYPES, true, new Set(), new Set(), speciesFilterSet);
+    const c = candidates.find(c => c.species.speciesCode === 'inFilter');
+    expect(c).toBeDefined();
+    expect(c!.weight).toBeCloseTo(20 * 0.05);
+  });
+
+  it('empty speciesFilterSet (no selection) includes all non-recent birds — no regression', () => {
+    const recentPool  = [];
+    const allPool     = [makeSpecies('bird1'), makeSpecies('bird2')];
+    const recentCodes = new Set<string>();
+    const weightsMap  = { 'bird1:image': 20, 'bird2:image': 20 };
+    const candidates = buildCandidates(recentPool, allPool, recentCodes, weightsMap, TYPES, true);
+    expect(candidates).toHaveLength(2);
+  });
+
+  it('level 0 non-recent bird outside the filter is still excluded', () => {
+    const recentPool  = [];
+    const allPool     = [makeSpecies('lv0bird'), makeSpecies('filtered')];
+    const recentCodes = new Set<string>();
+    const weightsMap  = { 'lv0bird:image': 20, 'filtered:image': 20 };
+    const level0Keys  = new Set(['lv0bird:image']);
+    const speciesFilterSet = new Set(['filtered']); // lv0bird is NOT in the user's selection
+    const candidates = buildCandidates(recentPool, allPool, recentCodes, weightsMap, TYPES, true, level0Keys, new Set(), speciesFilterSet);
+    // lv0bird should be excluded because the user's selection doesn't include it
+    expect(candidates.find(c => c.species.speciesCode === 'lv0bird')).toBeUndefined();
+    expect(candidates.find(c => c.species.speciesCode === 'filtered')).toBeDefined();
+  });
+});
+
 // ── buildCandidates: level 0 behaviour ───────────────────────────────────────
 
 describe('buildCandidates - level 0 birds', () => {

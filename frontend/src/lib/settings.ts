@@ -81,6 +81,10 @@ export interface QuizConfigPrefs {
   questionsPerRound?: number;
   regionCode?: string;
   groupId?: string;
+  selectionMode?: 'all' | 'custom';
+  selectedSpeciesCodes?: string[];
+  selectedFamilies?: string[];
+  selectedOrders?: string[];
 }
 
 export async function loadQuizPrefs(): Promise<QuizConfigPrefs> {

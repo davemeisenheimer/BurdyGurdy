@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import type { QuizConfig, QuestionType, GameMode } from '../../types';
 import { RegionSearch } from '../ui/RegionSearch';
-import { BIRD_GROUPS } from '../../lib/birdGroups';
 import { HelpModal } from '../ui/HelpModal';
 import { MapRegionPicker } from '../ui/MapRegionPicker';
 import { AccountPill } from '../ui/AccountPill';
 import { HelpInfo } from '../ui/HelpInfo';
 import { DialogGeneric } from '../ui/DialogGeneric';
+import { TaxonomicSelectionView } from './TaxonomicSelectionView';
+import type { QuizConfigPrefs } from '../../lib/settings';
 
 interface Props {
   initialConfig: QuizConfig;
@@ -23,6 +24,9 @@ interface Props {
   onAuthClick: () => void;
   onSignOut: () => void;
   onQuizPrefsChange: (prefs: { questionTypes: QuestionType[]; mode: GameMode; questionsPerRound: number; groupId: string; regionCode: string }) => void;
+  initialSelectionMode?: 'all' | 'custom';
+  initialSelectionPrefs?: Pick<QuizConfigPrefs, 'selectedSpeciesCodes' | 'selectedFamilies' | 'selectedOrders'>;
+  onSelectionChange: (prefs: { selectionMode: 'all' | 'custom'; selectedSpeciesCodes: string[]; selectedFamilies: string[]; selectedOrders: string[] }) => void;
 }
 
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
@@ -34,31 +38,34 @@ const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: 'sono',   label: 'Spectrogram' },
 ];
 
-export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSightings, onSettings, onFriends, hasPendingInvites, onNotifications, hasUnreadNotifications, userEmail, onAuthClick, onSignOut, onQuizPrefsChange }: Props) {
+export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSightings, onSettings, onFriends, hasPendingInvites, onNotifications, hasUnreadNotifications, userEmail, onAuthClick, onSignOut, onQuizPrefsChange, initialSelectionMode, initialSelectionPrefs, onSelectionChange }: Props) {
   const [regionCode, setRegionCode] = useState(initialConfig.regionCode);
   const [selectedTypes, setSelectedTypes] = useState<QuestionType[]>(initialConfig.questionTypes);
   const [mode, setMode] = useState<GameMode>(initialConfig.mode);
   const [questionsPerRound, setQuestionsPerRound] = useState(initialConfig.questionsPerRound);
-  const [groupId, setGroupId] = useState(initialConfig.groupId ?? 'all');
   const [regionDisplayName, setRegionDisplayName] = useState<string | undefined>(undefined);
   const [showHelp, setShowHelp] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [showRandomWarning, setShowRandomWarning] = useState(false);
-  const [showOrderGroupWarning, setShowOrderGroupWarning] = useState(false);
+  const [selectionMode, setSelectionMode] = useState<'all' | 'custom'>(initialSelectionMode ?? 'all');
+  const [showSelectionView, setShowSelectionView] = useState(false);
 
   // Sync local state when config is updated externally (e.g. cloud download on sign-in)
   useEffect(() => {
     setSelectedTypes(initialConfig.questionTypes);
     setMode(initialConfig.mode);
     setQuestionsPerRound(initialConfig.questionsPerRound);
-    setGroupId(initialConfig.groupId ?? 'all');
     if (isDesktop) setRegionCode(initialConfig.regionCode);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialConfig]);
 
-  const notify = (patch: Partial<{ questionTypes: QuestionType[]; mode: GameMode; questionsPerRound: number; groupId: string; regionCode: string }>) => {
+  useEffect(() => {
+    if (initialSelectionMode) setSelectionMode(initialSelectionMode);
+  }, [initialSelectionMode]);
+
+  const notify = (patch: Partial<{ questionTypes: QuestionType[]; mode: GameMode; questionsPerRound: number; regionCode: string }>) => {
     onQuizPrefsChange({
-      questionTypes: selectedTypes, mode, questionsPerRound, groupId, regionCode,
+      questionTypes: selectedTypes, mode, questionsPerRound, groupId: 'all', regionCode,
       ...patch,
     });
   };
@@ -72,18 +79,12 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSi
   };
 
   const handleStart = () => {
-    if (selectedTypes.includes('order') && groupId !== 'all') {
-      setShowOrderGroupWarning(true);
-      return;
-    }
-    onStart({ regionCode: isDesktop ? regionCode : initialConfig.regionCode, questionTypes: selectedTypes, mode, questionsPerRound, groupId });
+    onStart({ regionCode: isDesktop ? regionCode : initialConfig.regionCode, questionTypes: selectedTypes, mode, questionsPerRound, groupId: 'all' });
   };
 
-  const handlePlayAllBirds = () => {
-    setGroupId('all');
-    notify({ groupId: 'all' });
-    setShowOrderGroupWarning(false);
-    onStart({ regionCode: isDesktop ? regionCode : initialConfig.regionCode, questionTypes: selectedTypes, mode, questionsPerRound, groupId: 'all' });
+  const handleSelectAllBirds = () => {
+    setSelectionMode('all');
+    onSelectionChange({ selectionMode: 'all', selectedSpeciesCodes: [], selectedFamilies: [], selectedOrders: [] });
   };
 
   return (
@@ -91,7 +92,7 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSi
       <div className="w-full max-w-md mx-auto flex flex-col flex-1 min-h-0">
 
         {/* Header */}
-        <div className="text-center relative pb-4 shrink-0">
+        <div className={`text-center relative pb-4 shrink-0 ${showSelectionView ? 'hidden' : ''}`}>
           <button
             onClick={() => setShowHelp(true)}
             className="absolute right-0 top-0 w-8 h-8 rounded-full border border-slate-300 text-slate-500 hover:bg-slate-100 text-sm font-semibold"
@@ -148,7 +149,15 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSi
         </div>
 
         {/* Card - grows to fill remaining height; sections flex apart */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col flex-1 px-6 py-6">
+        <div className={`bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col flex-1 min-h-0 ${showSelectionView ? 'overflow-hidden' : 'px-6 py-6'}`}>
+          {showSelectionView && (
+            <TaxonomicSelectionView
+              initialPrefs={initialSelectionPrefs ?? {}}
+              onSave={prefs => { setSelectionMode('custom'); setShowSelectionView(false); onSelectionChange(prefs); }}
+              onClose={() => setShowSelectionView(false)}
+            />
+          )}
+          {!showSelectionView && <>
 
           {/* Region - desktop only; mobile sets region in Settings */}
           {isDesktop && (<>
@@ -242,26 +251,33 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSi
           </div>
           <div className="flex-1 min-h-4" />
 
-          {/* Bird group */}
+          {/* Bird selection */}
           <div className="shrink-0">
             <div className="flex items-center gap-2 mb-2">
               <HelpInfo id="birdGroup" />
-              <label className="text-sm font-semibold text-slate-700">Bird Group</label>
+              <label className="text-sm font-semibold text-slate-700">Which Birds to Play With</label>
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              {BIRD_GROUPS.map(g => (
-                <button
-                  key={g.id}
-                  onClick={() => { setGroupId(g.id); notify({ groupId: g.id }); }}
-                  className={`px-2 py-1.5 rounded-full text-xs font-medium border transition-colors text-center ${
-                    groupId === g.id
-                      ? 'bg-forest-600 border-forest-600 text-white'
-                      : 'bg-white border-slate-300 text-slate-600 hover:border-forest-400'
-                  }`}
-                >
-                  {g.label}
-                </button>
-              ))}
+            <div className="flex gap-2">
+              <button
+                onClick={handleSelectAllBirds}
+                className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-colors ${
+                  selectionMode === 'all'
+                    ? 'bg-forest-600 border-forest-600 text-white'
+                    : 'bg-white border-slate-300 text-slate-600 hover:border-forest-400'
+                }`}
+              >
+                All Birds
+              </button>
+              <button
+                onClick={() => setShowSelectionView(true)}
+                className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-colors ${
+                  selectionMode === 'custom'
+                    ? 'bg-forest-600 border-forest-600 text-white'
+                    : 'bg-white border-slate-300 text-slate-600 hover:border-forest-400'
+                }`}
+              >
+                Life List Selections
+              </button>
             </div>
           </div>
           <div className="flex-1 min-h-4" />
@@ -298,6 +314,7 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSi
           <p className="text-center text-xs text-slate-400 pt-4">
             <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="hover:text-slate-600 underline">Privacy Policy</a>
           </p>
+          </>}
         </div>
       </div>
 
@@ -306,18 +323,6 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSi
         <MapRegionPicker
           onSelect={(code, name) => { setRegionCode(code); setRegionDisplayName(name); notify({ regionCode: code }); }}
           onClose={() => setShowMap(false)}
-        />
-      )}
-      {showOrderGroupWarning && (
-        <DialogGeneric
-          dialogId="orderGroupWarning"
-          extraChildren={
-            <p className="text-sm text-slate-600 leading-relaxed mt-2">
-              You currently have <span className="font-semibold">{BIRD_GROUPS.find(g => g.id === groupId)?.label ?? groupId}</span> selected. To switch to All Birds and continue playing, click <span className="font-semibold">Play All Birds</span>.
-            </p>
-          }
-          onConfirm={handlePlayAllBirds}
-          onCancel={() => setShowOrderGroupWarning(false)}
         />
       )}
       {showRandomWarning && (

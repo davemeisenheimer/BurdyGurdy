@@ -50,6 +50,7 @@ export function buildCandidates(
   adaptiveMode: boolean,
   level0Keys: Set<string> = new Set(),
   paletteCodes: Set<string> = new Set(),
+  speciesFilterSet: Set<string> = new Set(),
 ): Candidate[] {
   const candidates: Candidate[] = [];
 
@@ -82,6 +83,7 @@ export function buildCandidates(
   if (adaptiveMode) {
     for (const species of filteredPool) {
       if (recentCodes.has(species.speciesCode)) continue;
+      if (speciesFilterSet.size > 0 && !speciesFilterSet.has(species.speciesCode)) continue;
       for (const t of types) {
         const key = `${species.speciesCode}:${t}`;
         const w = weightsMap[key];

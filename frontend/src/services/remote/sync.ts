@@ -8,6 +8,7 @@ import { api } from './api';
 import { db } from '../../lib/db';
 import { STRUGGLING_WINDOW } from '../../lib/struggling';
 import type { BirdProgress } from '../../types';
+import { loadQuizPrefs, saveQuizPrefs } from '../../lib/settings';
 import type { AppSettings, QuizConfigPrefs } from '../../lib/settings';
 
 // ── Upload ────────────────────────────────────────────────────────────────────
@@ -250,6 +251,10 @@ export async function downloadAndReplace(userId: string, cloudTs: number | null)
       recentAnswers:      remote.recent_answers ?? existing?.recentAnswers ?? null,
       masteredAt:         existing?.masteredAt,
       noAudio:            existing?.noAudio,
+      familyComName:      existing?.familyComName,
+      familySciName:      existing?.familySciName,
+      order:              existing?.order,
+      orderComName:       existing?.orderComName,
     };
     if (record.isMastered && !record.recentAnswers) {
       const total = record.correct + record.incorrect;
@@ -264,6 +269,18 @@ export async function downloadAndReplace(userId: string, cloudTs: number | null)
   });
 
   await db.progress.bulkPut(records);
+
+  // Filter selectedSpeciesCodes to only codes still present after sync.
+  const downloadedCodes = new Set(records.map(r => r.speciesCode));
+  const prefs = await loadQuizPrefs();
+  if ((prefs.selectedSpeciesCodes ?? []).length > 0) {
+    const filteredCodes = (prefs.selectedSpeciesCodes ?? []).filter(c => downloadedCodes.has(c));
+    const updated = { ...prefs, selectedSpeciesCodes: filteredCodes };
+    if (filteredCodes.length === 0 && (updated.selectedFamilies ?? []).length === 0 && (updated.selectedOrders ?? []).length === 0) {
+      updated.selectionMode = 'all';
+    }
+    await saveQuizPrefs(updated);
+  }
 
   // Stamp local sync state so callers never need to touch localStorage.
   if (cloudTs !== null) setLocalSyncedAt(userId, cloudTs);

@@ -127,18 +127,20 @@ export function AuthPanel({ onClose, onSignIn, onSignUp }: Props) {
           </form>
         ) : (
           <>
-            {/* News opt-in */}
-            <label className="flex items-start gap-2.5 mb-4 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={newsOptIn}
-                onChange={e => setNewsOptIn(e.target.checked)}
-                className="mt-0.5 w-4 h-4 rounded border-slate-300 text-forest-600 focus:ring-forest-500"
-              />
-              <span className="text-xs text-slate-600 leading-snug">
-                Receive occasional BurdyGurdy news and updates
-              </span>
-            </label>
+            {/* News opt-in — only relevant when creating an account */}
+            {mode === 'signup' && (
+              <label className="flex items-start gap-2.5 mb-4 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={newsOptIn}
+                  onChange={e => setNewsOptIn(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded border-slate-300 text-forest-600 focus:ring-forest-500"
+                />
+                <span className="text-xs text-slate-600 leading-snug">
+                  Receive occasional BurdyGurdy news and updates
+                </span>
+              </label>
+            )}
 
             {/* OAuth buttons */}
             <div className="flex flex-col gap-2 mb-4">

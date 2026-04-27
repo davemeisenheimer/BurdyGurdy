@@ -122,17 +122,17 @@ export function SightingsScreen({ regionCode, isDesktop, onBack, onSightingsLoad
     return (
       <div className="flex flex-col h-dvh">
         {/* Header */}
-        <div className="shrink-0 flex items-center gap-2 px-3 py-3 border-b border-slate-200 bg-white">
+        <div className="shrink-0 flex items-center gap-2 px-3 py-4 bg-sky-700">
           <button
             onClick={() => directMap ? onBack() : setMobileSelected(null)}
-            className="text-slate-500 hover:text-slate-700 text-5xl"
+            className="text-white/80 hover:text-white text-4xl leading-none"
             aria-label="Back"
           >
             ←
           </button>
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-slate-700 truncate">{mobileSelected.comName}</p>
-            <p className="text-xs text-slate-400 truncate">{mobileSelected.locName}</p>
+            <p className="font-semibold text-white truncate">{mobileSelected.comName}</p>
+            <p className="text-xs text-sky-100 truncate">{mobileSelected.locName}</p>
           </div>
         </div>
 
@@ -161,20 +161,20 @@ export function SightingsScreen({ regionCode, isDesktop, onBack, onSightingsLoad
   return (
     <div className="flex flex-col h-dvh lg:h-full">
       {/* Header */}
-      <div className="shrink-0 flex items-center gap-2 px-3 py-3 border-b border-slate-200 bg-white">
+      <div className="shrink-0 flex items-center gap-2 px-3 py-4 bg-sky-700">
         <button
           onClick={onBack}
-          className="text-slate-500 hover:text-slate-700 text-5xl"
+          className="text-white/80 hover:text-white text-4xl leading-none"
           aria-label="Back"
         >
           ←
         </button>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-slate-700">Recent Sightings</p>
-          <p className="text-xs text-slate-400">Past 24 hours · {regionCode}</p>
+          <p className="font-semibold text-white">Recent Sightings</p>
+          <p className="text-xs text-sky-100">Past 24 hours · {regionCode}</p>
         </div>
         {!loading && !error && (
-          <span className="text-xs text-slate-400 shrink-0">{displaySightings.length} sighting{displaySightings.length !== 1 ? 's' : ''}</span>
+          <span className="text-xs text-sky-100 shrink-0">{displaySightings.length} sighting{displaySightings.length !== 1 ? 's' : ''}</span>
         )}
       </div>
 

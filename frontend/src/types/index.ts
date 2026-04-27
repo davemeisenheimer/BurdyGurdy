@@ -104,6 +104,10 @@ export interface BirdProgress {
   speciesCode: string;
   questionType: QuestionType;
   comName: string;
+  familyComName?: string;
+  familySciName?: string;
+  order?: string;
+  orderComName?: string;
   correct: number;
   incorrect: number;
   lastAsked: number;

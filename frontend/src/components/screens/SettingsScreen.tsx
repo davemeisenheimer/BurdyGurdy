@@ -72,6 +72,14 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
   const [resetSent, setResetSent]       = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [resetError, setResetError]     = useState<string | null>(null);
+  const [newsOptIn, setNewsOptIn]       = useState<boolean>(
+    !!(user?.user_metadata?.news_opt_in),
+  );
+
+  const handleNewsOptInChange = async (value: boolean) => {
+    setNewsOptIn(value);
+    await supabase.auth.updateUser({ data: { news_opt_in: value } });
+  };
 
   const handleResetPassword = async () => {
     if (!user?.email) return;
@@ -92,14 +100,14 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
   };
 
   return (
-    <div className="min-h-dvh flex flex-col">
-      <div className="sticky top-0 z-10 bg-slate-50 px-3 sm:px-6 pt-3 sm:pt-6 pb-4 border-b border-slate-200">
-        <div className="w-full max-w-md mx-auto flex items-center gap-4">
-          <button onClick={onBack} className="text-slate-500 hover:text-slate-700 text-5xl leading-none">←</button>
-          <h1 className="text-2xl font-bold text-slate-800">Settings</h1>
+    <div className="h-dvh flex flex-col">
+      <div className="shrink-0 bg-sky-700 px-4 py-4">
+        <div className="w-full max-w-md mx-auto flex items-center gap-3">
+          <button onClick={onBack} className="text-white/80 hover:text-white text-4xl leading-none">←</button>
+          <h1 className="font-semibold text-white">Settings</h1>
         </div>
       </div>
-      <div className="px-3 sm:px-6 pt-5 pb-6">
+      <div className="px-3 sm:px-6 pt-5 pb-6 overflow-y-auto flex-1">
       <div className="w-full max-w-md mx-auto">
 
         {showFocusModeToggle && onToggleFocusStruggling && (
@@ -340,6 +348,24 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
             ) : (
               <p className="text-xs text-slate-500">Tap the browser menu ⋮ and select "Add to Home screen".</p>
             )}
+          </div>
+        )}
+
+        {/* Email preferences - signed-in users only */}
+        {user && (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mt-4">
+            <p className="font-medium text-slate-800 text-sm mb-3">Email preferences</p>
+            <label className="flex items-start gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={newsOptIn}
+                onChange={e => handleNewsOptInChange(e.target.checked)}
+                className="mt-0.5 w-4 h-4 accent-forest-600 cursor-pointer shrink-0"
+              />
+              <span className="text-sm text-slate-600 leading-snug">
+                Receive occasional BurdyGurdy news and updates
+              </span>
+            </label>
           </div>
         )}
 

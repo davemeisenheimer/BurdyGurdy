@@ -32,8 +32,9 @@ export const HELP_CONTENT: Record<string, HelpEntry> = {
   birdGroup: {
     title: 'Bird Group',
     body: [
-      'Filter the quiz to a specific group of birds. "All" includes every bird seen in your region.',
-      'Other groups let you focus on a particular family - useful if you want to drill waterfowl, raptors, or another category you\'re working on.',
+      'Filter the quiz to a specific birds. "All" includes every bird seen in your region, beginning with the most common.',
+      'The Life List Selections option opens a view where you can manually select which birds to include in your quiz. This works '
+      + 'best once you have mastered dozens of birds and have a few that you mix up and want to really drill down on.',
     ],
   },
   learningMode: {

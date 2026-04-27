@@ -24,7 +24,7 @@ import { DialogGeneric } from './components/ui/DialogGeneric';
 import { useQuiz } from './hooks/useQuiz';
 import { useNotifications } from './hooks/useNotifications';
 import { loadSettings, saveSettings, loadQuizPrefs, saveQuizPrefs, resetUserSettings, loadFocusStruggling, saveFocusStruggling, DEFAULTS as SETTINGS_DEFAULTS } from './lib/settings';
-import type { AppSettings } from './lib/settings';
+import type { AppSettings, QuizConfigPrefs } from './lib/settings';
 import { checkVictoryCondition, hasSeenVictory, markVictorySeen, getVictorySeen, mergeVictorySeen, describeMastery, describeWindow } from './lib/victory';
 import { locateRegion } from './services/remote/api';
 import type { LocateResult, RegionalSighting, RecentSighting } from './services/remote/api';
@@ -32,7 +32,7 @@ import { db, switchToUserDb } from './lib/db';
 import { supabase } from './lib/supabase';
 import type { SupabaseUser } from './lib/supabase';
 import { uploadProgress, downloadAndReplace, uploadSettings, downloadSettings, downloadUserBlockedPhotos, deleteAllUserBlockedPhotos, uploadUserBlockedPhoto, submitMediaReport, fetchAdminBlockedMedia, deleteCloudProgressRecords, uploadRegionSnapshot, downloadRegionSnapshot, getCloudUploadTime, getLocalSyncedAt, getNeedsUpload } from './services/remote/sync';
-import { checkBirdsToExpire, expireOldMasteredBirds } from './services/local/progress';
+import { checkBirdsToExpire, expireOldMasteredBirds, backfillProgressTaxonomy } from './services/local/progress';
 import { getRegionSpecies } from './services/local/region';
 import { loadSnapshot, saveSnapshot, buildSnapshot, computeRegionUpdate } from './services/local/regionSnapshot';
 import type { RegionUpdateInfo } from './services/local/regionSnapshot';
@@ -115,6 +115,7 @@ export default function App() {
   const [friendProgressRecords, setFriendProgressRecords] = useState<BirdProgress[]>([]);
   const [friendProgressName, setFriendProgressName]       = useState('');
   const [hasPendingInvites, setHasPendingInvites]         = useState(false);
+  const [selectionPrefs, setSelectionPrefs] = useState<Pick<QuizConfigPrefs, 'selectionMode' | 'selectedSpeciesCodes' | 'selectedFamilies' | 'selectedOrders'>>({ selectionMode: 'all', selectedSpeciesCodes: [], selectedFamilies: [], selectedOrders: [] });
   const [syncVersion, setSyncVersion]           = useState(0);
   const [cloudSyncing, setCloudSyncing]         = useState(false);
   const cloudSyncingRef  = useRef(false);
@@ -146,7 +147,14 @@ export default function App() {
       ...(prefs.groupId           ? { groupId: prefs.groupId }                                           : {}),
     });
     setFocusStruggling(focus);
+    setSelectionPrefs({
+      selectionMode:        prefs.selectionMode        ?? 'all',
+      selectedSpeciesCodes: prefs.selectedSpeciesCodes ?? [],
+      selectedFamilies:     prefs.selectedFamilies     ?? [],
+      selectedOrders:       prefs.selectedOrders       ?? [],
+    });
     setIsInitialized(true);
+    backfillProgressTaxonomy().catch(() => { /* non-fatal */ });
   }, []);
 
   const {
@@ -243,6 +251,12 @@ export default function App() {
       ...(mergedPrefs.regionCode        ? { regionCode: mergedPrefs.regionCode }                                     : {}),
       ...(mergedPrefs.groupId           ? { groupId: mergedPrefs.groupId }                                           : {}),
     }));
+    setSelectionPrefs({
+      selectionMode:        mergedPrefs.selectionMode        ?? 'all',
+      selectedSpeciesCodes: mergedPrefs.selectedSpeciesCodes ?? [],
+      selectedFamilies:     mergedPrefs.selectedFamilies     ?? [],
+      selectedOrders:       mergedPrefs.selectedOrders       ?? [],
+    });
     await mergeVictorySeen(remote.victorySeen);
   };
 
@@ -341,10 +355,17 @@ export default function App() {
   }, []);
 
   const handleQuizPrefsChange = async (prefs: { questionTypes: QuizConfig['questionTypes']; mode: QuizConfig['mode']; questionsPerRound: number; groupId: string; regionCode: string }) => {
-    const newPrefs = { questionTypes: prefs.questionTypes, mode: prefs.mode, questionsPerRound: prefs.questionsPerRound, groupId: prefs.groupId, regionCode: prefs.regionCode };
+    const existing = await loadQuizPrefs();
+    const newPrefs = { ...existing, questionTypes: prefs.questionTypes, mode: prefs.mode, questionsPerRound: prefs.questionsPerRound, groupId: prefs.groupId, regionCode: prefs.regionCode };
     await saveQuizPrefs(newPrefs);
     setConfig(c => ({ ...c, ...newPrefs }));
     if (user) uploadSettings(user.id, settings, newPrefs, await getVictorySeen()).catch(() => {});
+  };
+
+  const handleSelectionChange = async (newSelectionPrefs: { selectionMode: 'all' | 'custom'; selectedSpeciesCodes: string[]; selectedFamilies: string[]; selectedOrders: string[] }) => {
+    const existing = await loadQuizPrefs();
+    await saveQuizPrefs({ ...existing, ...newSelectionPrefs });
+    setSelectionPrefs(newSelectionPrefs);
   };
 
   const handleRegionChange = async (code: string) => {
@@ -449,6 +470,12 @@ export default function App() {
                 ...(mergedPrefs.regionCode        ? { regionCode: mergedPrefs.regionCode }                                     : {}),
                 ...(mergedPrefs.groupId           ? { groupId: mergedPrefs.groupId }                                           : {}),
               }));
+              setSelectionPrefs({
+                selectionMode:        mergedPrefs.selectionMode        ?? 'all',
+                selectedSpeciesCodes: mergedPrefs.selectedSpeciesCodes ?? [],
+                selectedFamilies:     mergedPrefs.selectedFamilies     ?? [],
+                selectedOrders:       mergedPrefs.selectedOrders       ?? [],
+              });
               await mergeVictorySeen(remote.victorySeen);
             } else if (isNewSignIn) {
               // Brand-new user, no cloud settings anywhere - reset stale local prefs
@@ -594,7 +621,9 @@ export default function App() {
   };
 
   const handleStart = async (newConfig: QuizConfig) => {
+    const existing = await loadQuizPrefs();
     const newPrefs = {
+      ...existing,
       questionTypes: newConfig.questionTypes,
       mode: newConfig.mode,
       questionsPerRound: newConfig.questionsPerRound,
@@ -900,6 +929,9 @@ export default function App() {
           onAuthClick={() => setShowAuth(true)}
           onSignOut={performSignOut}
           onQuizPrefsChange={handleQuizPrefsChange}
+          initialSelectionMode={selectionPrefs.selectionMode}
+          initialSelectionPrefs={selectionPrefs}
+          onSelectionChange={handleSelectionChange}
         />
       )}
 
@@ -931,6 +963,9 @@ export default function App() {
           recentDays={config.recentDays ?? 30}
           onRecentProgress={() => { setRecentProgressBack('progress'); setScreen('recentprogress'); }}
           syncKey={syncVersion}
+          onHistoryCleared={() => {
+            setSelectionPrefs({ selectionMode: 'all', selectedSpeciesCodes: [], selectedFamilies: [], selectedOrders: [] });
+          }}
         />
       )}
 
@@ -955,6 +990,12 @@ export default function App() {
               deleteCloudProgressRecords(user.id, deleted).catch(() => {});
               uploadProgress(user.id).catch(() => {});
             }
+            loadQuizPrefs().then(p => setSelectionPrefs({
+              selectionMode:        p.selectionMode        ?? 'all',
+              selectedSpeciesCodes: p.selectedSpeciesCodes ?? [],
+              selectedFamilies:     p.selectedFamilies     ?? [],
+              selectedOrders:       p.selectedOrders       ?? [],
+            })).catch(() => {});
           }}
           user={user}
           onInstallApp={handleInstallApp}

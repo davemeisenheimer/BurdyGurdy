@@ -6,10 +6,11 @@ import { BACKYARD_FAMILIES, GROUP_ORDERS, ORDER_COMMON_NAMES } from '../constant
 import { getSupabaseAdmin } from '../lib/supabase';
 import { cache } from '../cache';
 import {
-  PALETTE_DISTRACTOR_WEIGHT, RECENT_UNMASTERED_RATIO, XC_FETCH_BATCH_SIZE,
+  RECENT_UNMASTERED_RATIO, XC_FETCH_BATCH_SIZE,
 } from '@birdygurdy/shared';
 import { buildCandidates, applyRecentUnmasteredGuarantee, applyAffinityBoosts, pickFromPool, splitCandidates } from '../lib/candidateLogic';
 import { filterRecordings, weightedSampleByDuration } from '../lib/recordingFilter';
+import { selectDistractors, pickRandom } from '../lib/distractorLogic';
 import type { PoolSpecies, Candidate } from '../lib/candidateLogic';
 
 const router = Router();
@@ -44,173 +45,8 @@ export interface QuizQuestion {
 
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function pickRandom<T>(arr: T[], n: number): T[] {
-  return [...arr].sort(() => Math.random() - 0.5).slice(0, n);
-}
-
-// PALETTE_DISTRACTOR_WEIGHT imported from @birdygurdy/shared above.
-
-function pickWithPalettePreference<T extends { speciesCode: string }>(
-  arr: T[],
-  n: number,
-  paletteCodes: Set<string>,
-): T[] {
-  if (arr.length <= n) return [...arr];
-  const result: T[]   = [];
-  const remaining     = [...arr];
-  while (result.length < n && remaining.length > 0) {
-    const weights = remaining.map(s =>
-      paletteCodes.has(s.speciesCode) ? PALETTE_DISTRACTOR_WEIGHT : 1,
-    );
-    const total = weights.reduce((a, b) => a + b, 0);
-    let rand = Math.random() * total;
-    let idx  = 0;
-    for (let i = 0; i < weights.length; i++) {
-      rand -= weights[i];
-      if (rand <= 0) { idx = i; break; }
-    }
-    result.push(remaining.splice(idx, 1)[0]);
-  }
-  return result;
-}
-
-// ── Visual-similarity helpers (fallback when taxonomy tiers are exhausted) ──
-
-/**
- * Rough size class by taxonomic order (1 = tiny, 5 = very large).
- * Used to avoid mixing, e.g., hummingbirds with geese as distractors.
- */
-const ORDER_SIZE_CLASS: Record<string, number> = {
-  'Trochiliformes': 1,
-  'Apodiformes': 1,
-  'Passeriformes': 2,
-  'Piciformes': 3,
-  'Coraciiformes': 2,
-  'Cuculiformes': 3,
-  'Columbiformes': 3,
-  'Charadriiformes': 3,
-  'Strigiformes': 4,
-  'Falconiformes': 4,
-  'Galliformes': 3,
-  'Podicipediformes': 3,
-  'Gaviiformes': 4,
-  'Anseriformes': 4,
-  'Pelecaniformes': 4,
-  'Suliformes': 4,
-  'Accipitriformes': 4,
-  'Gruiformes': 4,
-  'Ciconiiformes': 5,
-};
-
-const COLOR_TERMS = [
-  'red', 'blue', 'yellow', 'green', 'orange', 'purple',
-  'black', 'white', 'gray', 'grey', 'brown', 'rufous',
-  'chestnut', 'golden', 'tawny', 'indigo', 'scarlet',
-  'olive', 'rosy', 'azure', 'crimson', 'violet',
-];
-
-function sizeClass(order: string): number {
-  return ORDER_SIZE_CLASS[order] ?? 3;
-}
-
-function colorTermsOf(comName: string): string[] {
-  const lower = comName.toLowerCase();
-  return COLOR_TERMS.filter(t => lower.includes(t));
-}
-
-/**
- * Returns pool species that are visually similar to the target:
- *   - within ±1 size class (order-based)
- *   - if the target's name contains colour terms, prefers species sharing at least one
- * Used as a fallback tier before resorting to fully random distractors.
- */
-function visuallySimilar(target: PoolSpecies, candidates: PoolSpecies[]): PoolSpecies[] {
-  const targetSize   = sizeClass(target.tax!.order);
-  const targetColors = colorTermsOf(target.comName);
-
-  return candidates.filter(s => {
-    if (Math.abs(sizeClass(s.tax!.order) - targetSize) > 1) return false;
-    if (targetColors.length === 0) return true;
-    const sc = colorTermsOf(s.comName);
-    return sc.length === 0 || sc.some(c => targetColors.includes(c));
-  });
-}
-
-/** Best fallback set: visually-similar subset of `pool` if large enough, else full `pool`. */
-function similarOrAll(target: PoolSpecies, pool: PoolSpecies[], count: number): PoolSpecies[] {
-  const sim = visuallySimilar(target, pool);
-  return sim.length >= count ? sim : pool;
-}
-
-// PoolSpecies and Candidate are imported from ../lib/candidateLogic
-
-/**
- * Select distractor common names scaled to the player's mastery level for this bird:
- *   0 = easy   → different family entirely
- *   1 = medium → same family, different genus
- *   2 = hard   → same genus (falls back to same family if too few)
- *
- * Within each tier, palette birds are preferred as distractors (reinforces active learning).
- */
-function selectDistractors(
-  target: PoolSpecies,
-  pool: PoolSpecies[],
-  masteryLevel: number,
-  count: number,
-  paletteCodes: Set<string>,
-): PoolSpecies[] {
-  const others = pool.filter(s => s.speciesCode !== target.speciesCode && s.tax);
-  const targetGenus  = target.sciName.split(' ')[0];
-  const targetFamily = target.tax!.familySciName;
-
-  let candidates: PoolSpecies[];
-
-  if (masteryLevel <= 0) {
-    // Level 0: pick from a completely different family
-    const diffFamily = others.filter(s => s.tax!.familySciName !== targetFamily);
-    candidates = diffFamily.length >= count ? diffFamily : similarOrAll(target, others, count);
-
-  } else if (masteryLevel === 1) {
-    // Level 1: same family, different genus preferred
-    const sameFamDiffGenus = others.filter(
-      s => s.tax!.familySciName === targetFamily && s.sciName.split(' ')[0] !== targetGenus,
-    );
-    if (sameFamDiffGenus.length >= count) {
-      candidates = sameFamDiffGenus;
-    } else {
-      const sameFamily = others.filter(s => s.tax!.familySciName === targetFamily);
-      candidates = sameFamily.length >= count ? sameFamily : similarOrAll(target, others, count);
-    }
-
-  } else {
-    // Level 2: same genus preferred (the "easily confused" tier)
-    const sameGenus  = others.filter(s => s.sciName.split(' ')[0] === targetGenus);
-    const sameFamily = others.filter(
-      s => s.tax!.familySciName === targetFamily && s.sciName.split(' ')[0] !== targetGenus,
-    );
-
-    if (sameGenus.length >= count) {
-      candidates = sameGenus;
-    } else if (sameGenus.length > 0) {
-      // Mix genus + family to fill the count
-      const extra = pickRandom(sameFamily, count - sameGenus.length);
-      const combined = [...sameGenus, ...extra];
-      if (combined.length >= count) {
-        candidates = combined;
-      } else {
-        const rest = others.filter(s => !combined.includes(s));
-        candidates = [...combined, ...pickRandom(rest, count - combined.length)];
-      }
-    } else {
-      // No same-genus birds available - fall back to same family
-      candidates = sameFamily.length >= count ? sameFamily : similarOrAll(target, others, count);
-    }
-  }
-
-  // Palette birds are 10× more likely to appear as distractors (weighted sampling)
-  return pickWithPalettePreference(candidates, Math.min(count, candidates.length), paletteCodes);
-}
+// selectDistractors, pickRandom, pickWithPalettePreference and visual-similarity
+// helpers live in ../lib/distractorLogic (imported above).
 
 function pickWeightedType(
   types: QuestionType[],
@@ -301,6 +137,7 @@ router.post('/questions', async (req, res) => {
       historyKeys          = [],
       bannedAudioUrls      = [],
       birderLevel          = 'novice',
+      speciesFilter        = [],
     } = req.body;
 
     const bannedAudioSet = new Set<string>(bannedAudioUrls as string[]);
@@ -377,14 +214,27 @@ router.post('/questions', async (req, res) => {
     const top100Set = new Set(top100Codes);
     filteredPool = [...filteredPool, ...historicalExtras.filter(s => top100Set.has(s.speciesCode))];
 
+    // When the user has a custom species selection, restrict question subjects to those codes.
+    // filteredPool (distractors) is left unfiltered so distractors remain varied when the
+    // selected set is small; selectDistractors prefers selected birds when the pool is large enough.
+    const speciesFilterSet = new Set<string>(speciesFilter as string[]);
+    if (speciesFilterSet.size > 0) {
+      questionPool = questionPool.filter(s => speciesFilterSet.has(s.speciesCode));
+    }
+
     const adaptiveMode = Object.keys(weights as object).length > 0;
     const weightsMap = weights as Record<string, number>;
+    // Species the user has encountered in at least one question type (used to prefer
+    // familiar birds as distractors over completely unintroduced ones).
+    const introducedCodes = adaptiveMode
+      ? new Set<string>(Object.keys(weightsMap).map(k => k.split(':')[0]))
+      : new Set<string>();
 
     const level0KeySet  = new Set<string>(level0Keys as string[]);
     const historyKeySet = new Set<string>(historyKeys as string[]);
 
     const candidates: Candidate[] = buildCandidates(
-      questionPool, filteredPool, recentCodes, weightsMap, types as QuestionType[], adaptiveMode, level0KeySet, paletteCodes,
+      questionPool, filteredPool, recentCodes, weightsMap, types as QuestionType[], adaptiveMode, level0KeySet, paletteCodes, speciesFilterSet,
     );
 
     const palettePlusStrugglingMin = adaptiveMode ? Math.ceil(count * RECENT_UNMASTERED_RATIO) : 0;
@@ -434,7 +284,7 @@ router.post('/questions', async (req, res) => {
             ? filteredPool.filter(s => s.tax?.familySciName !== species.tax!.familySciName)
             : filteredPool;
 
-        const distractorSpecies = selectDistractors(species, distractorPool, masteryLevel, 3, paletteCodes);
+        const distractorSpecies = selectDistractors(species, distractorPool, masteryLevel, 3, paletteCodes, speciesFilterSet, introducedCodes);
         // Fill any gaps (e.g. not enough birds at this mastery tier) with random picks
         while (distractorSpecies.length < 3) {
           const fallback = pickRandom(

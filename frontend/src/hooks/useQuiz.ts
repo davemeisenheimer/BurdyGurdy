@@ -10,6 +10,7 @@ function weightedPick<T>(candidates: Array<{ item: T; weight: number }>): T | nu
 }
 import type { QuizQuestion, QuizConfig, AttributedPhoto, LevelUpEvent, NoLongerStrugglingEvent, BirderLevel } from '../types';
 import { fetchQuizQuestions, fetchBirdPhotos, fetchBirdInfo, fetchRecentSightings } from '../services/remote/api';
+import { loadQuizPrefs } from '../lib/settings';
 import type { RecentSighting } from '../services/remote/api';
 import { db } from '../lib/db';
 import {
@@ -286,6 +287,26 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
         .filter(m => m.mediaType === 'audio')
         .map(m => m.url);
 
+      // Resolve species filter for custom selection mode.
+      let speciesFilter: string[] = [];
+      {
+        const prefs = await loadQuizPrefs();
+        if (prefs.selectionMode === 'custom') {
+          const selectedCodes    = new Set(prefs.selectedSpeciesCodes  ?? []);
+          const selectedFamilies = new Set(prefs.selectedFamilies      ?? []);
+          const selectedOrders   = new Set(prefs.selectedOrders        ?? []);
+          if (selectedCodes.size > 0 || selectedFamilies.size > 0 || selectedOrders.size > 0) {
+            const allRecords = await db.progress.toArray();
+            const resolved = new Set<string>(selectedCodes);
+            for (const r of allRecords) {
+              if (selectedFamilies.size > 0 && r.familySciName && selectedFamilies.has(r.familySciName)) resolved.add(r.speciesCode);
+              if (selectedOrders.size > 0   && r.order          && selectedOrders.has(r.order))           resolved.add(r.speciesCode);
+            }
+            speciesFilter = [...resolved];
+          }
+        }
+      }
+
       const questions = await fetchQuizQuestions(
         cfg.regionCode,
         cfg.questionsPerRound,
@@ -300,6 +321,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
         historyKeys,
         bannedAudioUrls,
         birderLevel,
+        speciesFilter,
       );
 
       if (questions.length === 0) {
@@ -348,7 +370,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
         setRoundLevelUps(prev => [...prev, levelUp]);
         setCurrentMastery(updatedMastery);
       } else {
-        const { levelUp, noLongerStruggling, updatedMastery, advancedFromLevel0 } = await recordAnswer(q.speciesCode, q.type, correct, q.comName, birderLevelToInitialMastery(birderLevel), q.familySciName);
+        const { levelUp, noLongerStruggling, updatedMastery, advancedFromLevel0 } = await recordAnswer(q.speciesCode, q.type, correct, q.comName, birderLevelToInitialMastery(birderLevel), q.familySciName, q.familyComName, q.order, q.orderComName);
         if (levelUp) setRoundLevelUps(prev => [...prev, levelUp]);
         if (noLongerStruggling) setRoundNoLongerStruggling(prev => [...prev, noLongerStruggling]);
         setCurrentMastery(updatedMastery);

@@ -17,6 +17,7 @@ export async function fetchQuizQuestions(
   historyKeys: string[] = [],
   bannedAudioUrls: string[] = [],
   birderLevel?: string,
+  speciesFilter: string[] = [],
 ): Promise<QuizQuestion[]> {
   const res = await api.post<QuizQuestion[]>('/quiz/questions', {
     regionCode,
@@ -32,6 +33,7 @@ export async function fetchQuizQuestions(
     historyKeys,
     bannedAudioUrls,
     birderLevel,
+    speciesFilter,
   });
   return res.data;
 }
@@ -198,6 +200,22 @@ export async function fetchBirdSuggestions(q: string): Promise<BirdSuggestion[]>
   } catch {
     return [];
   }
+}
+
+export interface TaxonomyEntry {
+  speciesCode:   string;
+  familyComName: string;
+  familySciName: string;
+  order:         string;
+  orderComName:  string;
+}
+
+export async function fetchTaxonomy(codes: string[]): Promise<TaxonomyEntry[]> {
+  if (codes.length === 0) return [];
+  const res = await api.get<TaxonomyEntry[]>('/birds/taxonomy', {
+    params: { codes: codes.join(',') },
+  });
+  return res.data;
 }
 
 export async function fetchBirdPhotos(speciesCode: string, comName?: string, sciName?: string, forQuestion = false): Promise<{ primary: AttributedPhoto | null; optional: AttributedPhoto[] }> {

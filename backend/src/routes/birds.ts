@@ -290,6 +290,36 @@ router.get('/audio/:sciName', async (req, res) => {
   }
 });
 
+// GET /api/birds/taxonomy?codes=amro,wbnu,bcch
+// Returns taxonomy fields for the given species codes (comma-separated).
+// Used by the frontend to backfill taxonomy on existing BirdProgress records.
+router.get('/taxonomy', async (req, res) => {
+  const codesParam = String(req.query.codes ?? '').trim();
+  if (!codesParam) return res.json([]);
+  const codes = codesParam.split(',').map(c => c.trim()).filter(Boolean);
+  if (codes.length === 0) return res.json([]);
+
+  try {
+    const taxonomy = await getTaxonomy();
+    const taxMap = new Map(taxonomy.map(t => [t.speciesCode, t]));
+    const result = codes.flatMap(code => {
+      const t = taxMap.get(code);
+      if (!t) return [];
+      return [{
+        speciesCode:   code,
+        familyComName: t.familyComName ?? '',
+        familySciName: t.familySciName ?? '',
+        order:         t.order ?? '',
+        orderComName:  ORDER_COMMON_NAMES[t.order ?? ''] ?? '',
+      }];
+    });
+    res.json(result);
+  } catch (err) {
+    console.error('taxonomy error:', err);
+    res.status(500).json({ error: 'Failed to fetch taxonomy' });
+  }
+});
+
 // GET /api/birds/suggest?q=robin
 // Filters the cached eBird taxonomy (24h TTL) by common or scientific name.
 // Returns up to 10 matches, prioritising starts-with over contains.

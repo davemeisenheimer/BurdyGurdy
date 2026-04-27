@@ -114,13 +114,11 @@ export function FriendsScreen({ userId, userEmail, onBack, onViewFriendLifeList 
   if (!userId) {
     return (
       <div className="h-dvh flex flex-col bg-slate-50">
+        <div className="shrink-0 flex items-center gap-3 px-4 py-4 bg-sky-700">
+          <button onClick={onBack} className="text-white/80 hover:text-white text-4xl leading-none">←</button>
+          <h1 className="font-semibold text-white">Friends</h1>
+        </div>
         <div className="max-w-2xl mx-auto w-full px-4 flex flex-col flex-1 min-h-0">
-          <div className="shrink-0 pt-6">
-            <div className="flex items-center gap-4 mb-6">
-              <button onClick={onBack} className="text-slate-500 hover:text-slate-700 text-5xl">←</button>
-              <h1 className="text-2xl font-bold text-slate-800">Friends</h1>
-            </div>
-          </div>
           <div className="text-slate-500 text-sm mt-8 text-center">
             Sign in to use the Friends feature.
           </div>
@@ -131,17 +129,13 @@ export function FriendsScreen({ userId, userEmail, onBack, onViewFriendLifeList 
 
   return (
     <div className="h-dvh flex flex-col bg-slate-50">
+      <div className="shrink-0 flex items-center gap-3 px-4 py-4 bg-sky-700">
+        <button onClick={onBack} className="text-white/80 hover:text-white text-4xl leading-none">←</button>
+        <h1 className="font-semibold text-white">Friends</h1>
+      </div>
       <div className="max-w-2xl mx-auto w-full px-4 flex flex-col flex-1 min-h-0">
 
-        {/* Header */}
-        <div className="shrink-0 pt-6">
-          <div className="flex items-center gap-4 mb-6">
-            <button onClick={onBack} className="text-slate-500 hover:text-slate-700 text-5xl">←</button>
-            <h1 className="text-2xl font-bold text-slate-800">Friends</h1>
-          </div>
-        </div>
-
-        <div className="overflow-y-auto flex-1 space-y-4 pb-8">
+        <div className="overflow-y-auto flex-1 space-y-4 py-4">
 
           {/* Pending received invites */}
           {pendingInvites.map(invite => (

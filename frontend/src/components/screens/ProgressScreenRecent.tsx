@@ -88,17 +88,19 @@ export function ProgressScreenRecent({ regionCode, recentDays, questionTypes, on
 
   return (
     <div className="h-dvh flex flex-col bg-slate-50">
+
+      {/* Header */}
+      <div className="shrink-0 flex items-center gap-3 px-4 py-4 bg-sky-700">
+        <button onClick={onBack} className="text-white/80 hover:text-white text-4xl leading-none">←</button>
+        <div>
+          <h1 className="font-semibold text-white">{friendDisplayName ? `${friendDisplayName} in Your Region` : 'Recent Progress'}</h1>
+          <p className="text-xs text-sky-100">{regionCode} · past {windowLabel} · {total} birds{friendDisplayName ? ' · your region & window' : ''}</p>
+        </div>
+      </div>
+
       <div className="max-w-2xl mx-auto w-full px-4 flex flex-col flex-1 min-h-0">
 
-        {/* Header */}
-        <div className="shrink-0 pt-6">
-          <div className="flex items-center gap-4 mb-2">
-            <button onClick={onBack} className="text-slate-500 hover:text-slate-700 text-5xl">←</button>
-            <div>
-              <h1 className="text-2xl font-bold text-slate-800">{friendDisplayName ? `${friendDisplayName} in Your Region` : 'Recent Progress'}</h1>
-              <p className="text-sm text-slate-500">{regionCode} · past {windowLabel} · {total} birds{friendDisplayName ? ' · your region & window' : ''}</p>
-            </div>
-          </div>
+        <div className="shrink-0 pt-4">
 
           {/* Summary pills */}
           {!loading && !noCache && (

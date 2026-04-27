@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { db } from '../../lib/db';
+import { loadQuizPrefs, saveQuizPrefs } from '../../lib/settings';
 import type { BirdProgress, QuestionType } from '../../types';
 
 const TYPE_LABELS: Partial<Record<QuestionType, string>> = {
@@ -76,6 +77,22 @@ export function TrimProgressDialog({ regionCode, recentDays, questionTypes, onCl
       .where('[speciesCode+questionType]')
       .anyOf(deleted.map(r => [r.speciesCode, r.questionType]))
       .delete();
+
+    // Remove fully-deleted species from selectedSpeciesCodes in quiz prefs.
+    const deletedSpeciesCodes = new Set(deleted.map(r => r.speciesCode));
+    const remaining = await db.progress.toArray();
+    const remainingCodes = new Set(remaining.map(r => r.speciesCode));
+    const gone = [...deletedSpeciesCodes].filter(c => !remainingCodes.has(c));
+    if (gone.length > 0) {
+      const prefs = await loadQuizPrefs();
+      const newCodes = (prefs.selectedSpeciesCodes ?? []).filter(c => !gone.includes(c));
+      const updated = { ...prefs, selectedSpeciesCodes: newCodes };
+      if (newCodes.length === 0 && (updated.selectedFamilies ?? []).length === 0 && (updated.selectedOrders ?? []).length === 0) {
+        updated.selectionMode = 'all';
+      }
+      await saveQuizPrefs(updated);
+    }
+
     onTrimmed(deleted);
     onClose();
   };

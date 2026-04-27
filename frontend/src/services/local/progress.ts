@@ -1,4 +1,5 @@
 import { db } from '../../lib/db';
+import { fetchTaxonomy } from '../remote/api';
 import { getRegionSpecies } from './region';
 import {
   calcWeight, applyAnswer,
@@ -25,6 +26,9 @@ export async function recordAnswer(
   comName: string,
   initialMasteryLevel = 0,
   familySciName?: string,
+  familyComName?: string,
+  order?: string,
+  orderComName?: string,
 ): Promise<RecordAnswerResult> {
   const existing = await db.progress.get([speciesCode, questionType]);
   const { newState, advancedFromLevel0, levelUp, noLongerStruggling, updatedMastery } = applyAnswer(
@@ -44,6 +48,10 @@ export async function recordAnswer(
     await db.progress.put({
       ...existing,
       comName,
+      familyComName: familyComName ?? existing.familyComName,
+      familySciName: familySciName ?? existing.familySciName,
+      order:         order         ?? existing.order,
+      orderComName:  orderComName  ?? existing.orderComName,
       correct:            newState.correct,
       incorrect:          newState.incorrect,
       lastAsked:          now,
@@ -59,6 +67,10 @@ export async function recordAnswer(
       speciesCode,
       questionType,
       comName,
+      familyComName,
+      familySciName,
+      order,
+      orderComName,
       correct:            newState.correct,
       incorrect:          newState.incorrect,
       lastAsked:          now,
@@ -442,6 +454,33 @@ export async function expireOldMasteredBirds(): Promise<void> {
       weight:             PALETTE_WEIGHT,
     })),
   );
+}
+
+// ── Taxonomy backfill ─────────────────────────────────────────────────────────
+
+/**
+ * One-shot migration: fetches taxonomy fields for any progress records that
+ * predate the custom-selection feature and are missing `order`. Runs once per
+ * session (fire-and-forget from App startup).
+ */
+export async function backfillProgressTaxonomy(): Promise<void> {
+  const records = await db.progress.filter(r => !r.order).toArray();
+  if (records.length === 0) return;
+
+  const codes = [...new Set(records.map(r => r.speciesCode))];
+  const BATCH = 50;
+  const taxMap = new Map<string, { familyComName: string; familySciName: string; order: string; orderComName: string }>();
+  for (let i = 0; i < codes.length; i += BATCH) {
+    const entries = await fetchTaxonomy(codes.slice(i, i + BATCH));
+    for (const e of entries) taxMap.set(e.speciesCode, e);
+  }
+
+  const updated = records.flatMap(r => {
+    const t = taxMap.get(r.speciesCode);
+    if (!t) return [];
+    return [{ ...r, familyComName: r.familyComName ?? t.familyComName, familySciName: r.familySciName ?? t.familySciName, order: t.order, orderComName: t.orderComName }];
+  });
+  if (updated.length > 0) await db.progress.bulkPut(updated);
 }
 
 // ── Re-export weight constants for callers that need them ─────────────────────
