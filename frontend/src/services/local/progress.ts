@@ -7,6 +7,7 @@ import {
   MAX_LEVEL_0_SIZE, MAX_LEVEL_0_SIZE_FIRST, MAX_LEVEL_0_SIZE_SECOND, MAX_LEVEL_0_SIZE_THIRD, MAX_LEVEL_ADVANCED_SIZE,
 } from '../../lib/adaptive';
 import type { AdaptiveParams, RecordAnswerResult } from '../../lib/adaptive';
+import { isStrugglingByWindow } from '../../lib/struggling';
 import type { QuestionType, CachedSpecies, LevelUpEvent, BirdProgress } from '../../types';
 
 // Re-export so call sites that previously imported these from adaptive can
@@ -155,6 +156,20 @@ async function promoteNextForType(
   if (!cache) return;
 
   const toSeed = selectSpeciesToPromote(cache.species, seededCodes, count);
+
+  // Log diagnostic info when approaching Local Legend (few recent unseeded birds left)
+  const recentUnseeded = cache.species.filter(s => !s.isHistorical && !seededCodes.has(s.speciesCode));
+  if (recentUnseeded.length > 0 && recentUnseeded.length <= 5) {
+    const historicalPromoted = toSeed.filter(s => s.isHistorical);
+    console.log(
+      `[palette:${type}] ${recentUnseeded.length} recent unseeded: [${recentUnseeded.map(s => s.comName).join(', ')}]. ` +
+      `Promoting ${toSeed.length}: [${toSeed.map(s => `${s.comName}${s.isHistorical ? '(hist)' : ''}`).join(', ')}].` +
+      (historicalPromoted.length > 0
+        ? ` ⚠️ ${historicalPromoted.length} historical bird(s) promoted while recent birds are unseeded!`
+        : ''),
+    );
+  }
+
   for (const s of toSeed) {
     await addToPaletteForType(s.speciesCode, s.comName, type, initialMasteryLevel);
   }
@@ -366,8 +381,9 @@ export async function getAdaptiveParams(): Promise<AdaptiveParams> {
 
   const weights: Record<string, number> = {};
   const paletteSpeciesCodes: string[] = [];
-  const level0Keys: string[] = [];
+  const paletteKeys: string[] = [];
   const historyKeys: string[] = [];
+  const strugglingKeys: string[] = [];
 
   for (const [speciesCode, speciesRecords] of bySpecies) {
     // A species is banned only when the user has excluded ALL its question-type records.
@@ -380,14 +396,19 @@ export async function getAdaptiveParams(): Promise<AdaptiveParams> {
     for (const record of speciesRecords) {
       const key    = `${speciesCode}:${record.questionType}`;
       weights[key] = calcWeight(record.isMastered ?? false, record.favourited ?? false, record.recentAnswers, record.correct ?? 0, record.incorrect ?? 0);
-      if (record.isMastered) historyKeys.push(key);
+      if (record.isMastered) {
+        historyKeys.push(key);
+        if (isStrugglingByWindow(record.recentAnswers ?? [])) {
+          strugglingKeys.push(key);
+        }
+      }
       if (!bannedSet.has(speciesCode) && !(record.isMastered ?? false)) {
-        level0Keys.push(key);
+        paletteKeys.push(key);
       }
     }
   }
 
-  return { weights, masteryLevels, banned: [...bannedSet], paletteSpeciesCodes, level0Keys, historyKeys };
+  return { weights, masteryLevels, banned: [...bannedSet], paletteSpeciesCodes, paletteKeys, historyKeys, strugglingKeys };
 }
 
 // ── Legacy helpers ────────────────────────────────────────────────────────────

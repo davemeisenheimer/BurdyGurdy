@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { QuizConfig } from './types';
-import type { BirdProgress } from './types';
+import type { QuizConfig, BirdProgress, CachedSpecies } from './types';
 import { HomeScreen } from './components/screens/HomeScreen';
 import { QuizScreen } from './components/screens/QuizScreen';
 import { ResultScreen } from './components/screens/ResultScreen';
@@ -25,13 +24,14 @@ import { useQuiz } from './hooks/useQuiz';
 import { useNotifications } from './hooks/useNotifications';
 import { loadSettings, saveSettings, loadQuizPrefs, saveQuizPrefs, resetUserSettings, loadFocusStruggling, saveFocusStruggling, DEFAULTS as SETTINGS_DEFAULTS } from './lib/settings';
 import type { AppSettings, QuizConfigPrefs } from './lib/settings';
-import { checkVictoryCondition, hasSeenVictory, markVictorySeen, getVictorySeen, mergeVictorySeen, describeMastery, describeWindow } from './lib/victory';
+import { findEarnedAward, getVictorySeen, mergeVictorySeen, getVictoryLog, mergeVictoryLog, describeMastery, describeWindow } from './lib/victory';
+import type { AwardTier, VictoryLogEntry } from './lib/victory';
 import { locateRegion } from './services/remote/api';
 import type { LocateResult, RegionalSighting, RecentSighting } from './services/remote/api';
 import { db, switchToUserDb } from './lib/db';
 import { supabase } from './lib/supabase';
 import type { SupabaseUser } from './lib/supabase';
-import { uploadProgress, downloadAndReplace, uploadSettings, downloadSettings, downloadUserBlockedPhotos, deleteAllUserBlockedPhotos, uploadUserBlockedPhoto, submitMediaReport, fetchAdminBlockedMedia, deleteCloudProgressRecords, uploadRegionSnapshot, downloadRegionSnapshot, getCloudUploadTime, getLocalSyncedAt, getNeedsUpload } from './services/remote/sync';
+import { uploadProgress, downloadAndReplace, uploadSettings, uploadAchievements, downloadSettings, fetchFriendVictoryLog, downloadUserBlockedPhotos, deleteAllUserBlockedPhotos, uploadUserBlockedPhoto, submitMediaReport, fetchAdminBlockedMedia, deleteCloudProgressRecords, uploadRegionSnapshot, downloadRegionSnapshot, getCloudUploadTime, getLocalSyncedAt, getNeedsUpload } from './services/remote/sync';
 import { checkBirdsToExpire, expireOldMasteredBirds, backfillProgressTaxonomy } from './services/local/progress';
 import { getRegionSpecies } from './services/local/region';
 import { loadSnapshot, saveSnapshot, buildSnapshot, computeRegionUpdate } from './services/local/regionSnapshot';
@@ -94,7 +94,9 @@ export default function App() {
   const [pendingRegionUpdate, setPendingRegionUpdate] = useState<{
     info: RegionUpdateInfo;
     records: BirdProgress[];
-    pendingConfig: QuizConfig;
+    pendingConfig: QuizConfig | null;
+    regionCode: string;
+    back: number;
   } | null>(null);
   const pendingStartConfigRef = useRef<QuizConfig | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem('burdygurdy_onboarding_complete'));
@@ -114,6 +116,7 @@ export default function App() {
   const [progressSelectedSpecies, setProgressSelectedSpecies] = useState<{ speciesCode: string; comName: string } | null>(null);
   const [friendProgressRecords, setFriendProgressRecords] = useState<BirdProgress[]>([]);
   const [friendProgressName, setFriendProgressName]       = useState('');
+  const [friendVictoryLog, setFriendVictoryLog]           = useState<VictoryLogEntry[]>([]);
   const [hasPendingInvites, setHasPendingInvites]         = useState(false);
   const [selectionPrefs, setSelectionPrefs] = useState<Pick<QuizConfigPrefs, 'selectionMode' | 'selectedSpeciesCodes' | 'selectedFamilies' | 'selectedOrders'>>({ selectionMode: 'all', selectedSpeciesCodes: [], selectedFamilies: [], selectedOrders: [] });
   const [syncVersion, setSyncVersion]           = useState(0);
@@ -124,6 +127,7 @@ export default function App() {
   const [masteryFactEvent, setMasteryFactEvent] = useState<LevelUpEvent | null>(null);
   const hasShownFactThisRoundRef = useRef(false);
   const prevGraduatedCountRef    = useRef(0);
+  const [awardTier, setAwardTier] = useState<AwardTier>('localLegend');
 
   // Loads all per-user settings from IndexedDB and populates React state.
   // Called once on mount (via getSession) and again after every switchToUserDb
@@ -258,6 +262,7 @@ export default function App() {
       selectedOrders:       mergedPrefs.selectedOrders       ?? [],
     });
     await mergeVictorySeen(remote.victorySeen);
+    await mergeVictoryLog(remote.victoryLog);
   };
 
   // Three debounced inactivity timers — all reset on any user interaction.
@@ -359,7 +364,10 @@ export default function App() {
     const newPrefs = { ...existing, questionTypes: prefs.questionTypes, mode: prefs.mode, questionsPerRound: prefs.questionsPerRound, groupId: prefs.groupId, regionCode: prefs.regionCode };
     await saveQuizPrefs(newPrefs);
     setConfig(c => ({ ...c, ...newPrefs }));
-    if (user) uploadSettings(user.id, settings, newPrefs, await getVictorySeen()).catch(() => {});
+    if (user) {
+      uploadSettings(user.id, settings, newPrefs).catch(() => {});
+      Promise.all([getVictorySeen(), getVictoryLog()]).then(([vs, vl]) => uploadAchievements(user.id, vs, vl)).catch(() => {});
+    }
   };
 
   const handleSelectionChange = async (newSelectionPrefs: { selectionMode: 'all' | 'custom'; selectedSpeciesCodes: string[]; selectedFamilies: string[]; selectedOrders: string[] }) => {
@@ -372,7 +380,10 @@ export default function App() {
     setConfig(c => ({ ...c, regionCode: code }));
     const prefs = { ...await loadQuizPrefs(), regionCode: code };
     await saveQuizPrefs(prefs);
-    if (user) uploadSettings(user.id, settings, prefs, await getVictorySeen()).catch(() => {});
+    if (user) {
+      uploadSettings(user.id, settings, prefs).catch(() => {});
+      Promise.all([getVictorySeen(), getVictoryLog()]).then(([vs, vl]) => uploadAchievements(user.id, vs, vl)).catch(() => {});
+    }
   };
 
   // On load, fetch admin-blocked media for all users (including guests)
@@ -477,6 +488,7 @@ export default function App() {
                 selectedOrders:       mergedPrefs.selectedOrders       ?? [],
               });
               await mergeVictorySeen(remote.victorySeen);
+              await mergeVictoryLog(remote.victoryLog);
             } else if (isNewSignIn) {
               // Brand-new user, no cloud settings anywhere - reset stale local prefs
               // (which may belong to a previous user on this device) and run the wizard.
@@ -620,6 +632,42 @@ export default function App() {
     });
   };
 
+  // Checks the region snapshot against fresh species data and shows the update
+  // dialog if the window changed. Returns true when the dialog was shown.
+  const applyRegionUpdate = useCallback(async (
+    regionCode: string,
+    back: number,
+    currentSpecies: CachedSpecies[],
+    progressRecords: BirdProgress[],
+    pendingConfig: QuizConfig | null,
+  ): Promise<boolean> => {
+    const snapshot = await loadSnapshot();
+    const snapshotMatches = snapshot?.regionCode === regionCode && snapshot?.back === back;
+    if (!snapshotMatches) {
+      const newSnap = buildSnapshot(regionCode, back, currentSpecies);
+      void saveSnapshot(newSnap);
+      if (user) uploadRegionSnapshot(user.id, newSnap).catch(() => {});
+      return false;
+    }
+    const updateInfo = computeRegionUpdate(currentSpecies, snapshot!);
+    if (!updateInfo) return false;
+    setPendingRegionUpdate({ info: updateInfo, records: progressRecords, pendingConfig, regionCode, back });
+    return true;
+  }, [user]);
+
+  // Passed to progress screens so they can trigger the update dialog after
+  // refreshing the region cache. Loads species (from cache) and records itself
+  // so the screens don't need to pass data back up.
+  const handleRegionRefresh = useCallback(async () => {
+    const regionCode = config.regionCode;
+    const back = config.recentDays ?? 30;
+    const [currentSpecies, allRecords] = await Promise.all([
+      getRegionSpecies(regionCode, back),
+      db.progress.toArray(),
+    ]);
+    await applyRegionUpdate(regionCode, back, currentSpecies, allRecords, null);
+  }, [applyRegionUpdate, config.regionCode, config.recentDays]);
+
   const handleStart = async (newConfig: QuizConfig) => {
     const existing = await loadQuizPrefs();
     const newPrefs = {
@@ -631,7 +679,10 @@ export default function App() {
       groupId: newConfig.groupId,
     };
     await saveQuizPrefs(newPrefs);
-    if (user) uploadSettings(user.id, settings, newPrefs, await getVictorySeen()).catch(() => {});
+    if (user) {
+      uploadSettings(user.id, settings, newPrefs).catch(() => {});
+      Promise.all([getVictorySeen(), getVictoryLog()]).then(([vs, vl]) => uploadAchievements(user.id, vs, vl)).catch(() => {});
+    }
     const fullConfig = { ...newConfig, recentDays: RECENT_DAYS[settings.recentWindow] };
 
     if (settings.expireMasteredBirds && newConfig.mode === 'adaptive') {
@@ -646,28 +697,20 @@ export default function App() {
     // Check whether the region sightings window has changed since the last quiz
     if (newConfig.mode === 'adaptive') {
       const back = fullConfig.recentDays ?? 30;
-      const currentSpecies = await getRegionSpecies(fullConfig.regionCode, back);
-      const snapshot = await loadSnapshot();
-      const snapshotMatches = snapshot?.regionCode === fullConfig.regionCode && snapshot?.back === back;
-      if (!snapshotMatches) {
-        // First run or region/back changed - save baseline silently
-        const newSnap = buildSnapshot(fullConfig.regionCode, back, currentSpecies);
-        void saveSnapshot(newSnap);
-        if (user) uploadRegionSnapshot(user.id, newSnap).catch(() => {});
-      } else {
-        const updateInfo = computeRegionUpdate(currentSpecies, snapshot!);
-        if (updateInfo) {
-          const allRecords = await db.progress.toArray();
-          setPendingRegionUpdate({ info: updateInfo, records: allRecords, pendingConfig: fullConfig });
-          // Preload quiz questions while the dialog is open
-          setConfig(fullConfig);
-          startQuiz({
-            ...fullConfig,
-            questionTypes: expandQuestionTypes(fullConfig.questionTypes, settings),
-            onlyStruggling: focusStruggling,
-          });
-          return;
-        }
+      const [currentSpecies, allRecords] = await Promise.all([
+        getRegionSpecies(fullConfig.regionCode, back),
+        db.progress.toArray(),
+      ]);
+      const showed = await applyRegionUpdate(fullConfig.regionCode, back, currentSpecies, allRecords, fullConfig);
+      if (showed) {
+        // Preload quiz questions while the dialog is open
+        setConfig(fullConfig);
+        startQuiz({
+          ...fullConfig,
+          questionTypes: expandQuestionTypes(fullConfig.questionTypes, settings),
+          onlyStruggling: focusStruggling,
+        });
+        return;
       }
     }
 
@@ -676,16 +719,14 @@ export default function App() {
 
   const handleRegionUpdateDismiss = () => {
     if (!pendingRegionUpdate) return;
-    const { pendingConfig } = pendingRegionUpdate;
-    const back = pendingConfig.recentDays ?? 30;
-    // currentSpecies is already cached in memory from handleStart; rebuild snapshot from it
-    getRegionSpecies(pendingConfig.regionCode, back).then(currentSpecies => {
-      const newSnap = buildSnapshot(pendingConfig.regionCode, back, currentSpecies);
+    const { pendingConfig, regionCode, back } = pendingRegionUpdate;
+    getRegionSpecies(regionCode, back).then(currentSpecies => {
+      const newSnap = buildSnapshot(regionCode, back, currentSpecies);
       void saveSnapshot(newSnap);
       if (user) uploadRegionSnapshot(user.id, newSnap).catch(() => {});
     }).catch(() => {});
     setPendingRegionUpdate(null);
-    setScreen('quiz');
+    if (pendingConfig) setScreen('quiz');
   };
 
   const handleNext = () => {
@@ -702,7 +743,10 @@ export default function App() {
   const handleSaveSettings = async (s: AppSettings) => {
     setSettings(s);
     await saveSettings(s);
-    if (user) uploadSettings(user.id, s, await loadQuizPrefs(), await getVictorySeen()).catch(() => {});
+    if (user) {
+      uploadSettings(user.id, s, await loadQuizPrefs()).catch(() => {});
+      Promise.all([getVictorySeen(), getVictoryLog()]).then(([vs, vl]) => uploadAchievements(user.id, vs, vl)).catch(() => {});
+    }
   };
 
   const handleUpdateSettings = (updates: Partial<AppSettings>) => {
@@ -743,9 +787,10 @@ export default function App() {
     (async () => {
       const snapshot = await loadSnapshot();
       const snapshotKey = snapshot?.savedAt ?? new Date().toISOString();
-      const won = await checkVictoryCondition(config.regionCode, config.recentDays ?? 30, expandedTypes);
-      if (won && roundLevelUps.some(e => e.graduated) && !await hasSeenVictory(snapshotKey, expandedTypes)) {
-        await markVictorySeen(snapshotKey, expandedTypes);
+      const graduatedCodes = new Set(roundLevelUps.filter(e => e.graduated).map(e => e.speciesCode));
+      const tier = await findEarnedAward(config.regionCode, config.recentDays ?? 30, expandedTypes, snapshotKey, graduatedCodes);
+      if (tier) {
+        setAwardTier(tier);
         sendFriendNotification('victory', {
           masteryDesc: describeMastery(expandedTypes),
           windowDesc: describeWindow(settings.recentWindow),
@@ -769,6 +814,15 @@ export default function App() {
     if (focusStruggling && !showFocusModeToggle) setFocusStruggling(false);
   }, [focusStruggling, showFocusModeToggle]);
 
+  // Dev-only test hook: window.__triggerAward('localLegend') to preview any victory screen tier
+  useEffect(() => {
+    (window as unknown as Record<string, unknown>).__triggerAward = (tier: AwardTier) => {
+      setAwardTier(tier);
+      setScreen('victory');
+    };
+    return () => { delete (window as unknown as Record<string, unknown>).__triggerAward; };
+  }, []);
+
   // Check for pending friend invites and subscribe to new ones in real-time
   useEffect(() => {
     if (!user?.email) { setHasPendingInvites(false); return; }
@@ -788,8 +842,12 @@ export default function App() {
   }, [user?.email]);
 
   async function handleViewFriendLifeList(friendUserId: string, displayName: string) {
-    const records = await fetchFriendProgress(friendUserId).catch(() => []);
+    const [records, log] = await Promise.all([
+      fetchFriendProgress(friendUserId).catch(() => []),
+      fetchFriendVictoryLog(friendUserId).catch(() => []),
+    ]);
     setFriendProgressRecords(records);
+    setFriendVictoryLog(log);
     setFriendProgressName(displayName);
     setScreen('friendprogress');
   }
@@ -966,6 +1024,7 @@ export default function App() {
           onHistoryCleared={() => {
             setSelectionPrefs({ selectionMode: 'all', selectedSpeciesCodes: [], selectedFamilies: [], selectedOrders: [] });
           }}
+          onRegionRefresh={handleRegionRefresh}
         />
       )}
 
@@ -1084,6 +1143,7 @@ export default function App() {
             ? setProgressSelectedSpecies
             : s => { setProgressSelectedSpecies(s); setPrevScreen('recentprogress'); setScreen('birdinfo'); }}
           selectedSpeciesCode={isDesktop ? progressSelectedSpecies?.speciesCode : undefined}
+          onRegionRefresh={handleRegionRefresh}
         />
       )}
 
@@ -1100,6 +1160,7 @@ export default function App() {
 
       {screen === 'victory' && (
         <VictoryScreen
+          awardTier={awardTier}
           recentWindow={settings.recentWindow}
           questionTypes={expandQuestionTypes(config.questionTypes, settings)}
           onKeepPlaying={() => handleStart(config)}
@@ -1145,6 +1206,7 @@ export default function App() {
           recentDays={RECENT_DAYS[settings.recentWindow ?? 'month']}
           onRecentProgress={() => setScreen('friendrecentprogress')}
           overrideRecords={friendProgressRecords}
+          overrideVictoryLog={friendVictoryLog}
           friendDisplayName={friendProgressName}
         />
       )}
@@ -1184,7 +1246,11 @@ export default function App() {
               <button
                 onClick={async () => {
                   await uploadProgress(user.id).catch(() => {});
-                  await uploadSettings(user.id, settings, await loadQuizPrefs(), await getVictorySeen());
+                  const [prefs, victorySeen, victoryLog] = await Promise.all([loadQuizPrefs(), getVictorySeen(), getVictoryLog()]);
+                  await Promise.all([
+                    uploadSettings(user.id, settings, prefs),
+                    uploadAchievements(user.id, victorySeen, victoryLog),
+                  ]);
                   const blocked = await db.blockedPhotos.toArray();
                   await Promise.all(blocked.map(p => uploadUserBlockedPhoto(user.id, p.url)));
                   setShowUploadPrompt(false);
@@ -1235,7 +1301,10 @@ export default function App() {
         <RegionUpdateDialog
           info={pendingRegionUpdate.info}
           progressRecords={pendingRegionUpdate.records}
-          questionTypes={expandQuestionTypes(pendingRegionUpdate.pendingConfig.questionTypes, settings)}
+          questionTypes={expandQuestionTypes(
+            pendingRegionUpdate.pendingConfig?.questionTypes ?? config.questionTypes,
+            settings,
+          )}
           onDismiss={handleRegionUpdateDismiss}
         />
       )}

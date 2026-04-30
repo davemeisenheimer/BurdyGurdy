@@ -130,10 +130,10 @@ describe('categoriseRecentBirds', () => {
     expect(result[0].category).toBe('notAsked');
   });
 
-  it('returns birds in the same order as recentSpecies input', () => {
-    const species = [makeSpecies('a'), makeSpecies('b'), makeSpecies('c')];
+  it('returns birds sorted alphabetically by common name within each category', () => {
+    const species = [makeSpecies('chickadee'), makeSpecies('warbler'), makeSpecies('bluebird')];
     const result  = categoriseRecentBirds(species, [], TYPES);
-    expect(result.map(r => r.speciesCode)).toEqual(['a', 'b', 'c']);
+    expect(result.map(r => r.speciesCode)).toEqual(['bluebird', 'chickadee', 'warbler']);
   });
 });
 

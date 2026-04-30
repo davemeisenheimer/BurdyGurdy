@@ -6,9 +6,9 @@ import { BACKYARD_FAMILIES, GROUP_ORDERS, ORDER_COMMON_NAMES } from '../constant
 import { getSupabaseAdmin } from '../lib/supabase';
 import { cache } from '../cache';
 import {
-  RECENT_UNMASTERED_RATIO, XC_FETCH_BATCH_SIZE,
+  PALETTE_AND_SM_RATIO, XC_FETCH_BATCH_SIZE,
 } from '@birdygurdy/shared';
-import { buildCandidates, applyRecentUnmasteredGuarantee, applyAffinityBoosts, pickFromPool, splitCandidates } from '../lib/candidateLogic';
+import { buildCandidates, applyPaletteSMGuarantee, applyAffinityBoosts, pickFromPool, splitCandidates } from '../lib/candidateLogic';
 import { filterRecordings, weightedSampleByDuration } from '../lib/recordingFilter';
 import { selectDistractors, pickRandom } from '../lib/distractorLogic';
 import type { PoolSpecies, Candidate } from '../lib/candidateLogic';
@@ -133,8 +133,9 @@ router.post('/questions', async (req, res) => {
       banned               = [],
       paletteSpeciesCodes  = [],
       back                 = 1,
-      level0Keys           = [],
+      paletteKeys          = [],
       historyKeys          = [],
+      strugglingKeys       = [],
       bannedAudioUrls      = [],
       birderLevel          = 'novice',
       speciesFilter        = [],
@@ -230,19 +231,20 @@ router.post('/questions', async (req, res) => {
       ? new Set<string>(Object.keys(weightsMap).map(k => k.split(':')[0]))
       : new Set<string>();
 
-    const level0KeySet  = new Set<string>(level0Keys as string[]);
-    const historyKeySet = new Set<string>(historyKeys as string[]);
+    const paletteKeySet   = new Set<string>(paletteKeys as string[]);
+    const historyKeySet   = new Set<string>(historyKeys as string[]);
+    const strugglingKeySet = new Set<string>(strugglingKeys as string[]);
 
     const candidates: Candidate[] = buildCandidates(
-      questionPool, filteredPool, recentCodes, weightsMap, types as QuestionType[], adaptiveMode, level0KeySet, paletteCodes, speciesFilterSet,
+      questionPool, filteredPool, recentCodes, weightsMap, types as QuestionType[], adaptiveMode, paletteKeySet, paletteCodes, speciesFilterSet, strugglingKeySet,
     );
 
-    const palettePlusStrugglingMin = adaptiveMode ? Math.ceil(count * RECENT_UNMASTERED_RATIO) : 0;
+    const palettePlusStrugglingMin = adaptiveMode ? Math.ceil(count * PALETTE_AND_SM_RATIO) : 0;
 
     let picked: Candidate[];
     if (adaptiveMode && palettePlusStrugglingMin > 0) {
       const { ruCandidates, smCandidates, otherCandidates } = splitCandidates(
-        candidates, recentCodes, level0KeySet, historyKeySet,
+        candidates, paletteKeySet, strugglingKeySet,
       );
 
       // Unmastered birds use target=count+5 so replacement fill lets them repeat naturally
@@ -409,21 +411,11 @@ router.post('/questions', async (req, res) => {
 
     let finalQuestions: QuizQuestion[];
     if (adaptiveMode && palettePlusStrugglingMin > 0) {
-      const ruValidCount = allValid.filter(q => {
-        const k = `${q.speciesCode}:${q.type}`;
-        const wt = (weightsMap[k] ?? 20);
-        const np = (recentCodes.has(q.speciesCode) && wt >= 5) || level0KeySet.has(k);
-        return np && !historyKeySet.has(k);
-      }).length;
-      const smValidCount = allValid.filter(q => {
-        const k = `${q.speciesCode}:${q.type}`;
-        const wt = (weightsMap[k] ?? 20);
-        const np = recentCodes.has(q.speciesCode) && wt >= 5;
-        return np && historyKeySet.has(k);
-      }).length;
+      const ruValidCount = allValid.filter(q => paletteKeySet.has(`${q.speciesCode}:${q.type}`)).length;
+      const smValidCount = allValid.filter(q => strugglingKeySet.has(`${q.speciesCode}:${q.type}`)).length;
       console.log(`[quiz] allValid: ${allValid.length}, ruValid: ${ruValidCount}, smValid: ${smValidCount}, target: ${palettePlusStrugglingMin}/${count}`);
-      finalQuestions = applyRecentUnmasteredGuarantee(
-        allValid, recentCodes, weightsMap, count, palettePlusStrugglingMin, level0KeySet, historyKeySet,
+      finalQuestions = applyPaletteSMGuarantee(
+        allValid, recentCodes, weightsMap, count, palettePlusStrugglingMin, paletteKeySet, strugglingKeySet,
       );
     } else {
       finalQuestions = allValid.slice(0, count);

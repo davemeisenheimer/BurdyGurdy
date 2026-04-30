@@ -7,7 +7,8 @@
 
 import type { QuestionType } from '../routes/quiz';
 import {
-  NON_RECENT_MULTIPLIER, NEW_ENCOUNTER_WEIGHT, MASTERED_FLOOR_WEIGHT,
+  NON_RECENT_MASTERED_DISCOUNT, NON_RECENT_PALETTE_DISCOUNT,
+  NEW_ENCOUNTER_WEIGHT, MASTERED_FLOOR_WEIGHT,
   ACTIVE_PALETTE_MIN_WEIGHT, UNMASTERED_FLOOR_RATIO,
   AFFINITY_GENUS_BOOST, AFFINITY_FAMILY_BOOST,
 } from '@birdygurdy/shared';
@@ -25,18 +26,17 @@ export interface Candidate {
   weight: number;
 }
 
-// NON_RECENT_MULTIPLIER, NEW_ENCOUNTER_WEIGHT, MASTERED_FLOOR_WEIGHT,
-// ACTIVE_PALETTE_MIN_WEIGHT imported from @birdygurdy/shared above.
-
 /**
  * Builds the weighted candidate list for question selection.
  *
  * Three tiers (adaptive mode only):
  *  1. Recent window birds - always candidates.
  *     - New encounters (not in weightsMap): weight = NEW_ENCOUNTER_WEIGHT
- *     - Unmastered (w ≥ 5): weight = w
- *     - Mastered (w < 5): weight = max(w, MASTERED_FLOOR_WEIGHT)
- *  2. Non-recent birds in weightsMap - heavily discounted (× NON_RECENT_MULTIPLIER).
+ *     - Any bird with a weight: weight = max(w, MASTERED_FLOOR_WEIGHT)
+ *  2. Non-recent birds in weightsMap - discounted by category:
+ *     - Unmastered palette birds (paletteKeys): × NON_RECENT_PALETTE_DISCOUNT, floored at ACTIVE_PALETTE_MIN_WEIGHT
+ *     - Struggling mastered birds (strugglingKeys): × NON_RECENT_PALETTE_DISCOUNT
+ *     - Non-struggling mastered birds: × NON_RECENT_MASTERED_DISCOUNT (heavy)
  *  3. Non-recent birds not in weightsMap - excluded.
  *
  * Non-adaptive mode: all questionPool birds at weight = 1, no non-recent birds.
@@ -48,9 +48,10 @@ export function buildCandidates(
   weightsMap: Record<string, number>,
   types: QuestionType[],
   adaptiveMode: boolean,
-  level0Keys: Set<string> = new Set(),
+  paletteKeys: Set<string> = new Set(),
   paletteCodes: Set<string> = new Set(),
   speciesFilterSet: Set<string> = new Set(),
+  strugglingKeys: Set<string> = new Set(),
 ): Candidate[] {
   const candidates: Candidate[] = [];
 
@@ -65,10 +66,10 @@ export function buildCandidates(
       } else if (w === undefined) {
         // Only introduce a new encounter for this specific type if
         // maintainLevel0Palette has explicitly seeded it (putting its key in
-        // level0Keys). The old paletteCodes check was too broad - a bird with
+        // paletteKeys). The old paletteCodes check was too broad - a bird with
         // an active family/song record could bypass palette ordering and be
         // introduced as a new image question before the queue reached it.
-        if (!level0Keys.has(key)) continue;
+        if (!paletteKeys.has(key)) continue;
         weight = NEW_ENCOUNTER_WEIGHT;
       } else {
         weight = Math.max(w, MASTERED_FLOOR_WEIGHT);
@@ -77,9 +78,7 @@ export function buildCandidates(
     }
   }
 
-  // Pass 2: Non-recent palette birds (long-term retention, rarely asked)
-  // Exception: level-0 question-type keys keep their full learning weight even
-  // outside the recent window - active learning trumps the observation window.
+  // Pass 2: Non-recent birds (long-term retention, discounted by category)
   if (adaptiveMode) {
     for (const species of filteredPool) {
       if (recentCodes.has(species.speciesCode)) continue;
@@ -88,9 +87,17 @@ export function buildCandidates(
         const key = `${species.speciesCode}:${t}`;
         const w = weightsMap[key];
         if (w === undefined) continue;
-        const weight = level0Keys.has(key)
-          ? Math.max(w, NEW_ENCOUNTER_WEIGHT)          // level 0 for this type: keep full palette weight
-          : Math.max(w * NON_RECENT_MULTIPLIER, 0.001); // others: heavy discount
+        let weight: number;
+        if (paletteKeys.has(key)) {
+          // Unmastered palette: light discount, stay above active floor
+          weight = Math.max(w * NON_RECENT_PALETTE_DISCOUNT, ACTIVE_PALETTE_MIN_WEIGHT);
+        } else if (strugglingKeys.has(key)) {
+          // Struggling mastered: same light discount as palette — still needs active practice
+          weight = w * NON_RECENT_PALETTE_DISCOUNT;
+        } else {
+          // Non-struggling mastered: heavy discount, occasional review only
+          weight = Math.max(w * NON_RECENT_MASTERED_DISCOUNT, 0.001);
+        }
         candidates.push({ species, type: t, weight });
       }
     }
@@ -101,39 +108,47 @@ export function buildCandidates(
 
 /**
  * Guarantees a minimum ratio of "needs practice" questions, split evenly between:
- *   - Truly unmastered (active palette, not yet graduated)
- *   - Struggling mastered (graduated but accuracy below threshold)
+ *   - Truly unmastered (active palette, identified by paletteKeySet membership)
+ *   - Struggling mastered (graduated but accuracy below threshold, identified by strugglingKeySet)
  *
  * total    = palettePlusStrugglingMin  (≈ 67% of count)
- * ruFloor  = ceil(total / 2)      - minimum unmastered
- * smFloor  = total − ruFloor      - minimum struggling-mastered
+ * ruFloor  = ceil(total × UNMASTERED_FLOOR_RATIO) - minimum unmastered
+ * smFloor  = total − ruFloor           - minimum struggling-mastered
+ *
+ * Within each bucket, window birds are sorted first (then by weight descending),
+ * so window-unmastered birds naturally fill the first RU slots — acting as a
+ * window guarantee without a hard-coded reservation.
  *
  * Each bucket backfills for the other's shortfall, then regular mastered
  * birds fill any remaining slots. Shuffles the final result.
  */
-export function applyRecentUnmasteredGuarantee<T extends { speciesCode: string; type: string }>(
+export function applyPaletteSMGuarantee<T extends { speciesCode: string; type: string }>(
   allValid: T[],
   recentCodes: Set<string>,
   weightsMap: Record<string, number>,
   count: number,
   palettePlusStrugglingMin: number,
-  level0Keys: Set<string> = new Set(),
-  historyKeySet: Set<string> = new Set(),
+  paletteKeySet: Set<string> = new Set(),
+  strugglingKeySet: Set<string> = new Set(),
 ): T[] {
   const key = (q: T) => `${q.speciesCode}:${q.type}`;
   const w   = (q: T) => weightsMap[key(q)] ?? NEW_ENCOUNTER_WEIGHT;
 
-  const needsPractice = (q: T) =>
-    (recentCodes.has(q.speciesCode) && w(q) >= ACTIVE_PALETTE_MIN_WEIGHT) || level0Keys.has(key(q));
+  const isUnmastered = (q: T) => paletteKeySet.has(key(q));
+  const isStruggling = (q: T) => strugglingKeySet.has(key(q));
 
-  // Unmastered: needs practice AND not yet graduated
-  const isUnmastered = (q: T) => needsPractice(q) && !historyKeySet.has(key(q));
-  // Struggling mastered: needs practice AND already graduated
-  const isStruggling = (q: T) => needsPractice(q) &&  historyKeySet.has(key(q));
+  // Sort: window birds first, then by weight descending within each group.
+  // Window-unmastered birds will naturally be picked before non-window ones.
+  const sortByWindowThenWeight = (a: T, b: T): number => {
+    const aRecent = recentCodes.has(a.speciesCode) ? 1 : 0;
+    const bRecent = recentCodes.has(b.speciesCode) ? 1 : 0;
+    if (aRecent !== bRecent) return bRecent - aRecent;
+    return w(b) - w(a);
+  };
 
-  const ruValid    = allValid.filter(isUnmastered);
-  const smValid    = allValid.filter(isStruggling);
-  const otherValid = allValid.filter(q => !needsPractice(q));
+  const ruValid    = allValid.filter(isUnmastered).sort(sortByWindowThenWeight);
+  const smValid    = allValid.filter(isStruggling).sort(sortByWindowThenWeight);
+  const otherValid = allValid.filter(q => !isUnmastered(q) && !isStruggling(q));
 
   const total   = palettePlusStrugglingMin;
   const ruFloor = Math.ceil(total * UNMASTERED_FLOOR_RATIO);
@@ -208,30 +223,20 @@ export function pickFromPool(pool: Candidate[], target: number): Candidate[] {
 
 /**
  * Splits a flat candidate list into the three buckets used by the quiz engine:
- *   ruCandidates    – unmastered palette birds (weight ≥ 5, not yet graduated)
- *   smCandidates    – struggling-mastered birds (weight ≥ 5, already graduated)
+ *   ruCandidates    – unmastered palette birds (membership in paletteKeySet)
+ *   smCandidates    – struggling mastered birds (membership in strugglingKeySet)
  *   otherCandidates – everything else (review-only mastered birds)
  *
- * A bird qualifies for ru/sm when it is either in the recent eBird sighting
- * window OR in level0Keys (palette birds that happen to be outside the current
- * observation window still need practice).
+ * Classification is explicit: paletteKeySet / strugglingKeySet are computed on
+ * the frontend from actual progress records, not inferred from weight or recency.
  */
 export function splitCandidates(
   candidates: Candidate[],
-  recentCodes: Set<string>,
-  level0KeySet: Set<string>,
-  historyKeySet: Set<string>,
+  paletteKeySet: Set<string>,
+  strugglingKeySet: Set<string>,
 ): { ruCandidates: Candidate[]; smCandidates: Candidate[]; otherCandidates: Candidate[] } {
-  const isUnmastered = (c: Candidate) => {
-    const key = `${c.species.speciesCode}:${c.type}`;
-    return (recentCodes.has(c.species.speciesCode) || level0KeySet.has(key)) &&
-      c.weight >= ACTIVE_PALETTE_MIN_WEIGHT && !historyKeySet.has(key);
-  };
-  const isStruggling = (c: Candidate) => {
-    const key = `${c.species.speciesCode}:${c.type}`;
-    return (recentCodes.has(c.species.speciesCode) || level0KeySet.has(key)) &&
-      c.weight >= ACTIVE_PALETTE_MIN_WEIGHT && historyKeySet.has(key);
-  };
+  const isUnmastered = (c: Candidate) => paletteKeySet.has(`${c.species.speciesCode}:${c.type}`);
+  const isStruggling = (c: Candidate) => strugglingKeySet.has(`${c.species.speciesCode}:${c.type}`);
   return {
     ruCandidates:    candidates.filter(isUnmastered),
     smCandidates:    candidates.filter(isStruggling),

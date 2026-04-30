@@ -7,7 +7,8 @@
  *     which lets the browser estimate seekable range for VBR MP3s that would
  *     otherwise report duration = Infinity until fully buffered.
  */
-export function toProxyUrl(xcUrl: string): string {
+export function toProxyUrl(xcUrl: string | null | undefined): string {
+  if (!xcUrl) return '';
   const normalized = xcUrl.startsWith('//') ? `https:${xcUrl}` : xcUrl;
   return `/api/proxy/audio?url=${encodeURIComponent(normalized)}`;
 }

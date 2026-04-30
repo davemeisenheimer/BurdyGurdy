@@ -1,5 +1,6 @@
 import { useEffect, useState, Fragment } from 'react';
 import { db } from '../../lib/db';
+import { getRegionSpecies } from '../../services/local/region';
 import { categoriseRecentBirds, summariseCounts } from '../../lib/recentProgress';
 import { DEV_SHOW_PALETTE_SPLIT } from '../../lib/devFlags';
 import { MASTERED_BADGE_COLOR } from '../../lib/mastery';
@@ -17,6 +18,7 @@ interface Props {
   selectedSpeciesCode?: string;
   overrideRecords?: BirdProgress[];
   friendDisplayName?: string;
+  onRegionRefresh?: () => void;
 }
 
 type TypeFilter = 'all' | QuestionType;
@@ -39,7 +41,7 @@ const SECTION_COLORS: Record<RecentProgressCategory, string> = {
   mastered: 'text-emerald-700',
 };
 
-export function ProgressScreenRecent({ regionCode, recentDays, questionTypes, onBack, onSelectBird, selectedSpeciesCode, overrideRecords, friendDisplayName }: Props) {
+export function ProgressScreenRecent({ regionCode, recentDays, questionTypes, onBack, onSelectBird, selectedSpeciesCode, overrideRecords, friendDisplayName, onRegionRefresh }: Props) {
   const [cachedSpecies, setCachedSpecies]       = useState<CachedSpecies[]>([]);
   const [progressRecords, setProgressRecords]   = useState<BirdProgress[]>([]);
   const [loading, setLoading]                   = useState(true);
@@ -51,23 +53,23 @@ export function ProgressScreenRecent({ regionCode, recentDays, questionTypes, on
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const cacheKey = `${regionCode}:${recentDays}`;
-      const [cached, records] = await Promise.all([
-        db.regionSpecies.get(cacheKey),
+      const [species, records] = await Promise.all([
+        getRegionSpecies(regionCode, recentDays),
         overrideRecords !== undefined ? Promise.resolve(overrideRecords) : db.progress.toArray(),
       ]);
 
-      if (!cached || cached.species.length === 0) {
+      if (species.length === 0) {
         setNoCache(true);
         setLoading(false);
         return;
       }
 
-      setCachedSpecies(cached.species);
+      setCachedSpecies(species);
       setProgressRecords(records);
       setLoading(false);
+      if (!overrideRecords) onRegionRefresh?.();
     })().catch(() => setLoading(false));
-  }, [regionCode, recentDays, overrideRecords]);
+  }, [regionCode, recentDays, overrideRecords]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Types actually present in DB records for species in the recent window
   const recentCodes = new Set(cachedSpecies.map(s => s.speciesCode));

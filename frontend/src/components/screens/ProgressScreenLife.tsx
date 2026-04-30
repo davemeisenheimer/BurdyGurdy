@@ -9,6 +9,9 @@ import { MasteryBadge } from '../ui/MasteryBadge';
 import { ProgressTypePill, TYPE_LABELS } from '../ui/ProgressTypePill';
 import { FocusModeToggle } from '../ui/FocusModeToggle';
 import { deleteCloudProgress } from '../../services/remote/sync';
+import { getVictoryLog } from '../../lib/victory';
+import type { VictoryLogEntry } from '../../lib/victory';
+import { AchievementsScreen } from './AchievementsScreen';
 import type { BirdProgress, QuestionType } from '../../types';
 
 interface Props {
@@ -23,10 +26,13 @@ interface Props {
   regionCode?: string;
   recentDays?: number;
   onRecentProgress?: () => void;
+  onRegionRefresh?: () => void;
   /** Increment to force a data reload (e.g. after a background cloud sync). */
   syncKey?: number;
   /** When provided, renders a read-only view of a friend's progress instead of local DB data. */
   overrideRecords?: BirdProgress[];
+  /** When provided, shows this achievement log instead of loading from local DB. */
+  overrideVictoryLog?: VictoryLogEntry[];
   /** Display name shown in the header when viewing a friend's list. */
   friendDisplayName?: string;
   /** Called after the user clears their entire progress history. */
@@ -105,7 +111,7 @@ function getGroupLabel(bird: BirdSummary, viewRecord: BirdProgress | null, typeF
   return MASTERY_LABELS[maxMastery] ?? 'Hard';
 }
 
-export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggling, showFocusModeToggle, onToggleFocusStruggling, onSelectBird, selectedSpeciesCode, regionCode, recentDays, onRecentProgress, syncKey, overrideRecords, friendDisplayName, onHistoryCleared }: Props) {
+export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggling, showFocusModeToggle, onToggleFocusStruggling, onSelectBird, selectedSpeciesCode, regionCode, recentDays, onRecentProgress, syncKey, overrideRecords, overrideVictoryLog, friendDisplayName, onHistoryCleared, onRegionRefresh }: Props) {
   const readOnly = overrideRecords !== undefined;
   const [birds, setBirds]               = useState<BirdSummary[]>([]);
   const [filter, setFilter]             = useState<Filter>('learning');
@@ -116,6 +122,8 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
   const [loading, setLoading]           = useState(true);
   const [confirmClear, setConfirmClear] = useState(false);
   const [masteryStats, setMasteryStats] = useState<{ mastered: number; total: number } | null>(null);
+  const [victoryLog, setVictoryLog]     = useState<VictoryLogEntry[]>(overrideVictoryLog ?? []);
+  const [showAchievements, setShowAchievements] = useState(false);
 
   const sortForMasteredTab = (summaries: BirdSummary[]): BirdSummary[] =>
     [...summaries].sort((a, b) => a.comName.localeCompare(b.comName));
@@ -188,17 +196,17 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
+    if (overrideVictoryLog !== undefined) return;
+    getVictoryLog().then(setVictoryLog).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncKey]);
+
+  useEffect(() => {
     if (readOnly || !regionCode) return;
     const back = recentDays ?? 30;
-    const cacheKey = `${regionCode}:${back}`;
     (async () => {
-      let cached = await db.regionSpecies.get(cacheKey);
-      if (!cached) {
-        await getRegionSpecies(regionCode, back);
-        cached = await db.regionSpecies.get(cacheKey);
-      }
-      if (!cached) return;
-      const recentSpecies = cached.species.filter(s => !s.isHistorical);
+      const species = await getRegionSpecies(regionCode, back);
+      const recentSpecies = species.filter(s => !s.isHistorical);
       if (recentSpecies.length === 0) return;
       const speciesCodes = recentSpecies.map(s => s.speciesCode);
       const activeTypes = questionTypes ?? [];
@@ -214,8 +222,9 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
         if (types.length > 0 && types.every(t => progressMap.get(`${speciesCode}:${t}`)?.isMastered === true)) mastered++;
       }
       setMasteryStats({ mastered, total: recentSpecies.length });
+      onRegionRefresh?.();
     })().catch(() => {});
-  }, [regionCode, recentDays, questionTypes]);
+  }, [regionCode, recentDays, questionTypes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleClearHistory = async (clearCloud: boolean) => {
     await db.progress.clear();
@@ -304,6 +313,16 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
   ];
   if (excludedCount > 0) filterTabs.push({ key: 'excluded', count: excludedCount, label: 'Hidden', color: 'text-slate-500', border: 'border-slate-400' });
 
+  if (showAchievements) {
+    return (
+      <AchievementsScreen
+        log={victoryLog}
+        onBack={() => setShowAchievements(false)}
+        friendDisplayName={friendDisplayName}
+      />
+    );
+  }
+
   return (
     <div className="h-dvh flex flex-col bg-slate-50">
 
@@ -320,41 +339,23 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
             )}
           </div>
         </div>
-        {!readOnly && (
-          confirmClear ? (
-            <div className="flex flex-col items-end gap-1.5 ml-4">
-              {userId ? (
-                <>
-                  <span className="text-xs text-white/80 text-right">Cloud data will resync on next sign-in unless you clear both.</span>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleClearHistory(false)}
-                      className="text-xs px-2 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600"
-                    >
-                      Local only
-                    </button>
-                    <button
-                      onClick={() => handleClearHistory(true)}
-                      className="text-xs px-2 py-1 bg-red-700 text-white rounded-lg hover:bg-red-800"
-                    >
-                      Local + cloud
-                    </button>
-                    <button
-                      onClick={() => setConfirmClear(false)}
-                      className="text-xs px-2 py-1 border border-white/40 rounded-lg text-white hover:bg-white/20"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-white/80">Are you sure you want to start over?</span>
+        {confirmClear ? (
+          <div className="flex flex-col items-end gap-1.5 ml-4">
+            {userId ? (
+              <>
+                <span className="text-xs text-white/80 text-right">Cloud data will resync on next sign-in unless you clear both.</span>
+                <div className="flex gap-2">
                   <button
                     onClick={() => handleClearHistory(false)}
                     className="text-xs px-2 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600"
                   >
-                    Yes
+                    Local only
+                  </button>
+                  <button
+                    onClick={() => handleClearHistory(true)}
+                    className="text-xs px-2 py-1 bg-red-700 text-white rounded-lg hover:bg-red-800"
+                  >
+                    Local + cloud
                   </button>
                   <button
                     onClick={() => setConfirmClear(false)}
@@ -363,16 +364,44 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
                     Cancel
                   </button>
                 </div>
-              )}
-            </div>
-          ) : (
+              </>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-white/80">Are you sure you want to start over?</span>
+                <button
+                  onClick={() => handleClearHistory(false)}
+                  className="text-xs px-2 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600"
+                >
+                  Yes
+                </button>
+                <button
+                  onClick={() => setConfirmClear(false)}
+                  className="text-xs px-2 py-1 border border-white/40 rounded-lg text-white hover:bg-white/20"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-3">
             <button
-              onClick={() => setConfirmClear(true)}
-              className="text-xs text-white/60 hover:text-white transition-colors"
+              onClick={() => setShowAchievements(true)}
+              className="w-8 h-8 flex items-center justify-center rounded-full border border-white/40 text-base hover:border-white hover:bg-white/20 transition-colors"
+              title="Achievements"
             >
-              Clear history
+              🏆
             </button>
-          )
+            {!readOnly && <span className="w-px h-4 bg-white/25" />}
+            {!readOnly && (
+              <button
+                onClick={() => setConfirmClear(true)}
+                className="text-xs text-white/60 hover:text-white transition-colors"
+              >
+                Clear history
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -500,6 +529,7 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
                 <BirdCard
                   bird={bird}
                   filter={filter}
+                  typeFilter={typeFilter}
                   accuracyMode={accuracyMode}
                   readOnly={readOnly}
                   isSelected={bird.speciesCode === selectedSpeciesCode}
@@ -518,9 +548,33 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
 
 // ── BirdCard ──────────────────────────────────────────────────────────────────
 
+/** Picks the best default question-type pill for a given tab context.
+ *  - If the parent dropdown has a specific type selected, always prefer that.
+ *  - On the mastered tab: pick the poorest-performing mastered type.
+ *  - On the struggling tab: pick the poorest struggling-mastered type.
+ *  - Otherwise: existing "poorest overall" behaviour. */
+function findDefaultType(bird: BirdSummary, filter: Filter, typeFilter: TypeFilter): QuestionType {
+  if (typeFilter !== 'all') {
+    const record = bird.records.find(r => r.questionType === typeFilter);
+    if (record) return typeFilter;
+  }
+  if (filter === 'mastered') {
+    const mastered = bird.records.filter(r => r.isMastered ?? false);
+    return findPoorestType(mastered.length > 0 ? mastered : bird.records);
+  }
+  if (filter === 'struggling') {
+    const struggling = bird.records.filter(r => (r.isMastered ?? false) && isStrugglingByWindow(r.recentAnswers ?? []));
+    if (struggling.length > 0) return findPoorestType(struggling);
+    const mastered = bird.records.filter(r => r.isMastered ?? false);
+    return findPoorestType(mastered.length > 0 ? mastered : bird.records);
+  }
+  return findPoorestType(bird.records);
+}
+
 interface BirdCardProps {
   bird:          BirdSummary;
   filter:        Filter;
+  typeFilter:    TypeFilter;
   accuracyMode:  AccuracyMode;
   readOnly:      boolean;
   isSelected:    boolean;
@@ -528,8 +582,8 @@ interface BirdCardProps {
   onUnexclude:   (speciesCode: string) => void;
 }
 
-function BirdCard({ bird, filter, accuracyMode, readOnly, isSelected, onSelectBird, onUnexclude }: BirdCardProps) {
-  const [selectedType, setSelectedType] = useState<QuestionType>(() => findPoorestType(bird.records));
+function BirdCard({ bird, filter, typeFilter, accuracyMode, readOnly, isSelected, onSelectBird, onUnexclude }: BirdCardProps) {
+  const [selectedType, setSelectedType] = useState<QuestionType>(() => findDefaultType(bird, filter, typeFilter));
 
   const selectedRecord = bird.records.find(r => r.questionType === selectedType) ?? bird.records[0];
   const total       = selectedRecord ? selectedRecord.correct + selectedRecord.incorrect : 0;

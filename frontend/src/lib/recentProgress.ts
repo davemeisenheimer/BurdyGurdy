@@ -93,7 +93,8 @@ export function categoriseRecentBirds(
         isSeeded:    false,
         records:     askedRecords,
       };
-    });
+    })
+    .sort((a, b) => a.comName.localeCompare(b.comName));
 }
 
 /** Returns counts per category for a classified list. */

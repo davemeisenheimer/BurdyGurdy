@@ -10,6 +10,7 @@ import { STRUGGLING_WINDOW } from '../../lib/struggling';
 import type { BirdProgress } from '../../types';
 import { loadQuizPrefs, saveQuizPrefs } from '../../lib/settings';
 import type { AppSettings, QuizConfigPrefs } from '../../lib/settings';
+import type { VictoryLogEntry } from '../../lib/victory';
 
 // ── Upload ────────────────────────────────────────────────────────────────────
 
@@ -295,7 +296,6 @@ export async function uploadSettings(
   userId: string,
   appSettings: AppSettings,
   quizPrefs: QuizConfigPrefs,
-  victorySeen: string[],
 ): Promise<void> {
   const now = new Date().toISOString();
   const { error } = await supabase
@@ -304,7 +304,6 @@ export async function uploadSettings(
       user_id:      userId,
       app_settings: appSettings,
       quiz_prefs:   quizPrefs,
-      victory_seen: victorySeen,
       updated_at:   now,
       // last_upload_at is intentionally NOT set here — it tracks progress sync
       // only (uploadProgress owns it). Settings uploads must not advance that
@@ -313,22 +312,48 @@ export async function uploadSettings(
   if (error) console.warn('sync: settings upload failed:', error.message);
 }
 
+export async function uploadAchievements(
+  userId: string,
+  victorySeen: string[],
+  victoryLog: VictoryLogEntry[] = [],
+): Promise<void> {
+  const { error } = await supabase
+    .from('user_achievements')
+    .upsert({
+      user_id:      userId,
+      victory_seen: victorySeen,
+      victory_log:  victoryLog,
+      updated_at:   new Date().toISOString(),
+    }, { onConflict: 'user_id' });
+  if (error) console.warn('sync: achievements upload failed:', error.message);
+}
+
 export async function downloadSettings(userId: string): Promise<{
   appSettings: AppSettings;
   quizPrefs: QuizConfigPrefs;
   victorySeen: string[];
+  victoryLog: VictoryLogEntry[];
 } | null> {
-  const { data, error } = await supabase
-    .from('user_settings')
-    .select('*')
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (error || !data) return null;
+  const [settingsRes, achievementsRes] = await Promise.all([
+    supabase.from('user_settings').select('*').eq('user_id', userId).maybeSingle(),
+    supabase.from('user_achievements').select('*').eq('user_id', userId).maybeSingle(),
+  ]);
+  if (settingsRes.error || !settingsRes.data) return null;
   return {
-    appSettings:  data.app_settings  as AppSettings,
-    quizPrefs:    data.quiz_prefs    as QuizConfigPrefs,
-    victorySeen:  (data.victory_seen as string[]) ?? [],
+    appSettings:  settingsRes.data.app_settings as AppSettings,
+    quizPrefs:    settingsRes.data.quiz_prefs   as QuizConfigPrefs,
+    victorySeen:  (achievementsRes.data?.victory_seen as string[])           ?? [],
+    victoryLog:   (achievementsRes.data?.victory_log  as VictoryLogEntry[])  ?? [],
   };
+}
+
+export async function fetchFriendVictoryLog(friendUserId: string): Promise<VictoryLogEntry[]> {
+  const { data } = await supabase
+    .from('user_achievements')
+    .select('victory_log')
+    .eq('user_id', friendUserId)
+    .maybeSingle();
+  return (data?.victory_log as VictoryLogEntry[] | null) ?? [];
 }
 
 // ── User blocked photos ────────────────────────────────────────────────────────

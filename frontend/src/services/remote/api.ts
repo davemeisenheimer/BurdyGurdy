@@ -13,8 +13,9 @@ export async function fetchQuizQuestions(
   banned: string[] = [],
   paletteSpeciesCodes: string[] = [],
   back = 30,
-  level0Keys: string[] = [],
+  paletteKeys: string[] = [],
   historyKeys: string[] = [],
+  strugglingKeys: string[] = [],
   bannedAudioUrls: string[] = [],
   birderLevel?: string,
   speciesFilter: string[] = [],
@@ -29,8 +30,9 @@ export async function fetchQuizQuestions(
     banned,
     paletteSpeciesCodes,
     back,
-    level0Keys,
+    paletteKeys,
     historyKeys,
+    strugglingKeys,
     bannedAudioUrls,
     birderLevel,
     speciesFilter,
@@ -99,7 +101,10 @@ export async function fetchBirdInfo(
   if (sciName) params.sciName = sciName;
   try {
     const res = await api.get<BirdInfoData>(`/birds/info/${speciesCode}`, { params });
-    return res.data;
+    const data = res.data;
+    // xeno-canto occasionally returns recordings with a null `file` field at runtime
+    data.recordings = data.recordings.filter(r => !!r.file);
+    return data;
   } catch {
     return null;
   }

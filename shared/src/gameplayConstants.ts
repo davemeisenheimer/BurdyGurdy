@@ -144,12 +144,22 @@ export const NON_MASTERED_STRUGGLE_BOOST = 1.5;
 export const NEW_ENCOUNTER_WEIGHT = 20;
 
 /**
- * Discount multiplier applied to non-recent birds in the weightsMap.
+ * Discount multiplier applied to non-recent non-struggling mastered birds.
  * A bird outside the current sightings window gets weight × 0.05, keeping it
  * accessible (it won't vanish completely) while strongly preferring birds the
  * user might actually encounter in the field.
  */
-export const NON_RECENT_MULTIPLIER = 0.05;
+export const NON_RECENT_MASTERED_DISCOUNT = 0.05;
+
+/**
+ * Discount multiplier applied to unmastered palette birds and struggling
+ * mastered birds that are outside the current eBird sightings window.
+ * Unlike non-struggling mastered birds, these birds still need active practice,
+ * so they are kept above ACTIVE_PALETTE_MIN_WEIGHT rather than nearly eliminated.
+ * The effect is that window birds are practised roughly twice as often as
+ * palette/struggling birds that have drifted out of the window.
+ */
+export const NON_RECENT_PALETTE_DISCOUNT = 0.5;
 
 /**
  * Minimum weight floor applied to mastered birds that ARE in the recent window.
@@ -184,10 +194,11 @@ export const ACTIVE_PALETTE_MIN_WEIGHT = 5;
 //   Remaining 3 slots → any valid candidate (often mastered review)
 
 /**
- * Minimum fraction of each round reserved for "needs practice" candidates.
- * Applied as: Math.ceil(questionsPerRound × RECENT_UNMASTERED_RATIO).
+ * Minimum fraction of each round reserved for "needs practice" candidates —
+ * unmastered palette birds and struggling mastered birds combined.
+ * Applied as: Math.ceil(questionsPerRound × PALETTE_AND_SM_RATIO).
  */
-export const RECENT_UNMASTERED_RATIO = 0.67;
+export const PALETTE_AND_SM_RATIO = 0.67;
 
 /**
  * Within the guaranteed "needs practice" block, how the slots are split between

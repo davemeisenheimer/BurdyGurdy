@@ -238,8 +238,9 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
       let masteryLevels = {};
       let banned: string[] = [];
       let paletteSpeciesCodes: string[] = [];
-      let level0Keys: string[] = [];
+      let paletteKeys: string[] = [];
       let historyKeys: string[] = [];
+      let strugglingKeys: string[] = [];
 
       const back = cfg.recentDays ?? 30;
       if (cfg.mode === 'adaptive') {
@@ -255,8 +256,9 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
         masteryLevels       = params.masteryLevels;
         banned              = params.banned;
         paletteSpeciesCodes = params.paletteSpeciesCodes;
-        level0Keys          = params.level0Keys;
+        paletteKeys         = params.paletteKeys;
         historyKeys         = params.historyKeys;
+        strugglingKeys      = params.strugglingKeys;
 
         if (cfg.onlyStruggling) {
           const allRecords = await db.progress.toArray();
@@ -271,8 +273,9 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
               Object.entries(weights as Record<string, number>).filter(([k]) => strugglingSpecies.has(k.split(':')[0])),
             );
             paletteSpeciesCodes = paletteSpeciesCodes.filter(c => strugglingSpecies.has(c));
-            level0Keys  = level0Keys.filter(k  => strugglingSpecies.has(k.split(':')[0]));
-            historyKeys = historyKeys.filter(k => strugglingSpecies.has(k.split(':')[0]));
+            paletteKeys    = paletteKeys.filter(k    => strugglingSpecies.has(k.split(':')[0]));
+            historyKeys    = historyKeys.filter(k    => strugglingSpecies.has(k.split(':')[0]));
+            strugglingKeys = strugglingKeys.filter(k => strugglingSpecies.has(k.split(':')[0]));
             // Non-struggling species are not added to banned: weights+level0Keys filtering already
             // prevents them from being chosen as question subjects, and keeping them in the pool
             // allows the backend to use them as distractors to fill out 4 answer options.
@@ -317,8 +320,9 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
         banned,
         paletteSpeciesCodes,
         cfg.recentDays ?? 30,
-        level0Keys,
+        paletteKeys,
         historyKeys,
+        strugglingKeys,
         bannedAudioUrls,
         birderLevel,
         speciesFilter,

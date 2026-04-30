@@ -77,8 +77,9 @@ export interface AdaptiveParams {
   masteryLevels: Record<string, number>;
   banned: string[];
   paletteSpeciesCodes: string[];
-  level0Keys: string[];    // "speciesCode:questionType" keys where masteryLevel===0 and !isMastered
-  historyKeys: string[];   // "speciesCode:questionType" keys where isMastered===true
+  paletteKeys: string[];    // "speciesCode:questionType" keys for all unmastered birds (any mastery level)
+  historyKeys: string[];    // "speciesCode:questionType" keys where isMastered===true
+  strugglingKeys: string[]; // "speciesCode:questionType" keys for mastered birds failing the accuracy window
 }
 
 // ── Pure mastery progression ──────────────────────────────────────────────────
