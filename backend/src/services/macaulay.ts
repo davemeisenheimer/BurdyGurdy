@@ -11,7 +11,7 @@ const TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
 const HEADERS = { 'User-Agent': 'BurdyGurdy/1.0 (bird identification learning app)' };
 
 // Option C timeout strategy: 1s initial window, 500ms trailing window after first resolves
-const INITIAL_MS = 1000;
+const INITIAL_MS = 2500;
 const TRAILING_MS = 500;
 
 export interface PhotoSet {
@@ -29,11 +29,13 @@ function filenameFromUrl(url: string): string {
 
 /** Fetches the top-rated photo from the Macaulay Library (eBird media archive). */
 async function fetchMacaulayPhoto(speciesCode: string): Promise<AttributedPhoto | null> {
+  const t0 = Date.now();
   const res = await axios.get(MACAULAY_SEARCH, {
     params: { taxonCode: speciesCode, mediaType: 'Photo', count: 1, sort: 'rating_rank_desc' },
     headers: HEADERS,
   });
   const content = res.data?.results?.content;
+  console.log(`[macaulay] ${speciesCode} → ${content?.length ?? 0} results in ${Date.now() - t0}ms`);
   if (!content?.length) return null;
   const item = content[0];
   if (!item?.assetId) return null;

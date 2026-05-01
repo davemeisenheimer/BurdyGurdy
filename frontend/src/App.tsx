@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { QuizConfig, BirdProgress, CachedSpecies } from './types';
+import type { QuizConfig, BirdProgress, CachedSpecies, QuestionType } from './types';
 import { HomeScreen } from './components/screens/HomeScreen';
 import { QuizScreen } from './components/screens/QuizScreen';
 import { ResultScreen } from './components/screens/ResultScreen';
@@ -24,7 +24,7 @@ import { useQuiz } from './hooks/useQuiz';
 import { useNotifications } from './hooks/useNotifications';
 import { loadSettings, saveSettings, loadQuizPrefs, saveQuizPrefs, resetUserSettings, loadFocusStruggling, saveFocusStruggling, DEFAULTS as SETTINGS_DEFAULTS } from './lib/settings';
 import type { AppSettings, QuizConfigPrefs } from './lib/settings';
-import { findEarnedAward, getVictorySeen, mergeVictorySeen, getVictoryLog, mergeVictoryLog, describeMastery, describeWindow } from './lib/victory';
+import { findEarnedAward, getVictorySeen, mergeVictorySeen, getVictoryLog, mergeVictoryLog, describeMastery, describeWindow, computeChallengeSnapshot, storeChallengeSnapshot } from './lib/victory';
 import type { AwardTier, VictoryLogEntry } from './lib/victory';
 import { locateRegion } from './services/remote/api';
 import type { LocateResult, RegionalSighting, RecentSighting } from './services/remote/api';
@@ -640,6 +640,7 @@ export default function App() {
     currentSpecies: CachedSpecies[],
     progressRecords: BirdProgress[],
     pendingConfig: QuizConfig | null,
+    expandedTypes: QuestionType[],
   ): Promise<boolean> => {
     const snapshot = await loadSnapshot();
     const snapshotMatches = snapshot?.regionCode === regionCode && snapshot?.back === back;
@@ -647,6 +648,8 @@ export default function App() {
       const newSnap = buildSnapshot(regionCode, back, currentSpecies);
       void saveSnapshot(newSnap);
       if (user) uploadRegionSnapshot(user.id, newSnap).catch(() => {});
+      const challenge = computeChallengeSnapshot(currentSpecies, progressRecords, expandedTypes);
+      storeChallengeSnapshot(newSnap.savedAt!, expandedTypes, challenge).catch(() => {});
       return false;
     }
     const updateInfo = computeRegionUpdate(currentSpecies, snapshot!);
@@ -665,8 +668,8 @@ export default function App() {
       getRegionSpecies(regionCode, back),
       db.progress.toArray(),
     ]);
-    await applyRegionUpdate(regionCode, back, currentSpecies, allRecords, null);
-  }, [applyRegionUpdate, config.regionCode, config.recentDays]);
+    await applyRegionUpdate(regionCode, back, currentSpecies, allRecords, null, expandQuestionTypes(config.questionTypes, settings));
+  }, [applyRegionUpdate, config.regionCode, config.recentDays, config.questionTypes, settings]);
 
   const handleStart = async (newConfig: QuizConfig) => {
     const existing = await loadQuizPrefs();
@@ -701,7 +704,7 @@ export default function App() {
         getRegionSpecies(fullConfig.regionCode, back),
         db.progress.toArray(),
       ]);
-      const showed = await applyRegionUpdate(fullConfig.regionCode, back, currentSpecies, allRecords, fullConfig);
+      const showed = await applyRegionUpdate(fullConfig.regionCode, back, currentSpecies, allRecords, fullConfig, expandQuestionTypes(fullConfig.questionTypes, settings));
       if (showed) {
         // Preload quiz questions while the dialog is open
         setConfig(fullConfig);
@@ -719,11 +722,14 @@ export default function App() {
 
   const handleRegionUpdateDismiss = () => {
     if (!pendingRegionUpdate) return;
-    const { pendingConfig, regionCode, back } = pendingRegionUpdate;
+    const { pendingConfig, regionCode, back, records } = pendingRegionUpdate;
+    const expandedTypes = expandQuestionTypes((pendingConfig ?? config).questionTypes, settings);
     getRegionSpecies(regionCode, back).then(currentSpecies => {
       const newSnap = buildSnapshot(regionCode, back, currentSpecies);
       void saveSnapshot(newSnap);
       if (user) uploadRegionSnapshot(user.id, newSnap).catch(() => {});
+      const challenge = computeChallengeSnapshot(currentSpecies, records, expandedTypes);
+      storeChallengeSnapshot(newSnap.savedAt!, expandedTypes, challenge).catch(() => {});
     }).catch(() => {});
     setPendingRegionUpdate(null);
     if (pendingConfig) setScreen('quiz');

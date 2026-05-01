@@ -7,6 +7,8 @@ export interface VictoryLogEntry {
   tier: AwardTier;
   questionTypes: QuestionType[];
   earnedAt: string; // ISO 8601
+  /** Pool birds for this award: total window size for first-ever, unmastered count for repeats. */
+  count?: number;
 }
 
 export type AwardTier = 'firstStep' | 'backyardBirder' | 'patchRegular' | 'localLegend' | 'regionalChampion';
@@ -55,17 +57,18 @@ export async function hasSeenVictory(snapshotKey: string, types: QuestionType[],
   } catch { return false; }
 }
 
-export async function markVictorySeen(snapshotKey: string, types: QuestionType[], tier: AwardTier = 'localLegend'): Promise<void> {
+export async function markVictorySeen(snapshotKey: string, types: QuestionType[], tier: AwardTier = 'localLegend', count?: number): Promise<void> {
   try {
     const seen = await getSeen();
     const id = victoryId(snapshotKey, types, tier);
     if (!seen.includes(id)) {
       seen.push(id);
       await db.keyValue.put({ key: KEY, value: JSON.stringify(seen) });
-      // Append to the timestamped log for the achievements screen
       const row = await db.keyValue.get(LOG_KEY).catch(() => null);
       const log: VictoryLogEntry[] = row ? (JSON.parse(row.value) as VictoryLogEntry[]) : [];
-      log.push({ tier, questionTypes: [...types].sort(), earnedAt: new Date().toISOString() });
+      const entry: VictoryLogEntry = { tier, questionTypes: [...types].sort(), earnedAt: new Date().toISOString() };
+      if (count !== undefined) entry.count = count;
+      log.push(entry);
       await db.keyValue.put({ key: LOG_KEY, value: JSON.stringify(log) });
     }
   } catch { /* non-fatal */ }
@@ -99,6 +102,68 @@ export async function mergeVictoryLog(remote: VictoryLogEntry[]): Promise<void> 
     await db.keyValue.put({ key: LOG_KEY, value: JSON.stringify(merged) });
   } catch { /* non-fatal */ }
 }
+
+// ── Challenge snapshot ────────────────────────────────────────────────────────
+// Stored at snapshot-save time; records how many species×type pairs were
+// unmastered in each award pool so the achievements screen can show meaningful
+// counts without needing historical mastery state at award-fire time.
+
+export interface ChallengeSnapshot {
+  nonHistorical: number; // for localLegend
+  recentCommon: number;  // for patchRegular
+  all: number;           // for regionalChampion
+}
+
+const CHALLENGE_PREFIX = 'challenge';
+
+function challengeKey(snapshotKey: string, types: QuestionType[]): string {
+  return `${CHALLENGE_PREFIX}:${snapshotKey}:${[...types].sort().join(',')}`;
+}
+
+export function computeChallengeSnapshot(
+  currentSpecies: CachedSpecies[],
+  records: BirdProgress[],
+  types: QuestionType[],
+): ChallengeSnapshot {
+  const recordMap = new Map(records.map(r => [`${r.speciesCode}:${r.questionType}`, r]));
+  const countUnmastered = (pool: CachedSpecies[]) =>
+    pool.reduce((sum, s) =>
+      sum + types.filter(t => !(recordMap.get(`${s.speciesCode}:${t}`)?.isMastered ?? false)).length, 0);
+  return {
+    nonHistorical: countUnmastered(currentSpecies.filter(s => !s.isHistorical)),
+    recentCommon:  countUnmastered(currentSpecies.filter(s => s.priorityGroup === 'recentCommon')),
+    all:           countUnmastered(currentSpecies),
+  };
+}
+
+export async function storeChallengeSnapshot(
+  snapshotKey: string,
+  types: QuestionType[],
+  snapshot: ChallengeSnapshot,
+): Promise<void> {
+  await db.keyValue.put({ key: challengeKey(snapshotKey, types), value: JSON.stringify(snapshot) }).catch(() => {});
+}
+
+export async function getChallengeSnapshot(
+  snapshotKey: string,
+  types: QuestionType[],
+): Promise<ChallengeSnapshot | null> {
+  try {
+    const row = await db.keyValue.get(challengeKey(snapshotKey, types));
+    return row ? JSON.parse(row.value) as ChallengeSnapshot : null;
+  } catch { return null; }
+}
+
+/** Clears all stored challenge snapshots. Call after clearing play history
+ *  so stale pre-clear counts don't misrepresent the next award cycle. */
+export async function clearChallengeSnapshots(): Promise<void> {
+  try {
+    const toDelete = await db.keyValue.filter(r => r.key.startsWith(CHALLENGE_PREFIX + ':')).toArray();
+    if (toDelete.length > 0) await db.keyValue.bulkDelete(toDelete.map(e => e.key));
+  } catch { /* non-fatal */ }
+}
+
+// ── Award logic ───────────────────────────────────────────────────────────────
 
 // Pure helper: all target species×type pairs must be mastered, and overall accuracy must clear the threshold.
 function allMasteredWithAccuracy(
@@ -173,7 +238,28 @@ export async function findEarnedAward(
 
     if (!won) continue;
 
-    await markVictorySeen(snapshotKey, questionTypes, tier);
+    let count: number | undefined;
+    if (!PERMANENT_TIERS.has(tier)) {
+      const log = await getVictoryLog();
+      const typesKey = [...questionTypes].sort().join(',');
+      const isFirstEver = !log.some(e => e.tier === tier && [...e.questionTypes].sort().join(',') === typesKey);
+      if (isFirstEver) {
+        // First-ever: show the total pool size ("identified all N birds")
+        count =
+          tier === 'patchRegular'     ? recentCommon.length :
+          tier === 'localLegend'      ? nonHistorical.length :
+          /* regionalChampion */        species.length;
+      } else {
+        // Repeat: show how many were newly mastered this cycle ("mastered N new birds")
+        const challenge = await getChallengeSnapshot(snapshotKey, questionTypes);
+        count =
+          tier === 'patchRegular'     ? (challenge?.recentCommon  ?? recentCommon.length) :
+          tier === 'localLegend'      ? (challenge?.nonHistorical ?? nonHistorical.length) :
+          /* regionalChampion */        (challenge?.all            ?? species.length);
+      }
+    }
+
+    await markVictorySeen(snapshotKey, questionTypes, tier, count);
     return tier;
   }
 

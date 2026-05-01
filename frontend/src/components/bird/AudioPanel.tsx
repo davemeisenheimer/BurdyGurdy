@@ -18,7 +18,17 @@ export function AudioPanel({ recordings, autoplay = false, pauseRef, fillHeight 
   const audioRef = useRef<HTMLAudioElement>(null);
   const rec = recordings[idx];
 
-  useEffect(() => { setIdx(0); setPlaying(autoplay); }, [recordings]);
+  useEffect(() => {
+    const audio = audioRef.current;
+    setIdx(0);
+    if (autoplay && audio) {
+      // Attempt autoplay (desktop only — iOS blocks this, which is expected browser behaviour)
+      audio.play().catch(() => setPlaying(false));
+      setPlaying(true);
+    } else {
+      setPlaying(false);
+    }
+  }, [recordings]);
 
   useEffect(() => {
     if (!pauseRef) return;
@@ -26,10 +36,12 @@ export function AudioPanel({ recordings, autoplay = false, pauseRef, fillHeight 
     return () => { pauseRef.current = null; };
   }, [pauseRef]);
 
+  // Pause when playing becomes false or when the track index changes.
+  // play() is intentionally NOT called here — iOS Safari blocks audio.play()
+  // unless it is called synchronously inside a user gesture handler.
   useEffect(() => {
     if (!audioRef.current) return;
-    if (playing) audioRef.current.play().catch(() => setPlaying(false));
-    else         audioRef.current.pause();
+    if (!playing) audioRef.current.pause();
   }, [playing, idx]);
 
   // Pause on unmount so audio doesn't outlive the component
@@ -39,7 +51,18 @@ export function AudioPanel({ recordings, autoplay = false, pauseRef, fillHeight 
 
   if (recordings.length === 0) return null;
 
-  const togglePlaying = () => setPlaying(p => !p);
+  const togglePlaying = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (playing) {
+      audio.pause();
+      setPlaying(false);
+    } else {
+      // Call play() synchronously within the gesture handler so iOS Safari allows it
+      audio.play().catch(() => setPlaying(false));
+      setPlaying(true);
+    }
+  };
 
   return (
     <div className={`flex flex-col bg-slate-900 overflow-hidden ${fillHeight ? 'h-full' : ''}`}>

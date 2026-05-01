@@ -84,6 +84,16 @@ export function RelatedSpeciesCarousel({
     setListenMode(true);
     listenModeRef.current = true;
     setIdx(1);
+    // Call play() synchronously inside the gesture handler so iOS Safari allows it
+    const firstSlide = slides[1];
+    if (firstSlide && firstSlide.kind !== 'title' && audioRef.current) {
+      const recs = recordings.get(firstSlide.speciesCode);
+      if (recs && recs.length > 0) {
+        const rec = recs[0];
+        if (audioRef.current.src !== rec.file) audioRef.current.src = rec.file;
+        audioRef.current.play().catch(() => {});
+      }
+    }
   };
 
   // Navigate to a slide; wrapping is always instant (no reverse-direction animation)
@@ -416,8 +426,18 @@ export function RelatedSpeciesCarousel({
                           e.stopPropagation();
                           stopAutoScroll();
                           stopListenMode();
-                          if (!isPlaying) onWillPlay?.();
-                          setPlayingCode(isPlaying ? null : slide.speciesCode);
+                          const audio = audioRef.current;
+                          if (!audio) return;
+                          if (isPlaying) {
+                            audio.pause();
+                            setPlayingCode(null);
+                          } else {
+                            onWillPlay?.();
+                            const rec = recs[0];
+                            if (audio.src !== rec.file) audio.src = rec.file;
+                            audio.play().catch(() => setPlayingCode(null));
+                            setPlayingCode(slide.speciesCode);
+                          }
                         }}
                         className="absolute bottom-1 left-1 flex items-center gap-1 bg-black/60 hover:bg-black/80 rounded-full px-2 py-0.5 text-white text-xs"
                         aria-label={isPlaying ? 'Pause song' : 'Play song'}

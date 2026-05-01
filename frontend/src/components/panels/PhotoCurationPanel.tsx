@@ -69,9 +69,14 @@ export function PhotoCurationPanel() {
         db.adminBlockedMedia.filter(r => r.speciesCode === bird.speciesCode).toArray(),
       ]);
       setBlocked(new Map(blockedRows.map(r => [r.url, r.blockScope])));
+      let wikiIdx = 0;
       setPhotos([
-        ...(primary ? [{ url: primary.url, label: 'Primary' }] : []),
-        ...optional.map((p, i) => ({ url: p.url, label: `Opt ${i + 1}` })),
+        ...(primary ? [{ url: primary.url, label: 'Primary: iNat' }] : []),
+        ...optional.map(p => {
+          if (p.source === 'macaulay') return { url: p.url, label: 'Secondary: Mac' };
+          wikiIdx++;
+          return { url: p.url, label: `Opt ${wikiIdx}: Wiki` };
+        }),
       ]);
     } finally {
       setLoadingPhotos(false);

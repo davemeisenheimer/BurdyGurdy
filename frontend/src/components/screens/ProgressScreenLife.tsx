@@ -9,6 +9,7 @@ import { MasteryBadge } from '../ui/MasteryBadge';
 import { ProgressTypePill, TYPE_LABELS } from '../ui/ProgressTypePill';
 import { FocusModeToggle } from '../ui/FocusModeToggle';
 import { deleteCloudProgress } from '../../services/remote/sync';
+import { clearChallengeSnapshots } from '../../lib/victory';
 import { getVictoryLog } from '../../lib/victory';
 import type { VictoryLogEntry } from '../../lib/victory';
 import { AchievementsScreen } from './AchievementsScreen';
@@ -232,6 +233,7 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
     if (clearCloud && userId) await deleteCloudProgress(userId);
     const prefs = await loadQuizPrefs();
     await saveQuizPrefs({ ...prefs, selectionMode: 'all', selectedSpeciesCodes: [], selectedFamilies: [], selectedOrders: [] });
+    await clearChallengeSnapshots();
     onHistoryCleared?.();
     setBirds([]);
     setConfirmClear(false);
