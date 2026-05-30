@@ -25,7 +25,7 @@ export function WelcomePanel({ hasActiveQuestion, userEmail, onAuthClick, onSign
       <div className="flex-1 flex flex-col items-center justify-center px-8 py-10">
         <div className="w-full max-w-[34rem]">
 
-          <h1 className="text-3xl font-bold text-slate-800 leading-tight text-center">BirdyGurdy</h1>
+          <h1 className="text-3xl font-bold text-slate-800 leading-tight text-center">BurdyGurdy</h1>
           <p className="text-sm text-slate-500 mt-1 text-center">by Three Corner Orchard Technology</p>
 
           <br/><p className="text-sm text-slate-600">A bird identification game that adapts to your pace and local area. You get to decide what to focus on: sight ID, ID by songs and calls, or scientific nomenclature.</p>
