@@ -71,6 +71,7 @@ export interface QuizQuestion {
   optionAudioUrls?: string[];
   correctAnswer: string;
   noAudio?: boolean;  // true when no recordings exist - frontend awards a free correct answer
+  noPhoto?: boolean;  // true when no photos exist after retrying - frontend awards a free correct answer
 }
 
 export interface QuizConfig {
@@ -119,5 +120,6 @@ export interface BirdProgress {
   isMastered?: boolean;        // graduated from learning palette - appears only occasionally for review
   masteredAt?: number;         // timestamp (ms) when isMastered first became true
   noAudio?: boolean;           // graduated automatically because no recordings exist for this question type
+  noPhoto?: boolean;           // graduated automatically because no photos exist for this question type
   recentAnswers?: boolean[];   // rolling window of last STRUGGLING_WINDOW answers (mastered birds only)
 }

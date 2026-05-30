@@ -58,6 +58,12 @@ export async function getRegionalSpecies(regionCode: string, back = 30): Promise
   return res.data;
 }
 
+export interface CommonSpeciesEntry {
+  code: string;
+  rank: number;
+  appearances: number; // number of the 12 monthly samples in which this species appeared
+}
+
 /** Species ranked by number of appearances in private (backyard/home) location observations over the
  *  past 7 days. Excludes public hotspot data so common backyard birds rank above wetland rarities.
  *  Returns species codes ordered most→least common. Cached 1h. */
@@ -103,10 +109,11 @@ export async function getBackyardSpeciesRanking(regionCode: string): Promise<str
  *  Samples historic observations on the 15th of each of the past 12 months using
  *  the /data/obs/historic endpoint (works at all region levels: country, state, county).
  *  Recent months are weighted more heavily so birds arriving now rank above absent-season birds.
- *  Returns species codes ordered most→least common. Cached 24h. */
-export async function getCommonSpeciesCodes(regionCode: string): Promise<string[]> {
-  const key = `top100annual:${regionCode}`;
-  const cached = cache.get<string[]>(key);
+ *  Returns entries ordered most→least common, each with a rank index and raw appearances count.
+ *  Cached 24h. */
+export async function getCommonSpeciesCodes(regionCode: string): Promise<CommonSpeciesEntry[]> {
+  const key = `commonspecies-v2:${regionCode}`;
+  const cached = cache.get<CommonSpeciesEntry[]>(key);
   if (cached) return cached;
 
   // Sample the 15th of each of the past 12 months (mid-month has complete data).
@@ -130,23 +137,25 @@ export async function getCommonSpeciesCodes(regionCode: string): Promise<string[
   const results = await Promise.allSettled(
     dates.map(({ y, m, d }) =>
       client.get(`/data/obs/${regionCode}/historic/${y}/${m}/${d}`, {
-        params: { maxResults: 200, includeProvisional: true },
+        params: { maxResults: 500, includeProvisional: true },
       }),
     ),
   );
 
   // Weighted aggregate: each appearance contributes its month's weight to count and position sum.
-  const scores = new Map<string, { weightedCount: number; weightedRankSum: number }>();
+  // appearances = raw count of monthly samples in which the species appeared (unweighted).
+  const scores = new Map<string, { weightedCount: number; weightedRankSum: number; appearances: number }>();
   for (let i = 0; i < results.length; i++) {
     const result = results[i];
     if (result.status !== 'fulfilled') continue;
     const { weight } = dates[i];
     const items: Array<{ speciesCode: string }> = result.value.data;
     items.forEach((item, idx) => {
-      const existing = scores.get(item.speciesCode) ?? { weightedCount: 0, weightedRankSum: 0 };
+      const existing = scores.get(item.speciesCode) ?? { weightedCount: 0, weightedRankSum: 0, appearances: 0 };
       scores.set(item.speciesCode, {
         weightedCount:   existing.weightedCount + weight,
         weightedRankSum: existing.weightedRankSum + idx * weight,
+        appearances:     existing.appearances + 1,
       });
     });
   }
@@ -155,15 +164,15 @@ export async function getCommonSpeciesCodes(regionCode: string): Promise<string[
 
   // Sort: highest weighted count first (appeared in more months = more common overall),
   // then by weighted average position (lower position = more frequently reported on each date).
-  const codes = [...scores.entries()]
+  const entries = [...scores.entries()]
     .sort(([, a], [, b]) => {
       if (b.weightedCount !== a.weightedCount) return b.weightedCount - a.weightedCount;
       return a.weightedRankSum / a.weightedCount - b.weightedRankSum / b.weightedCount;
     })
-    .map(([code]) => code);
+    .map(([code, s], rank) => ({ code, rank, appearances: s.appearances }));
 
-  cache.set(key, codes, TTL_24H);
-  return codes;
+  cache.set(key, entries, TTL_24H);
+  return entries;
 }
 
 /** Species list for a region (just codes + names). Cached 24h. */

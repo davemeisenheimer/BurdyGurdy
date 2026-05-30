@@ -1,5 +1,5 @@
 /**
- * BirdyGurdy Gameplay Constants
+ * BurdyGurdy Gameplay Constants
  * ==============================
  * Single source of truth for every numeric value that shapes quiz behaviour.
  * Changing a value here affects both the frontend (adaptive.ts, mastery.ts,

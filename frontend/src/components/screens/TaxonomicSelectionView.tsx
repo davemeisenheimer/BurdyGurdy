@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../../lib/db';
 import type { QuizConfigPrefs } from '../../lib/settings';
 import { backfillProgressTaxonomy } from '../../services/local/progress';
-import type { BirdProgress } from '../../types';
+import type { BirdProgress, PriorityGroup } from '../../types';
+import { DialogGeneric } from '../ui/DialogGeneric';
 
 // ── Data model ────────────────────────────────────────────────────────────────
 
@@ -163,21 +164,58 @@ function HighlightMatch({ text, query }: { text: string; query: string }) {
   );
 }
 
+// ── Unintroduced-bird dialog body ─────────────────────────────────────────────
+
+function buildDialogBody(comName: string, priorityGroup: PriorityGroup | undefined): React.ReactNode {
+  let whenText: string;
+  switch (priorityGroup) {
+    case 'recentCommon':
+      whenText = `${comName} has been spotted in your area recently and is a common sighting — you would have seen it in your next few sessions.`;
+      break;
+    case 'recentUncommon':
+      whenText = `${comName} was spotted in your area recently but isn't a frequent visitor — it would have come up once the more common birds were covered.`;
+      break;
+    case 'regionCommon':
+      whenText = `${comName} is a regular in your region but hasn't been spotted in recent reports — it would have appeared eventually during a quieter period for recent sightings.`;
+      break;
+    case 'regionUncommon':
+      whenText = `${comName} isn't seen often in your area and hasn't appeared in recent reports — it could have been a while before it came up naturally.`;
+      break;
+    case 'rareUncommon':
+      whenText = `${comName} is a rare visitor to your area — without selecting it, you might not have seen it for a long time.`;
+      break;
+    default:
+      whenText = `${comName} was waiting in line to be introduced based on how recently and how often it's been sighted in your area.`;
+  }
+
+  return (
+    <div className="space-y-2 text-sm text-slate-600">
+      <p>You haven't encountered <span className="font-semibold">{comName}</span> in a quiz yet.</p>
+      <p>{whenText}</p>
+      <p>Select it now to include it in your life list practice right away. When it first appears in a quiz, you'll see the ✨ New bird! badge.</p>
+    </div>
+  );
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
   initialPrefs: Pick<QuizConfigPrefs, 'selectedSpeciesCodes' | 'selectedFamilies' | 'selectedOrders'>;
   onSave:  (prefs: { selectionMode: 'all' | 'custom'; selectedSpeciesCodes: string[]; selectedFamilies: string[]; selectedOrders: string[] }) => void;
   onClose: () => void;
+  regionCode: string;
+  recentDays: number;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function TaxonomicSelectionView({ initialPrefs, onSave, onClose }: Props) {
-  const [records,  setRecords]  = useState<BirdProgress[]>([]);
-  const [loading,  setLoading]  = useState(true);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+export function TaxonomicSelectionView({ initialPrefs, onSave, onClose, regionCode, recentDays }: Props) {
+  const [records,           setRecords]           = useState<BirdProgress[]>([]);
+  const [loading,           setLoading]           = useState(true);
+  const [selected,          setSelected]          = useState<Set<string>>(new Set());
+  const [expanded,          setExpanded]          = useState<Set<string>>(new Set());
+  const [pendingCode,       setPendingCode]       = useState<string | null>(null);
+  const [regionPriorityMap, setRegionPriorityMap] = useState<Map<string, PriorityGroup | undefined>>(new Map());
 
   // ── Search state ─────────────────────────────────────────────────────────────
   const [searchInput, setSearchInput] = useState('');
@@ -217,13 +255,27 @@ export function TaxonomicSelectionView({ initialPrefs, onSave, onClose }: Props)
       setExpanded(init);
       setRecords(visible);
       setSelected(initialSelected);
+
+      // Load region priority groups for the unintroduced-bird dialog
+      const cacheKey = `${regionCode}:${recentDays}`;
+      const regionCache = await db.regionSpecies.get(cacheKey);
+      if (regionCache) {
+        setRegionPriorityMap(new Map(regionCache.species.map(s => [s.speciesCode, s.priorityGroup])));
+      }
+
       setLoading(false);
     })().catch(() => setLoading(false));
-  // initialPrefs is stable (passed once on open)
+  // initialPrefs, regionCode, recentDays are all stable (passed once on open)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const { orders, orphans } = useMemo(() => buildHierarchy(records), [records]);
+
+  // Species that are seeded in the palette but have never appeared in a quiz.
+  const unintroducedCodes = useMemo(() => {
+    const introduced = new Set(records.filter(r => r.lastAsked > 0).map(r => r.speciesCode));
+    return new Set(records.map(r => r.speciesCode).filter(c => !introduced.has(c)));
+  }, [records]);
 
   const allSpeciesCodes = useMemo(() => {
     const codes = new Set<string>();
@@ -302,8 +354,23 @@ export function TaxonomicSelectionView({ initialPrefs, onSave, onClose }: Props)
     });
   };
 
-  const toggleSpecies = (code: string) =>
+  const toggleSpecies = (code: string) => {
+    if (!selected.has(code) && unintroducedCodes.has(code)) {
+      setPendingCode(code);
+      return;
+    }
     setSelected(prev => { const s = new Set(prev); s.has(code) ? s.delete(code) : s.add(code); return s; });
+  };
+
+  const confirmSelectUnintroduced = () => {
+    if (!pendingCode) return;
+    setSelected(prev => { const s = new Set(prev); s.add(pendingCode); return s; });
+    setPendingCode(null);
+  };
+
+  const pendingBird     = pendingCode ? records.find(r => r.speciesCode === pendingCode) : null;
+  const pendingComName  = pendingBird?.comName ?? pendingCode ?? '';
+  const pendingPriority = pendingCode ? regionPriorityMap.get(pendingCode) : undefined;
 
   const handleBack = () => {
     if (loading) { onClose(); return; }
@@ -315,6 +382,7 @@ export function TaxonomicSelectionView({ initialPrefs, onSave, onClose }: Props)
   const totalCount    = allSpeciesCodes.size;
 
   return (
+    <>
     <div className="flex flex-col flex-1 min-h-0">
 
       {/* Header */}
@@ -453,9 +521,12 @@ export function TaxonomicSelectionView({ initialPrefs, onSave, onClose }: Props)
                                   onClick={e => e.stopPropagation()}
                                   className="w-4 h-4 accent-forest-600 cursor-pointer shrink-0"
                                 />
-                                <span className="text-sm text-slate-700">
+                                <span className="text-sm text-slate-700 flex-1">
                                   <HighlightMatch text={sp.comName} query={searchQuery} />
                                 </span>
+                                {unintroducedCodes.has(sp.speciesCode) && (
+                                  <span className="text-xs leading-none shrink-0" title="Not yet introduced">✨</span>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -497,5 +568,15 @@ export function TaxonomicSelectionView({ initialPrefs, onSave, onClose }: Props)
         )}
       </div>
     </div>
+
+    {pendingCode && (
+      <DialogGeneric
+        dialogId="newBirdInLifeList"
+        extraChildren={buildDialogBody(pendingComName, pendingPriority)}
+        onConfirm={confirmSelectUnintroduced}
+        onCancel={() => setPendingCode(null)}
+      />
+    )}
+    </>
   );
 }

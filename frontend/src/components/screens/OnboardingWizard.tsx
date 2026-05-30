@@ -143,10 +143,12 @@ export function OnboardingWizard({ user, settings, onUpdateSettings, onRegionDet
             <div className="bg-white rounded-2xl border border-slate-200 p-5 mb-6 space-y-3 w-full">
               <h2 className="text-sm font-semibold text-slate-700">How it works</h2>
               <p className="text-sm text-slate-600 leading-relaxed">
-                BurdyGurdy quizzes you on birds that have actually been spotted in your local area. Every session draws from recent eBird sightings so you learn what you're likely to see outside.
+                Master local bird identification with BurdyGurdy. This adaptive online learning app uses real eBird data to quiz you on the birds in your area.
+                BurdyGurdy quizzes you on birds that have actually been spotted in your local area. 
+                Every session draws from recent eBird sightings so you learn what you're likely to see outside.
               </p>
               <p className="text-sm text-slate-600 leading-relaxed">
-                An adaptive algorithm tracks your progress. Birds you find difficult appear more often; once you master a bird it moves to occasional review. Your life list grows as you go.
+                The app tracks and adapts to your progress. Birds you find difficult appear more often; once you master a bird it moves to occasional review, but if you begin to struggle with it again, it will appear more frequently until you improve your record. Your life list grows as you go.
               </p>
             </div>
 

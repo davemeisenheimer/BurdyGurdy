@@ -46,9 +46,10 @@ export function RelatedSpeciesCarousel({
       fetchBirdPhotos(speciesCode, comName, sciName),
       db.blockedPhotos.toArray(),
       db.adminBlockedMedia.filter(r => r.speciesCode === speciesCode).toArray(),
-    ]).then(([{ primary }, blocked, adminBlocked]) => {
+    ]).then(([{ primary, optional }, blocked, adminBlocked]) => {
       const blockedUrls = new Set([...blocked.map(b => b.url), ...adminBlocked.map(b => b.url)]);
-      setReferencePhoto(primary && !blockedUrls.has(primary.url) ? primary : null);
+      const photo = [primary, ...(optional ?? [])].find(p => p && !blockedUrls.has(p.url)) ?? null;
+      setReferencePhoto(photo);
     }).catch(() => setReferencePhoto(null));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showReferencePhoto, referenceSpecies.speciesCode]);
@@ -256,13 +257,13 @@ export function RelatedSpeciesCarousel({
         fetchBirdPhotos(speciesCode, comName, sciName),
         db.blockedPhotos.toArray(),
         db.adminBlockedMedia.filter(r => r.speciesCode === speciesCode).toArray(),
-      ]).then(([{ primary }, blocked, adminBlocked]) => {
+      ]).then(([{ primary, optional }, blocked, adminBlocked]) => {
         if (genRef.current !== gen) return;
         const blockedUrls = new Set([
           ...blocked.map(b => b.url),
           ...adminBlocked.map(b => b.url),
         ]);
-        const photo = primary && !blockedUrls.has(primary.url) ? primary : null;
+        const photo = [primary, ...(optional ?? [])].find(p => p && !blockedUrls.has(p.url)) ?? null;
         setPhotos(prev => new Map(prev).set(speciesCode, photo));
         setFetchedCodes(prev => new Set(prev).add(speciesCode));
       }).catch(() => {

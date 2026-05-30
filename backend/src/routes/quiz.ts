@@ -41,6 +41,7 @@ export interface QuizQuestion {
   optionAudioUrls?: string[];
   correctAnswer: string;
   noAudio?: boolean;  // true when no recordings exist - frontend awards a free correct answer
+  noPhoto?: boolean;  // true when no photos exist after retrying - frontend awards a free correct answer
 }
 
 
@@ -155,7 +156,7 @@ router.post('/questions', async (req, res) => {
     ]);
 
     // Use backyard (private location) ranking as primary; fall back to top100 if too sparse
-    const commonCodes = backyardCodes.length >= 10 ? backyardCodes : top100Codes;
+    const commonCodes = backyardCodes.length >= 10 ? backyardCodes : top100Codes.map(e => e.code);
 
     const taxMap = new Map(taxonomy.map(t => [t.speciesCode, t]));
 
@@ -208,11 +209,10 @@ router.post('/questions', async (req, res) => {
         } as PoolSpecies;
       })
       .filter(s => groupOrders.length === 0 || groupOrders.includes(s.tax!.order));
-    // Historical extras supplement the distractor pool only - not question subjects.
-    // Filtered to species in the annual top-100 frequency list to exclude accidentals
-    // (one-off vagrants that eBird's all-time species list includes but users would never
-    // recognise as belonging to their region).
-    const top100Set = new Set(top100Codes);
+    // Historical extras supplement both the distractor pool and the non-recent question pool.
+    // Filtered to species in the annual frequency list to exclude one-off accidentals that
+    // the user would never recognise as belonging to their region.
+    const top100Set = new Set(top100Codes.map(e => e.code));
     filteredPool = [...filteredPool, ...historicalExtras.filter(s => top100Set.has(s.speciesCode))];
 
     // When the user has a custom species selection, restrict question subjects to those codes.
@@ -234,6 +234,27 @@ router.post('/questions', async (req, res) => {
     const paletteKeySet   = new Set<string>(paletteKeys as string[]);
     const historyKeySet   = new Set<string>(historyKeys as string[]);
     const strugglingKeySet = new Set<string>(strugglingKeys as string[]);
+
+    // Palette birds that are absent from both the recent window and the annual frequency list
+    // (e.g. uncommon migrants the user has encountered before) are promoted into the learning
+    // palette by maintainLevel0Palette but would be silently skipped by buildCandidates because
+    // they never appear in filteredPool. Add them here so they remain question candidates.
+    if (adaptiveMode) {
+      const filteredPoolCodes = new Set(filteredPool.map(s => s.speciesCode));
+      for (const key of Object.keys(weightsMap)) {
+        const code = key.split(':')[0];
+        if (filteredPoolCodes.has(code) || excludeSet.has(code) || !taxMap.has(code)) continue;
+        const tax = taxMap.get(code)!;
+        if (groupOrders.length > 0 && !groupOrders.includes(tax.order)) continue;
+        filteredPool.push({
+          speciesCode: code,
+          comName: tax.comName,
+          sciName: tax.sciName,
+          tax: { familySciName: tax.familySciName, familyComName: tax.familyComName, order: tax.order, orderComName: ORDER_COMMON_NAMES[tax.order] },
+        });
+        filteredPoolCodes.add(code);
+      }
+    }
 
     const candidates: Candidate[] = buildCandidates(
       questionPool, filteredPool, recentCodes, weightsMap, types as QuestionType[], adaptiveMode, paletteKeySet, paletteCodes, speciesFilterSet, strugglingKeySet,
@@ -334,9 +355,11 @@ router.post('/questions', async (req, res) => {
           correctAnswer,
         };
 
-        const [recordings, photoUrl] = await Promise.all([
+        const [recordings, photoResult] = await Promise.all([
           getRecordings(species.sciName),
-          needsPhoto ? getSpeciesPhotoUrl(species.speciesCode, species.comName, species.sciName, masteryLevels[`${species.speciesCode}:${type}`], blockedPhotoUrls) : Promise.resolve(null),
+          needsPhoto
+            ? getSpeciesPhotoUrl(species.speciesCode, species.comName, species.sciName, masteryLevels[`${species.speciesCode}:${type}`], blockedPhotoUrls)
+            : Promise.resolve({ photo: null, noPhoto: false } as { photo: null; noPhoto: boolean }),
         ]);
 
         const availableRecordings = filterRecordings(recordings, bannedAudioSet);
@@ -377,7 +400,8 @@ router.post('/questions', async (req, res) => {
           }));
         }
 
-        if (photoUrl) { q.imageUrl = photoUrl.url; q.imageCredit = photoUrl.credit; }
+        if (photoResult.photo) { q.imageUrl = photoResult.photo.url; q.imageCredit = photoResult.photo.credit; }
+        if (photoResult.noPhoto) q.noPhoto = true;
 
         if (isSongAnswer) {
           const distractorRecs = await Promise.all(
@@ -403,7 +427,7 @@ router.post('/questions', async (req, res) => {
     const allValid = questions.filter(q => {
       const t = q.type as string;
       if (['song', 'song-latin'].includes(t) && !q.audioUrl && !q.noAudio) return false;
-      if (['image', 'image-latin', 'image-song'].includes(t) && !q.imageUrl) return false;
+      if (['image', 'image-latin', 'image-song'].includes(t) && !q.imageUrl && !q.noPhoto) return false;
       if (['sono', 'sono-song'].includes(t) && !q.sonoUrl) return false;
       if (t.endsWith('-song') && (!q.optionAudioUrls || q.optionAudioUrls.length < 4 || q.optionAudioUrls.some(u => !u))) return false;
       return true;

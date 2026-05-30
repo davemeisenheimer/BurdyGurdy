@@ -249,16 +249,19 @@ export function QuizScreen({
 
         {!answered ? (
           /* ── QUESTION STATE ── */
-          question.noAudio ? (
-            /* No recordings available - inform the user and award a free correct answer */
+          (question.noAudio || question.noPhoto) ? (
+            /* No media available - inform the user and award a free correct answer */
             <div className="h-full flex flex-col items-center justify-center px-6 gap-5 text-center">
-              <div className="text-5xl">🔇</div>
+              <div className="text-5xl">{question.noAudio ? '🔇' : '📷'}</div>
               <div>
                 <p className="text-xl font-bold text-slate-800">{question.comName}</p>
                 <p className="text-sm italic text-slate-400 mt-0.5">{question.sciName}</p>
               </div>
               <p className="text-sm text-slate-500 max-w-xs">
-                No audio recordings are currently available for this bird. You'll be awarded a free correct answer and it will be marked as mastered.
+                {question.noAudio
+                  ? "No audio recordings are currently available for this bird. You'll be awarded a free correct answer and it will be marked as mastered."
+                  : "No photos are currently available for this bird. You'll be awarded a free correct answer and it will be marked as mastered."
+                }
               </p>
               {isFirstEncounter && (
                 <span className="bg-slate-700 border-2 border-amber-400 text-white text-xs font-bold px-2.5 py-1.5 rounded-full shadow-md leading-none">
@@ -379,9 +382,11 @@ export function QuizScreen({
             )}
 
             {/* Status strip */}
-            {question.noAudio ? (
+            {(question.noAudio || question.noPhoto) ? (
               <div className="shrink-0 px-5 py-3 border-b border-sky-100 flex items-center justify-between gap-3 bg-sky-50">
-                <p className="font-semibold text-sky-700">No audio available - automatically mastered</p>
+                <p className="font-semibold text-sky-700">
+                  {question.noAudio ? 'No audio available - automatically mastered' : 'No photo available - automatically mastered'}
+                </p>
                 {currentMastery && (
                   <MasteryBadge
                     className={`text-xs px-2 py-1 rounded-full font-medium ${masteryBadgeClass(currentMastery.masteryLevel, currentMastery.isMastered)}`}
@@ -583,8 +588,8 @@ export function QuizScreen({
         )}
       </div>
 
-      {/* Answer options - hidden for noAudio questions */}
-      {!question.noAudio && (
+      {/* Answer options - hidden for noAudio/noPhoto questions */}
+      {!question.noAudio && !question.noPhoto && (
         <div className="shrink-0 space-y-2">
           {question.options.map((opt, idx) => {
             const audioUrl = isSongAnswer ? (question.optionAudioUrls?.[idx] ?? undefined) : undefined;

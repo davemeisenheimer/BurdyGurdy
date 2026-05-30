@@ -7,7 +7,8 @@ export type { AttributedPhoto };
 const MACAULAY_SEARCH = 'https://search.macaulaylibrary.org/api/v1/search';
 const MACAULAY_CDN = 'https://cdn.download.ams.birds.cornell.edu/api/v1/asset';
 const INAT_TAXA_API = 'https://api.inaturalist.org/v1/taxa';
-const TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
+const TTL       = 7 * 24 * 60 * 60 * 1000; // 7 days  — successful photo fetches
+const RETRY_TTL = 5 * 60 * 1000;            // 5 minutes — failed fetches, retried next round
 const HEADERS = { 'User-Agent': 'BurdyGurdy/1.0 (bird identification learning app)' };
 
 // Option C timeout strategy: 1s initial window, 500ms trailing window after first resolves
@@ -70,24 +71,19 @@ async function fetchInatPhoto(sciName: string): Promise<AttributedPhoto | null> 
   return { url, credit, source: 'inat' as const };
 }
 
-async function loadPhotoSet(
+/**
+ * Runs a single attempt to fetch photos from all three sources (Macaulay, iNat, Wikipedia)
+ * with the Option-C timeout strategy. Returns an empty PhotoSet on total failure.
+ */
+async function fetchPhotoSetOnce(
   speciesCode: string,
-  comName?: string,
-  sciName?: string,
+  sc: string,
+  cn: string,
 ): Promise<PhotoSet> {
-  const cacheKey = `photoset5:${speciesCode}`;
-  const cached = cache.get<PhotoSet>(cacheKey);
-  if (cached !== undefined) return cached;
-
-  const sc = sciName ?? comName ?? '';
-  const cn = comName ?? sc;
-
-  // Track resolved values; undefined means not yet settled
   let ebirdPhoto: AttributedPhoto | null | undefined = undefined;
   let inatPhoto:  AttributedPhoto | null | undefined = undefined;
   let wikiPhotos: AttributedPhoto[]     | undefined  = undefined;
 
-  // Start all 3 fetches; side-effect updates tracking vars when each settles
   const macaulayP = fetchMacaulayPhoto(speciesCode)
     .then(v  => { ebirdPhoto = v;  return v; })
     .catch(() => { ebirdPhoto = null; return null as AttributedPhoto | null; });
@@ -113,16 +109,44 @@ async function loadPhotoSet(
     await new Promise<void>(resolve => setTimeout(resolve, TRAILING_MS));
   }
 
-  // Carousel order: primary → secondary → Wikipedia
-  const result: PhotoSet = {
+  return {
     primary: inatPhoto ?? null,
     optional: (
       [ebirdPhoto !== undefined ? ebirdPhoto : null, ...(wikiPhotos ?? [])] as Array<AttributedPhoto | null>
     ).filter((p): p is AttributedPhoto => p !== null),
   };
+}
 
-  cache.set(cacheKey, result, TTL);
-  return result;
+/**
+ * Returns the photo set for a species, with one automatic retry if all sources
+ * return empty on the first attempt. Failed results are cached for RETRY_TTL (5 min)
+ * so the next quiz round re-checks; successful results cache for 7 days.
+ */
+async function loadPhotoSet(
+  speciesCode: string,
+  comName?: string,
+  sciName?: string,
+): Promise<{ photoSet: PhotoSet; noPhoto: boolean }> {
+  const cacheKey = `photoset5:${speciesCode}`;
+  const cached = cache.get<{ photoSet: PhotoSet; noPhoto: boolean }>(cacheKey);
+  if (cached !== undefined) return cached;
+
+  const sc = sciName ?? comName ?? '';
+  const cn = comName ?? sc;
+
+  let photoSet = await fetchPhotoSetOnce(speciesCode, sc, cn);
+  let hasPhotos = photoSet.primary !== null || photoSet.optional.length > 0;
+
+  if (!hasPhotos) {
+    // Retry once after a brief pause to recover from transient failures
+    await new Promise<void>(resolve => setTimeout(resolve, 2000));
+    photoSet = await fetchPhotoSetOnce(speciesCode, sc, cn);
+    hasPhotos = photoSet.primary !== null || photoSet.optional.length > 0;
+  }
+
+  const noPhoto = !hasPhotos;
+  cache.set(cacheKey, { photoSet, noPhoto }, noPhoto ? RETRY_TTL : TTL);
+  return { photoSet, noPhoto };
 }
 
 /** Returns all photos for the reveal/info carousel - unfiltered (eggs, nests etc. are informational). */
@@ -131,7 +155,8 @@ export async function getSpeciesPhotoUrls(
   comName?: string,
   sciName?: string,
 ): Promise<PhotoSet> {
-  return loadPhotoSet(speciesCode, comName, sciName);
+  const { photoSet } = await loadPhotoSet(speciesCode, comName, sciName);
+  return photoSet;
 }
 
 /** Returns appearance-only photos for question display - eggs, nests, chicks etc. filtered out. */
@@ -140,14 +165,15 @@ export async function getSpeciesPhotoUrlsForQuestion(
   comName?: string,
   sciName?: string,
 ): Promise<PhotoSet> {
-  const { primary, optional } = await loadPhotoSet(speciesCode, comName, sciName);
+  const { photoSet: { primary, optional } } = await loadPhotoSet(speciesCode, comName, sciName);
   const allPhotos = [primary, ...optional].filter((p): p is AttributedPhoto => !!p);
   const suitable = allPhotos.filter(p => !QUESTION_EXCLUDE.test(filenameFromUrl(p.url)));
   return { primary: suitable[0] ?? null, optional: suitable.slice(1) };
 }
 
 /**
- * Returns a single attributed photo for a quiz image question.
+ * Returns a single attributed photo for a quiz image question, plus a noPhoto flag
+ * when no photos could be found after retrying.
  * Filters out non-appearance photos (eggs, nests, chicks, etc.).
  * Photo source is weighted by mastery level:
  *   level 0            → primary only
@@ -160,15 +186,17 @@ export async function getSpeciesPhotoUrl(
   sciName?: string,
   masteryLevel?: number,
   blockedUrls: Set<string> = new Set(),
-): Promise<AttributedPhoto | null> {
-  const { primary, optional } = await loadPhotoSet(speciesCode, comName, sciName);
+): Promise<{ photo: AttributedPhoto | null; noPhoto: boolean }> {
+  const { photoSet: { primary, optional }, noPhoto } = await loadPhotoSet(speciesCode, comName, sciName);
+
+  if (noPhoto) return { photo: null, noPhoto: true };
 
   const allPhotos = [primary, ...optional].filter((p): p is AttributedPhoto => !!p);
   const suitable = allPhotos.filter(p =>
     !QUESTION_EXCLUDE.test(filenameFromUrl(p.url)) && !blockedUrls.has(p.url),
   );
 
-  if (suitable.length === 0) return null;
+  if (suitable.length === 0) return { photo: null, noPhoto: false };
 
   const ebirdPhoto = suitable.find(p => p.source === 'macaulay') ?? null;
   const inatPhoto  = suitable.find(p => p.source === 'inat')     ?? null;
@@ -176,7 +204,7 @@ export async function getSpeciesPhotoUrl(
 
   // Level 0: iNat only
   if ((masteryLevel ?? 0) <= 0) {
-    return inatPhoto ?? ebirdPhoto ?? wikiPhotos[0] ?? null;
+    return { photo: inatPhoto ?? ebirdPhoto ?? wikiPhotos[0] ?? null, noPhoto: false };
   }
 
   // Level 1: 75% Macaulay (eBird), 25% iNat
@@ -185,13 +213,13 @@ export async function getSpeciesPhotoUrl(
       ...(ebirdPhoto ? [{ photo: ebirdPhoto, weight: 3 }] : []),
       ...(inatPhoto  ? [{ photo: inatPhoto,  weight: 1 }] : []),
     ];
-    if (candidates.length === 0) return suitable[0] ?? null;
+    if (candidates.length === 0) return { photo: suitable[0] ?? null, noPhoto: false };
     const total = candidates.reduce((s, c) => s + c.weight, 0);
     let r = Math.random() * total;
-    for (const c of candidates) { r -= c.weight; if (r <= 0) return c.photo; }
-    return candidates[candidates.length - 1].photo;
+    for (const c of candidates) { r -= c.weight; if (r <= 0) return { photo: c.photo, noPhoto: false }; }
+    return { photo: candidates[candidates.length - 1].photo, noPhoto: false };
   }
 
   // Level 2+: equal probability across all suitable photos regardless of source
-  return suitable[Math.floor(Math.random() * suitable.length)];
+  return { photo: suitable[Math.floor(Math.random() * suitable.length)], noPhoto: false };
 }

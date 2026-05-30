@@ -9,7 +9,7 @@ export const HELP_CONTENT: Record<string, HelpEntry> = {
   region: {
     title: 'Region',
     body: [
-      'Your region determines which birds appear in your quiz. BirdyGurdy uses recent eBird sightings from your chosen area to build a pool of locally-occurring birds.',
+      'Your region determines which birds appear in your quiz. BurdyGurdy uses recent eBird sightings from your chosen area to build a pool of locally-occurring birds.',
       'You can type a place name, enter an eBird region code directly (e.g. CA-ON, US-WA, CR), or pick a region using the map.',
     ],
   },

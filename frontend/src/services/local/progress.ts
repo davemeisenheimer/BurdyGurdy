@@ -298,6 +298,71 @@ export async function graduateNoAudio(
   return { levelUp, updatedMastery };
 }
 
+// ── No-photo graduation ───────────────────────────────────────────────────────
+
+/**
+ * Pure helper - computes the record to write and the result to return.
+ * Exported for unit tests; call graduateNoPhoto() from production code.
+ */
+export function buildNoPhotoGraduation(
+  speciesCode: string,
+  questionType: QuestionType,
+  comName: string,
+  existing: BirdProgress | null,
+  now: number,
+  familySciName?: string,
+): {
+  record: BirdProgress;
+  levelUp: LevelUpEvent;
+  updatedMastery: { masteryLevel: number; consecutiveCorrect: number; isMastered: boolean; correct: number; incorrect: number };
+} {
+  const record: BirdProgress = {
+    speciesCode,
+    questionType,
+    comName,
+    correct:            existing?.correct            ?? 0,
+    incorrect:          existing?.incorrect          ?? 0,
+    lastAsked:          now,
+    weight:             HISTORY_WEIGHT,
+    favourited:         existing?.favourited         ?? false,
+    excluded:           existing?.excluded           ?? false,
+    masteryLevel:       existing?.masteryLevel       ?? 0,
+    consecutiveCorrect: existing?.consecutiveCorrect ?? 0,
+    isMastered:         true,
+    masteredAt:         existing?.masteredAt         ?? now,
+    noPhoto:            true,
+    recentAnswers:      existing?.recentAnswers      ?? [],
+  };
+  return {
+    record,
+    levelUp: { speciesCode, comName, questionType, newLevel: 3, graduated: true, familySciName },
+    updatedMastery: {
+      masteryLevel:       record.masteryLevel,
+      consecutiveCorrect: record.consecutiveCorrect,
+      isMastered:         true,
+      correct:            record.correct,
+      incorrect:          record.incorrect,
+    },
+  };
+}
+
+export async function graduateNoPhoto(
+  speciesCode: string,
+  questionType: QuestionType,
+  comName: string,
+  familySciName?: string,
+): Promise<{
+  levelUp: LevelUpEvent;
+  updatedMastery: { masteryLevel: number; consecutiveCorrect: number; isMastered: boolean; correct: number; incorrect: number };
+}> {
+  const existing = await db.progress.get([speciesCode, questionType]);
+  const { record, levelUp, updatedMastery } = buildNoPhotoGraduation(
+    speciesCode, questionType, comName, existing ?? null, Date.now(), familySciName,
+  );
+  await db.progress.put(record);
+  return { levelUp, updatedMastery };
+}
+
 // ── Fast-track to hard ────────────────────────────────────────────────────────
 
 /**

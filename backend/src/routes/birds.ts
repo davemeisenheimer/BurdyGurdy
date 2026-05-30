@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import axios from 'axios';
-import { getTaxonomy, getRegionalSpecies, ebirdClient, getCommonSpeciesCodes, getSpeciesList } from '../services/ebird';
+import { getTaxonomy, getRegionalSpecies, ebirdClient, getCommonSpeciesCodes, getSpeciesList, type CommonSpeciesEntry } from '../services/ebird';
 import { getRecordings, parseXCLength } from '../services/xenocanto';
 import { getSpeciesPhotoUrl, getSpeciesPhotoUrls, getSpeciesPhotoUrlsForQuestion } from '../services/macaulay';
 import { getWikipediaSummary, getWikipediaRangeMap, getWikipediaRangeMapLegend, getWikipediaPhotos } from '../services/wikipedia';
@@ -34,12 +34,12 @@ async function getBannedAudioUrls(): Promise<Set<string>> {
 const PRIORITY_GROUPS = ['recentCommon', 'recentUncommon', 'regionCommon', 'regionUncommon', 'rareUncommon'] as const;
 
 /** Returns the 0-based sort index for a species given its region/observation flags. */
-function pgIndex(isHistorical: boolean, isBackyard: boolean, commonRank: number): number {
-  if (!isHistorical && isBackyard)       return 0; // recentCommon
-  if (!isHistorical && !isBackyard)      return 1; // recentUncommon
-  if (isHistorical && commonRank < 9999) return 2; // regionCommon   - any historically common bird
-  if (isHistorical && isBackyard)        return 3; // regionUncommon - uncommon but backyard family
-  return 4;                                        // rareUncommon   - uncommon + non-backyard (vagrants)
+function pgIndex(isHistorical: boolean, isBackyard: boolean, appearances: number): number {
+  if (!isHistorical && isBackyard)      return 0; // recentCommon
+  if (!isHistorical && !isBackyard)     return 1; // recentUncommon
+  if (isHistorical && appearances >= 3) return 2; // regionCommon   - appeared in 3+ of 12 monthly samples
+  if (isHistorical && isBackyard)       return 3; // regionUncommon - uncommon but backyard family
+  return 4;                                       // rareUncommon   - uncommon + non-backyard (vagrants)
 }
 
 // GET /api/birds/region/:regionCode
@@ -59,7 +59,8 @@ router.get('/region/:regionCode', async (req, res) => {
     ]);
 
     const taxMap = new Map(taxonomy.map(t => [t.speciesCode, t]));
-    const commonRank = new Map(top100Codes.map((code, i) => [code, i]));
+    const commonRankMap  = new Map(top100Codes.map((e: CommonSpeciesEntry) => [e.code, e.rank]));
+    const appearancesMap = new Map(top100Codes.map((e: CommonSpeciesEntry) => [e.code, e.appearances]));
 
     // Build recent species (deduplicated, hybrids/slashes/spuhs excluded),
     // tagged as not historical
@@ -77,7 +78,8 @@ router.get('/region/:regionCode', async (req, res) => {
           order: tax?.order ?? '',
           orderComName: ORDER_COMMON_NAMES[tax?.order ?? ''],
           isBackyard: BACKYARD_FAMILIES.has(tax?.familySciName ?? ''),
-          commonRank: commonRank.get(obs.speciesCode) ?? 9999,
+          commonRank: commonRankMap.get(obs.speciesCode) ?? 9999,
+          appearances: appearancesMap.get(obs.speciesCode) ?? 0,
           isHistorical: false,
         };
       });
@@ -95,7 +97,8 @@ router.get('/region/:regionCode', async (req, res) => {
           familySciName: tax.familySciName ?? '',
           order: tax.order ?? '',
           isBackyard: BACKYARD_FAMILIES.has(tax.familySciName ?? ''),
-          commonRank: commonRank.get(code) ?? 9999,
+          commonRank: commonRankMap.get(code) ?? 9999,
+          appearances: appearancesMap.get(code) ?? 0,
           isHistorical: true,
         };
       });
@@ -105,21 +108,22 @@ router.get('/region/:regionCode', async (req, res) => {
     // Sort into 5 priority groups:
     //   0: recentCommon   - recent + backyard family
     //   1: recentUncommon - recent + non-backyard family
-    //   2: regionCommon   - historical + in common ranking (any genuinely common regional bird)
-    //   3: regionUncommon - historical + NOT in common ranking + backyard family (uncommon visitors)
-    //   4: rareUncommon   - historical + NOT in common ranking + non-backyard (vagrants/rarities)
-    // Within each group, order by commonness rank.
+    //   2: regionCommon   - historical + appeared in 3+ of 12 monthly samples
+    //   3: regionUncommon - historical + fewer than 3 monthly appearances + backyard family
+    //   4: rareUncommon   - historical + fewer than 3 monthly appearances + non-backyard (vagrants)
+    // Within each group: more monthly appearances first, then by frequency rank within those months.
     all.sort((a, b) => {
-      const gA = pgIndex(a.isHistorical, a.isBackyard, a.commonRank);
-      const gB = pgIndex(b.isHistorical, b.isBackyard, b.commonRank);
+      const gA = pgIndex(a.isHistorical, a.isBackyard, a.appearances);
+      const gB = pgIndex(b.isHistorical, b.isBackyard, b.appearances);
       if (gA !== gB) return gA - gB;
+      if (b.appearances !== a.appearances) return b.appearances - a.appearances;
       return a.commonRank - b.commonRank;
     });
 
-    // Strip raw sort key; send priorityGroup string for client-side promotion ordering
+    // Strip raw sort keys; send priorityGroup string for client-side promotion ordering
     res.json(all.map(s => {
-      const { commonRank, ...rest } = s;
-      return { ...rest, priorityGroup: PRIORITY_GROUPS[pgIndex(rest.isHistorical, rest.isBackyard, commonRank)] };
+      const { commonRank, appearances, ...rest } = s;
+      return { ...rest, priorityGroup: PRIORITY_GROUPS[pgIndex(rest.isHistorical, rest.isBackyard, appearances)] };
     }));
   } catch (err) {
     console.error(err);

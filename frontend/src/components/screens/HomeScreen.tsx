@@ -153,6 +153,8 @@ export function HomeScreen({ initialConfig, isDesktop, onStart, onProgress, onSi
           {showSelectionView && (
             <TaxonomicSelectionView
               initialPrefs={initialSelectionPrefs ?? {}}
+              regionCode={isDesktop ? regionCode : initialConfig.regionCode}
+              recentDays={initialConfig.recentDays ?? 1}
               onSave={prefs => { setSelectionMode('custom'); setShowSelectionView(false); onSelectionChange(prefs); }}
               onClose={() => setShowSelectionView(false)}
             />

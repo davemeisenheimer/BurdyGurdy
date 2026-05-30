@@ -14,7 +14,7 @@ import { loadQuizPrefs } from '../lib/settings';
 import type { RecentSighting } from '../services/remote/api';
 import { db } from '../lib/db';
 import {
-  recordAnswer, graduateNoAudio, setFavourite, getFavourited,
+  recordAnswer, graduateNoAudio, graduateNoPhoto, setFavourite, getFavourited,
   setExcluded, getExcluded, getAdaptiveParams,
   maintainLevel0Palette, fastTrackToHard,
 } from '../services/local/progress';
@@ -371,6 +371,10 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
     if (config.mode !== 'random') {
       if (q.noAudio) {
         const { levelUp, updatedMastery } = await graduateNoAudio(q.speciesCode, q.type, q.comName, q.familySciName);
+        setRoundLevelUps(prev => [...prev, levelUp]);
+        setCurrentMastery(updatedMastery);
+      } else if (q.noPhoto) {
+        const { levelUp, updatedMastery } = await graduateNoPhoto(q.speciesCode, q.type, q.comName, q.familySciName);
         setRoundLevelUps(prev => [...prev, levelUp]);
         setCurrentMastery(updatedMastery);
       } else {
