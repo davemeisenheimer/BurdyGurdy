@@ -6,7 +6,7 @@ import { BACKYARD_FAMILIES, GROUP_ORDERS, ORDER_COMMON_NAMES } from '../constant
 import { getSupabaseAdmin } from '../lib/supabase';
 import { cache } from '../cache';
 import {
-  PALETTE_AND_SM_RATIO, XC_FETCH_BATCH_SIZE,
+  PALETTE_AND_SM_RATIO, XC_FETCH_BATCH_SIZE, MASTERED_FLOOR_WEIGHT,
 } from '@birdygurdy/shared';
 import { buildCandidates, applyPaletteSMGuarantee, applyAffinityBoosts, pickFromPool, splitCandidates } from '../lib/candidateLogic';
 import { filterRecordings, weightedSampleByDuration } from '../lib/recordingFilter';
@@ -268,19 +268,47 @@ router.post('/questions', async (req, res) => {
         candidates, paletteKeySet, strugglingKeySet,
       );
 
-      // Unmastered birds use target=count+5 so replacement fill lets them repeat naturally
-      // to fill a round (e.g. 8 palette birds across 25 questions).
-      // Mastered birds use target=pool size so no replacement fill — each mastered bird
-      // appears at most once, preventing a single recently-mastered species from
-      // crowding out all the review slots.
-      const pickedRU    = pickFromPool(ruCandidates, count + 5);
-      const pickedSM    = pickFromPool(smCandidates, smCandidates.length);
+      // Unmastered and struggling birds use target=count+5 so replacement fill lets them
+      // repeat to fill a round (e.g. 3 struggling birds across 5 questions).
+      // Non-struggling mastered birds use target=pool size — each appears at most once,
+      // preventing a single recently-mastered species from crowding out review slots.
+      const pickedRU = pickFromPool(ruCandidates, count + 5);
+      const pickedSM = pickFromPool(smCandidates, count + 5);
       const anchorSpecies = [...ruCandidates, ...smCandidates].map(c => c.species);
-      const boostedOther  = birderLevel === 'advanced'
-        ? applyAffinityBoosts(otherCandidates, anchorSpecies)
-        : otherCandidates;
-      const pickedOther = pickFromPool(boostedOther, boostedOther.length);
-      console.log(`[quiz] RU: ${ruCandidates.length}, SM: ${smCandidates.length}, other: ${otherCandidates.length}, min: ${palettePlusStrugglingMin}/${count}`);
+
+      // In struggling-only mode the weightsMap only contains struggling birds, so
+      // otherCandidates is empty — synthesize affinity fill from introduced related
+      // species so the round can be padded with birds the user already knows from
+      // the same genus or family. Not applied when speciesFilterSet is active (Life
+      // List Selections) since the user explicitly chose which birds to practise.
+      let effectiveOther: Candidate[];
+      if (otherCandidates.length === 0 && smCandidates.length > 0 && speciesFilterSet.size === 0) {
+        const anchorGenera   = new Set(anchorSpecies.map(a => a.sciName.split(' ')[0]));
+        const anchorFamilies = new Set(
+          anchorSpecies.map(a => a.tax?.familySciName).filter((f): f is string => Boolean(f)),
+        );
+        const existingCodes = new Set(candidates.map(c => c.species.speciesCode));
+        const synthesized: Candidate[] = [];
+        for (const s of filteredPool) {
+          if (!introducedCodes.has(s.speciesCode)) continue;
+          if (existingCodes.has(s.speciesCode))    continue;
+          if (excludeSet.has(s.speciesCode))        continue;
+          const genus  = s.sciName.split(' ')[0];
+          const family = s.tax?.familySciName;
+          if (!anchorGenera.has(genus) && !(family && anchorFamilies.has(family))) continue;
+          for (const t of types as QuestionType[]) {
+            synthesized.push({ species: s, type: t, weight: MASTERED_FLOOR_WEIGHT });
+          }
+        }
+        effectiveOther = applyAffinityBoosts(synthesized, anchorSpecies);
+      } else {
+        effectiveOther = birderLevel === 'advanced'
+          ? applyAffinityBoosts(otherCandidates, anchorSpecies)
+          : otherCandidates;
+      }
+
+      const pickedOther = pickFromPool(effectiveOther, effectiveOther.length);
+      console.log(`[quiz] RU: ${ruCandidates.length}, SM: ${smCandidates.length}, other: ${otherCandidates.length} (effective: ${effectiveOther.length}), min: ${palettePlusStrugglingMin}/${count}`);
       picked = [...pickedRU, ...pickedSM, ...pickedOther];
     } else {
       picked = pickFromPool(candidates, count + 5);
