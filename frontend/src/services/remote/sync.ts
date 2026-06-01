@@ -393,9 +393,14 @@ export interface SubmitReportParams {
   issueType:   'wrong_bird' | 'poor_quality' | 'confusing' | 'nest' | 'egg' | 'other';
   wrongBird:   string | null;
   description: string | null;
+  regionCode:  string | null;
 }
 
 export async function submitMediaReport(p: SubmitReportParams): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const headers = session?.access_token
+    ? { Authorization: `Bearer ${session.access_token}` }
+    : {};
   await api.post('/birds/report-media', {
     url:         p.url,
     mediaType:   p.mediaType,
@@ -405,7 +410,8 @@ export async function submitMediaReport(p: SubmitReportParams): Promise<void> {
     issueType:   p.issueType,
     wrongBird:   p.wrongBird,
     description: p.description,
-  });
+    regionCode:  p.regionCode,
+  }, { headers });
 }
 
 /** Downloads all admin-blocked media and caches in IndexedDB. Called for all signed-in users. */

@@ -783,6 +783,7 @@ export default function App() {
       issueType: data.issueType,
       wrongBird: data.wrongBird || null,
       description: data.description || null,
+      regionCode: config.regionCode,
     }).catch(err => console.error('[report-media]', err));
   };
 

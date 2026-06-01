@@ -10,6 +10,17 @@ import { filterObservationsToKnownSpecies } from '../lib/speciesFilter';
 import { filterRecordings } from '../lib/recordingFilter';
 import { getSupabaseAdmin } from '../lib/supabase';
 
+/** Decode a JWT payload without verifying the signature. Returns null on failure or expiry. */
+function decodeJwt(jwt: string): { sub?: string; exp?: number } | null {
+  try {
+    const payload = JSON.parse(Buffer.from(jwt.split('.')[1], 'base64url').toString());
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
 const router = Router();
 
 async function getBannedAudioUrls(): Promise<Set<string>> {
@@ -643,10 +654,16 @@ router.get('/photos/:speciesCode', async (req, res) => {
 // NOTE: requires media_report_submissions.reporter_id to be nullable in Supabase
 // (guests have no user ID).
 router.post('/report-media', async (req, res) => {
-  const { url, mediaType, service, speciesCode, comName, issueType, wrongBird, description } = req.body ?? {};
+  const { url, mediaType, service, speciesCode, comName, issueType, wrongBird, description, regionCode } = req.body ?? {};
   if (!url || !mediaType || !speciesCode || !comName || !issueType) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
+
+  const token = req.headers.authorization?.startsWith('Bearer ')
+    ? req.headers.authorization.slice(7)
+    : null;
+  const reporterId = token ? (decodeJwt(token)?.sub ?? null) : null;
+
   try {
     const admin = getSupabaseAdmin();
 
@@ -674,15 +691,15 @@ router.post('/report-media', async (req, res) => {
       reportId = (created as { id: string }).id;
     }
 
-    // Insert the submission. reporter_id is null for guests.
     const { error: subErr } = await admin
       .from('media_report_submissions')
       .insert({
-        media_report_id: reportId,
-        reporter_id:     null,
-        issue_type:      issueType,
-        wrong_bird:      wrongBird ?? null,
-        description:     description ?? null,
+        report_id:    reportId,
+        reporter_id:  reporterId,
+        issue_type:   issueType,
+        wrong_bird:   wrongBird ?? null,
+        description:  description ?? null,
+        region_code:  regionCode ?? null,
       });
     if (subErr) {
       console.error('[report-media] create submission:', subErr.message);

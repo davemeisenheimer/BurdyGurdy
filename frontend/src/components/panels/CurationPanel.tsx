@@ -163,8 +163,14 @@ function ReportDetail({
                 <IssueBadge type={s.issueType} />
                 <span className="text-xs text-slate-400 ml-auto">{new Date(s.createdAt).toLocaleDateString()}</span>
               </div>
-              {s.reporterEmail && (
-                <p className="text-xs text-slate-500">{s.reporterEmail}</p>
+              {(s.reporterDisplayName || s.reporterEmail || s.regionCode) && (
+                <p className="text-xs text-slate-500">
+                  {s.reporterDisplayName ?? s.reporterEmail ?? 'Unknown user'}
+                  {s.reporterEmail && s.reporterDisplayName && (
+                    <span className="text-slate-400"> ({s.reporterEmail})</span>
+                  )}
+                  {s.regionCode && <span className="text-slate-400"> · {s.regionCode}</span>}
+                </p>
               )}
               {s.wrongBird && (
                 <p className="text-xs text-slate-600">Thinks it's: <strong>{s.wrongBird}</strong></p>

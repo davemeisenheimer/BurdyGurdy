@@ -4,6 +4,7 @@
  * Supabase user metadata, enforced by RLS on the media_reports tables.
  */
 import { supabase } from './supabase';
+import { api } from '../services/remote/api';
 import { db } from './db';
 
 // ── Bird facts ────────────────────────────────────────────────────────────────
@@ -61,13 +62,15 @@ export async function deleteBirdFact(id: string): Promise<void> {
 // ── Media reports ─────────────────────────────────────────────────────────────
 
 export interface MediaReportSubmission {
-  id:            string;
-  reporterId:    string | null;
-  reporterEmail: string | null;
-  issueType:     'wrong_bird' | 'poor_quality' | 'confusing' | 'nest' | 'egg' | 'other';
-  wrongBird:     string | null;
-  description:   string | null;
-  createdAt:     string;
+  id:                   string;
+  reporterId:           string | null;
+  reporterDisplayName:  string | null;
+  reporterEmail:        string | null;
+  issueType:            'wrong_bird' | 'poor_quality' | 'confusing' | 'nest' | 'egg' | 'other';
+  wrongBird:            string | null;
+  description:          string | null;
+  regionCode:           string | null;
+  createdAt:            string;
 }
 
 export interface MediaReport {
@@ -84,29 +87,65 @@ export interface MediaReport {
   submissions: MediaReportSubmission[];
 }
 
-function mapReport(r: Record<string, unknown>): MediaReport {
+function mapReport(
+  r: Record<string, unknown>,
+  reporterMap: Map<string, { displayName: string | null; email: string | null }> = new Map(),
+): MediaReport {
   const subs = (r.media_report_submissions as Record<string, unknown>[] | null) ?? [];
   return {
-    id:          r.id          as string,
-    url:         r.url         as string,
-    mediaType:   r.media_type  as 'photo' | 'audio',
-    service:     r.service     as string | null,
+    id:          r.id           as string,
+    url:         r.url          as string,
+    mediaType:   r.media_type   as 'photo' | 'audio',
+    service:     r.service      as string | null,
     speciesCode: r.species_code as string,
-    comName:     r.com_name    as string,
-    status:      r.status      as 'pending' | 'blocked' | 'invalidated',
-    blockScope:  r.block_scope as 'full' | 'question' | null,
-    createdAt:   r.created_at  as string,
-    resolvedAt:  r.resolved_at as string | null,
-    submissions: subs.map(s => ({
-      id:            s.id             as string,
-      reporterId:    s.reporter_id    as string,
-      reporterEmail: s.reporter_email as string | null,
-      issueType:     s.issue_type     as MediaReportSubmission['issueType'],
-      wrongBird:     s.wrong_bird     as string | null,
-      description:   s.description   as string | null,
-      createdAt:     s.created_at     as string,
-    })),
+    comName:     r.com_name     as string,
+    status:      r.status       as 'pending' | 'blocked' | 'invalidated',
+    blockScope:  r.block_scope  as 'full' | 'question' | null,
+    createdAt:   r.created_at   as string,
+    resolvedAt:  r.resolved_at  as string | null,
+    submissions: subs.map(s => {
+      const reporterId = s.reporter_id as string | null;
+      const reporter = reporterId ? (reporterMap.get(reporterId) ?? null) : null;
+      return {
+        id:                  s.id           as string,
+        reporterId,
+        reporterDisplayName: reporter?.displayName ?? null,
+        reporterEmail:       reporter?.email       ?? null,
+        issueType:           s.issue_type   as MediaReportSubmission['issueType'],
+        wrongBird:           s.wrong_bird   as string | null,
+        description:         s.description as string | null,
+        regionCode:          s.region_code as string | null,
+        createdAt:           s.created_at  as string,
+      };
+    }),
   };
+}
+
+async function fetchReporterMap(reporterIds: string[]): Promise<Map<string, { displayName: string | null; email: string | null }>> {
+  if (reporterIds.length === 0) return new Map();
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return new Map();
+    const res = await api.get<Array<{ id: string; email: string | null; username: string | null }>>(
+      '/admin/users',
+      { headers: { Authorization: `Bearer ${session.access_token}` } },
+    );
+    const idSet = new Set(reporterIds);
+    return new Map(
+      res.data
+        .filter(u => idSet.has(u.id))
+        .map(u => [u.id, { displayName: u.username ?? null, email: u.email ?? null }]),
+    );
+  } catch {
+    return new Map();
+  }
+}
+
+function extractReporterIds(rows: Record<string, unknown>[]): string[] {
+  return [...new Set(
+    rows.flatMap(r => ((r.media_report_submissions as Record<string, unknown>[] | null) ?? [])
+      .map(s => s.reporter_id as string | null).filter((id): id is string => Boolean(id)))
+  )];
 }
 
 export async function fetchPendingReports(): Promise<MediaReport[]> {
@@ -116,7 +155,10 @@ export async function fetchPendingReports(): Promise<MediaReport[]> {
     .eq('status', 'pending')
     .order('created_at', { ascending: false });
   if (error || !data) return [];
-  return (data as Record<string, unknown>[]).map(mapReport);
+  const rows = data as Record<string, unknown>[];
+  const reporterIds = extractReporterIds(rows);
+  const reporterMap = await fetchReporterMap(reporterIds);
+  return rows.map(r => mapReport(r, reporterMap));
 }
 
 export async function fetchBlockedReports(): Promise<MediaReport[]> {
@@ -126,7 +168,10 @@ export async function fetchBlockedReports(): Promise<MediaReport[]> {
     .eq('status', 'blocked')
     .order('resolved_at', { ascending: false });
   if (error || !data) return [];
-  return (data as Record<string, unknown>[]).map(mapReport);
+  const rows = data as Record<string, unknown>[];
+  const reporterIds = extractReporterIds(rows);
+  const reporterMap = await fetchReporterMap(reporterIds);
+  return rows.map(r => mapReport(r, reporterMap));
 }
 
 export async function blockReport(id: string, blockScope: 'full' | 'question'): Promise<void> {
