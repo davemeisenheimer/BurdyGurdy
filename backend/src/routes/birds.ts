@@ -92,6 +92,8 @@ router.get('/region/:regionCode', async (req, res) => {
           commonRank: commonRankMap.get(obs.speciesCode) ?? 9999,
           appearances: appearancesMap.get(obs.speciesCode) ?? 0,
           isHistorical: false,
+          recentLocName: obs.locName ?? null,
+          recentObsDt:   obs.obsDt   ?? null,
         };
       });
 
@@ -710,6 +712,65 @@ router.post('/report-media', async (req, res) => {
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Internal error';
     console.error('[report-media]', msg);
+    res.status(500).json({ error: msg });
+  }
+});
+
+// POST /api/birds/regional-presence/refresh
+// Called fire-and-forget by the frontend. Checks if the shared regional presence
+// cache is stale (>24h) and if so fetches fresh eBird data and upserts last_seen_date
+// per species. Uses the service-role client so RLS doesn't block writes.
+router.post('/regional-presence/refresh', async (req, res) => {
+  const { regionCode } = req.body ?? {};
+  if (!regionCode) return res.status(400).json({ error: 'regionCode required' });
+
+  try {
+    const admin = getSupabaseAdmin();
+
+    // Check when this region was last refreshed.
+    const { data: meta } = await admin
+      .from('regional_presence_meta')
+      .select('last_fetched_at, fetch_back_days')
+      .eq('region_code', regionCode)
+      .maybeSingle();
+
+    const lastFetched = meta ? new Date((meta as { last_fetched_at: string }).last_fetched_at) : null;
+    const hoursSince  = lastFetched ? (Date.now() - lastFetched.getTime()) / 3_600_000 : Infinity;
+    if (hoursSince < 24) return res.json({ updated: false });
+
+    // eBird recent-obs endpoint caps at back=30; use that for new regions, otherwise
+    // cover the gap since last fetch (capped at 30).
+    const daysSince = lastFetched ? Math.ceil((Date.now() - lastFetched.getTime()) / 86_400_000) : 30;
+    const back      = Math.min(30, Math.max(2, daysSince + 1));
+
+    const observations = await getRegionalSpecies(regionCode, back);
+    if (observations.length === 0) return res.json({ updated: false });
+
+    // Upsert last_seen_date using the actual eBird observation date (obsDt), not today.
+    const rows = observations.map((obs: { speciesCode: string; obsDt: string }) => ({
+      region_code:    regionCode,
+      species_code:   obs.speciesCode,
+      last_seen_date: obs.obsDt.slice(0, 10), // "YYYY-MM-DD HH:MM" → "YYYY-MM-DD"
+      updated_at:     new Date().toISOString(),
+    }));
+
+    const { error: upsertErr } = await admin
+      .from('regional_presence')
+      .upsert(rows, { onConflict: 'region_code,species_code' });
+    if (upsertErr) {
+      console.error('[regional-presence] upsert:', upsertErr.message);
+      return res.status(500).json({ error: upsertErr.message });
+    }
+
+    await admin
+      .from('regional_presence_meta')
+      .upsert({ region_code: regionCode, last_fetched_at: new Date().toISOString(), fetch_back_days: back },
+               { onConflict: 'region_code' });
+
+    res.json({ updated: true, count: rows.length });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Internal error';
+    console.error('[regional-presence]', msg);
     res.status(500).json({ error: msg });
   }
 });

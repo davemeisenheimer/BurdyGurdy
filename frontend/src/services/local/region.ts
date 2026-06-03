@@ -21,6 +21,8 @@ export function buildSpeciesCache(full: BirdSpecies[]): CachedSpecies[] {
     sciName:       s.sciName,
     isHistorical:  s.isHistorical,
     priorityGroup: s.priorityGroup,
+    recentLocName: s.recentLocName,
+    recentObsDt:   s.recentObsDt,
   }));
 }
 

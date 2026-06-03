@@ -17,12 +17,37 @@ export interface RegionSnapshot {
   species: SnapshotSpecies[];
 }
 
+export interface ReturneeInfo {
+  speciesCode: string;
+  comName:     string;
+  sciName:     string;
+  lastSeenDate: Date;
+  locName:     string | null;
+  obsDt:       string | null;
+}
+
 export interface RegionUpdateInfo {
   added: CachedSpecies[];
   dropped: SnapshotSpecies[];
   unchanged: CachedSpecies[];
   back: number;
   savedAt?: string;
+  returnees: ReturneeInfo[];
+}
+
+const RETURNEE_MIN_ABSENCE_DAYS = 31;
+
+export function computeReturnees(
+  added: CachedSpecies[],
+  presenceMap: Map<string, Date>,
+): ReturneeInfo[] {
+  const threshold = new Date();
+  threshold.setDate(threshold.getDate() - RETURNEE_MIN_ABSENCE_DAYS);
+  return added.flatMap(bird => {
+    const lastSeen = presenceMap.get(bird.speciesCode);
+    if (!lastSeen || lastSeen >= threshold) return [];
+    return [{ speciesCode: bird.speciesCode, comName: bird.comName, sciName: bird.sciName, lastSeenDate: lastSeen, locName: bird.recentLocName ?? null, obsDt: bird.recentObsDt ?? null }];
+  });
 }
 
 export async function loadSnapshot(): Promise<RegionSnapshot | null> {
@@ -66,6 +91,7 @@ export function buildSnapshot(
 export function computeRegionUpdate(
   currentSpecies: CachedSpecies[],
   snapshot: RegionSnapshot,
+  presenceMap: Map<string, Date> = new Map(),
 ): RegionUpdateInfo | null {
   const currentNonHistorical = currentSpecies.filter(s => !s.isHistorical);
   const currentCodes  = new Set(currentNonHistorical.map(s => s.speciesCode));
@@ -76,5 +102,6 @@ export function computeRegionUpdate(
   const unchanged = currentNonHistorical.filter(s => snapshotCodes.has(s.speciesCode));
 
   if (added.length === 0 && dropped.length === 0) return null;
-  return { added, dropped, unchanged, back: snapshot.back, savedAt: snapshot.savedAt };
+  const returnees = computeReturnees(added, presenceMap);
+  return { added, dropped, unchanged, back: snapshot.back, savedAt: snapshot.savedAt, returnees };
 }

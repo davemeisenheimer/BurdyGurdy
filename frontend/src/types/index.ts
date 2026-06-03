@@ -19,6 +19,8 @@ export interface BirdSpecies {
   isBackyard?: boolean;
   isHistorical?: boolean;
   priorityGroup?: PriorityGroup;
+  recentLocName?: string;
+  recentObsDt?: string;
 }
 
 export interface AttributedPhoto {
@@ -39,6 +41,8 @@ export interface CachedSpecies {
   sciName: string;
   isHistorical?: boolean;
   priorityGroup?: PriorityGroup;
+  recentLocName?: string;
+  recentObsDt?: string;
 }
 
 /** IndexedDB record for caching the ordered regional species list. */

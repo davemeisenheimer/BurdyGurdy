@@ -434,6 +434,26 @@ export async function fetchAdminBlockedMedia(): Promise<void> {
   );
 }
 
+// ── Regional presence ─────────────────────────────────────────────────────────
+
+/** Reads the shared presence cache for a region. Returns a map of speciesCode → last_seen_date. */
+export async function fetchRegionalPresence(regionCode: string): Promise<Map<string, Date>> {
+  const { data, error } = await supabase
+    .from('regional_presence')
+    .select('species_code, last_seen_date')
+    .eq('region_code', regionCode);
+  if (error || !data) return new Map();
+  return new Map(
+    (data as Array<{ species_code: string; last_seen_date: string }>)
+      .map(r => [r.species_code, new Date(r.last_seen_date)]),
+  );
+}
+
+/** Fire-and-forget: tells the backend to refresh the presence cache if it's stale. */
+export function refreshRegionalPresence(regionCode: string): void {
+  api.post('/birds/regional-presence/refresh', { regionCode }).catch(() => {});
+}
+
 // ── Region snapshot ───────────────────────────────────────────────────────────
 
 import type { RegionSnapshot } from '../local/regionSnapshot';

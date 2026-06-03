@@ -31,7 +31,7 @@ import type { LocateResult, RegionalSighting, RecentSighting } from './services/
 import { db, switchToUserDb } from './lib/db';
 import { supabase } from './lib/supabase';
 import type { SupabaseUser } from './lib/supabase';
-import { uploadProgress, downloadAndReplace, uploadSettings, uploadAchievements, downloadSettings, fetchFriendVictoryLog, downloadUserBlockedPhotos, deleteAllUserBlockedPhotos, uploadUserBlockedPhoto, submitMediaReport, fetchAdminBlockedMedia, deleteCloudProgressRecords, uploadRegionSnapshot, downloadRegionSnapshot, getCloudUploadTime, getLocalSyncedAt, getNeedsUpload } from './services/remote/sync';
+import { uploadProgress, downloadAndReplace, uploadSettings, uploadAchievements, downloadSettings, fetchFriendVictoryLog, downloadUserBlockedPhotos, deleteAllUserBlockedPhotos, uploadUserBlockedPhoto, submitMediaReport, fetchAdminBlockedMedia, deleteCloudProgressRecords, uploadRegionSnapshot, downloadRegionSnapshot, getCloudUploadTime, getLocalSyncedAt, getNeedsUpload, fetchRegionalPresence, refreshRegionalPresence } from './services/remote/sync';
 import { checkBirdsToExpire, expireOldMasteredBirds, backfillProgressTaxonomy } from './services/local/progress';
 import { getRegionSpecies } from './services/local/region';
 import { loadSnapshot, saveSnapshot, buildSnapshot, computeRegionUpdate } from './services/local/regionSnapshot';
@@ -641,6 +641,7 @@ export default function App() {
     progressRecords: BirdProgress[],
     pendingConfig: QuizConfig | null,
     expandedTypes: QuestionType[],
+    presenceMap: Map<string, Date> = new Map(),
   ): Promise<boolean> => {
     const snapshot = await loadSnapshot();
     const snapshotMatches = snapshot?.regionCode === regionCode && snapshot?.back === back;
@@ -652,7 +653,7 @@ export default function App() {
       storeChallengeSnapshot(newSnap.savedAt!, expandedTypes, challenge).catch(() => {});
       return false;
     }
-    const updateInfo = computeRegionUpdate(currentSpecies, snapshot!);
+    const updateInfo = computeRegionUpdate(currentSpecies, snapshot!, presenceMap);
     if (!updateInfo) return false;
     setPendingRegionUpdate({ info: updateInfo, records: progressRecords, pendingConfig, regionCode, back });
     return true;
@@ -664,11 +665,13 @@ export default function App() {
   const handleRegionRefresh = useCallback(async () => {
     const regionCode = config.regionCode;
     const back = config.recentDays ?? 30;
-    const [currentSpecies, allRecords] = await Promise.all([
+    const [currentSpecies, allRecords, presenceMap] = await Promise.all([
       getRegionSpecies(regionCode, back),
       db.progress.toArray(),
+      fetchRegionalPresence(regionCode),
     ]);
-    await applyRegionUpdate(regionCode, back, currentSpecies, allRecords, null, expandQuestionTypes(config.questionTypes, settings));
+    refreshRegionalPresence(regionCode);
+    await applyRegionUpdate(regionCode, back, currentSpecies, allRecords, null, expandQuestionTypes(config.questionTypes, settings), presenceMap);
   }, [applyRegionUpdate, config.regionCode, config.recentDays, config.questionTypes, settings]);
 
   const handleStart = async (newConfig: QuizConfig) => {
@@ -700,11 +703,13 @@ export default function App() {
     // Check whether the region sightings window has changed since the last quiz
     if (newConfig.mode === 'adaptive') {
       const back = fullConfig.recentDays ?? 30;
-      const [currentSpecies, allRecords] = await Promise.all([
+      const [currentSpecies, allRecords, presenceMap] = await Promise.all([
         getRegionSpecies(fullConfig.regionCode, back),
         db.progress.toArray(),
+        fetchRegionalPresence(fullConfig.regionCode),
       ]);
-      const showed = await applyRegionUpdate(fullConfig.regionCode, back, currentSpecies, allRecords, fullConfig, expandQuestionTypes(fullConfig.questionTypes, settings));
+      refreshRegionalPresence(fullConfig.regionCode);
+      const showed = await applyRegionUpdate(fullConfig.regionCode, back, currentSpecies, allRecords, fullConfig, expandQuestionTypes(fullConfig.questionTypes, settings), presenceMap);
       if (showed) {
         // Preload quiz questions while the dialog is open
         setConfig(fullConfig);
@@ -829,6 +834,35 @@ export default function App() {
     };
     return () => { delete (window as unknown as Record<string, unknown>).__triggerAward; };
   }, []);
+
+  // Dev-only test hook: window.__triggerReturnees() to preview the "Back in town" UI
+  useEffect(() => {
+    (window as unknown as Record<string, unknown>).__triggerReturnees = () => {
+      const fakeAdded: CachedSpecies[] = [
+        { speciesCode: 'amewoo', comName: 'American Woodcock', sciName: 'Scolopax minor' },
+        { speciesCode: 'rusgro', comName: 'Rose-breasted Grosbeak', sciName: 'Pheucticus ludovicianus' },
+        { speciesCode: 'norpar', comName: 'Northern Parula', sciName: 'Setophaga americana' },
+      ];
+      setPendingRegionUpdate({
+        info: {
+          added: fakeAdded,
+          dropped: [{ speciesCode: 'daejun', comName: 'Dark-eyed Junco', sciName: 'Junco hyemalis' }],
+          unchanged: [],
+          back: 1,
+          savedAt: new Date(Date.now() - 86_400_000).toISOString(),
+          returnees: [
+            { speciesCode: 'amewoo', comName: 'American Woodcock', sciName: 'Scolopax minor', lastSeenDate: new Date('2025-11-15'), locName: 'Mer Bleue Bog', obsDt: '2026-06-03 06:42' },
+            { speciesCode: 'rusgro', comName: 'Rose-breasted Grosbeak', sciName: 'Pheucticus ludovicianus', lastSeenDate: new Date('2025-10-02'), locName: 'Andrew Haydon Park', obsDt: '2026-06-03 08:15' },
+          ],
+        },
+        records: [],
+        pendingConfig: null,
+        regionCode: config.regionCode,
+        back: 1,
+      });
+    };
+    return () => { delete (window as unknown as Record<string, unknown>).__triggerReturnees; };
+  }, [config.regionCode]);
 
   // Check for pending friend invites and subscribe to new ones in real-time
   useEffect(() => {
