@@ -51,6 +51,7 @@ export function BirdInfoPanel({
   // Resolve sciName/familyComName for browse mode
   useEffect(() => {
     if (!browseSpecies) { setBrowseResolved(null); return; }
+    setLoading(true);
     setViewingSpecies(null);
     setViewedInfo(null);
     setViewedSightings([]);
@@ -194,7 +195,7 @@ export function BirdInfoPanel({
 
         <div className="overflow-hidden rounded-lg border border-stone-300" style={{ width: 'calc((100% - 16px) / 3)' }}>
           <RelatedSpeciesCarousel
-            referenceSpecies={primarySpecies}
+            referenceSpecies={sp}
             regionCode={regionCode}
             autoScrollEnabled={autoScrollRelatedSpecies}
             showReferencePhoto={!!browseResolved}

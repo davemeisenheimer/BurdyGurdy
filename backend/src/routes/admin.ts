@@ -12,7 +12,7 @@ router.get('/users', async (req, res) => {
     : null;
   if (!token) return res.status(401).json({ error: 'Missing auth token' });
 
-  let admin;
+  let admin: ReturnType<typeof getSupabaseAdmin>;
   try { admin = getSupabaseAdmin(); }
   catch (e) { return res.status(500).json({ error: (e as Error).message }); }
 
@@ -24,28 +24,34 @@ router.get('/users', async (req, res) => {
   }
   if (caller.user_metadata?.is_admin !== true) return res.status(403).json({ error: 'Forbidden' });
 
-  // Fetch all auth users (up to 1 000 — increase if needed).
-  const { data: usersData, error: usersErr } = await admin.auth.admin.listUsers({ perPage: 1000 });
-  if (usersErr) return res.status(500).json({ error: usersErr.message });
-
-  // Fetch all progress records with pagination to avoid the server-side max-rows cap (1000).
   type ProgressRow = { user_id: string; species_code: string; question_type: string; in_history: boolean };
-  const allProgress: ProgressRow[] = [];
-  const PAGE = 1000;
-  for (let from = 0; ; from += PAGE) {
-    const { data: page, error: pageErr } = await admin
-      .from('bird_progress')
-      .select('user_id, species_code, question_type, in_history')
-      .range(from, from + PAGE - 1);
-    if (pageErr || !page) break;
-    allProgress.push(...(page as ProgressRow[]));
-    if (page.length < PAGE) break;
+
+  async function fetchAllProgress() {
+    const rows: ProgressRow[] = [];
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data: page, error: pageErr } = await admin
+        .from('bird_progress')
+        .select('user_id, species_code, question_type, in_history')
+        .range(from, from + PAGE - 1);
+      if (pageErr || !page) break;
+      rows.push(...(page as ProgressRow[]));
+      if (page.length < PAGE) break;
+    }
+    return rows;
   }
 
-  // Fetch display names from profiles table.
-  const { data: profiles } = await admin
-    .from('profiles')
-    .select('id, display_name');
+  // Run all three independent fetches in parallel now that admin access is confirmed.
+  const [
+    { data: usersData, error: usersErr },
+    allProgress,
+    { data: profiles },
+  ] = await Promise.all([
+    admin.auth.admin.listUsers({ perPage: 1000 }),
+    fetchAllProgress(),
+    admin.from('profiles').select('id, display_name'),
+  ]);
+  if (usersErr) return res.status(500).json({ error: usersErr.message });
 
   // Aggregate progress stats per user.
   // Track per-species which types exist and which are mastered, so we can compute

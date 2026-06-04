@@ -35,12 +35,15 @@ export function RelatedSpeciesCarousel({
   const [autoScrolling, setAutoScrolling] = useState(false);
   const hasTriggeredRef  = useRef(false);
 
-  // Reference bird photo (browse mode only)
-  const [referencePhoto, setReferencePhoto] = useState<AttributedPhoto | null | undefined>(undefined);
+  // All non-blocked photos of the subject bird (browse mode only)
+  const [subjectPhotos, setSubjectPhotos]   = useState<AttributedPhoto[]>([]);
+  // Toggle: 'related' = current carousel, 'photos' = all subject bird photos
+  const [photoMode, setPhotoMode]           = useState<'related' | 'photos'>('photos');
+  const [photoIdx,  setPhotoIdx]            = useState(0);
 
   useEffect(() => {
-    if (!showReferencePhoto) { setReferencePhoto(null); return; }
-    setReferencePhoto(undefined);
+    if (!showReferencePhoto) { setSubjectPhotos([]); return; }
+    setSubjectPhotos([]);
     const { speciesCode, comName, sciName } = referenceSpecies;
     Promise.all([
       fetchBirdPhotos(speciesCode, comName, sciName),
@@ -48,9 +51,9 @@ export function RelatedSpeciesCarousel({
       db.adminBlockedMedia.filter(r => r.speciesCode === speciesCode).toArray(),
     ]).then(([{ primary, optional }, blocked, adminBlocked]) => {
       const blockedUrls = new Set([...blocked.map(b => b.url), ...adminBlocked.map(b => b.url)]);
-      const photo = [primary, ...(optional ?? [])].find(p => p && !blockedUrls.has(p.url)) ?? null;
-      setReferencePhoto(photo);
-    }).catch(() => setReferencePhoto(null));
+      const all = [primary, ...(optional ?? [])].filter((p): p is AttributedPhoto => !!p && !blockedUrls.has(p.url));
+      setSubjectPhotos(all);
+    }).catch(() => { setSubjectPhotos([]); });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showReferencePhoto, referenceSpecies.speciesCode]);
 
@@ -200,7 +203,9 @@ export function RelatedSpeciesCarousel({
     setPlayingCode(null);
     audioRef.current?.pause();
     setIdx(0);
-    if (showReferencePhoto) setReferencePhoto(undefined);
+    setPhotoMode('photos');
+    setPhotoIdx(0);
+    setSubjectPhotos([]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [referenceSpecies.speciesCode]);
 
@@ -334,6 +339,67 @@ export function RelatedSpeciesCarousel({
     </button>
   );
 
+  // ── Photos mode: all subject bird photos ──────────────────────────────────
+  if (showReferencePhoto && photoMode === 'photos') {
+    const total     = subjectPhotos.length;
+    const allSlides = total + 1; // 0 = title card, 1..N = photos
+    const isTitle   = photoIdx === 0;
+    const photo     = !isTitle ? (subjectPhotos[photoIdx - 1] ?? null) : null;
+    const visible   = photo?.url ? imgLoadedUrls.has(photo.url) : false;
+    return (
+      <div className="relative bg-slate-800 h-full overflow-hidden">
+        {isTitle ? (
+          <div className="flex flex-col items-center justify-center h-full px-4 text-center gap-1">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Bird Photos</p>
+            <p className="text-base font-bold text-white leading-tight mt-1">{referenceSpecies.comName}</p>
+            {total > 0
+              ? <p className="text-xs text-slate-400 mt-1">{total} photo{total !== 1 ? 's' : ''}</p>
+              : <p className="text-xs text-slate-400 mt-1">Loading…</p>
+            }
+            <button
+              onClick={() => { setPhotoMode('related'); setPhotoIdx(0); }}
+              className="mt-3 flex items-center gap-1 bg-black/60 hover:bg-black/80 text-white text-xs rounded-full px-3 py-1.5 transition-colors"
+            >
+              Switch to related species
+            </button>
+          </div>
+        ) : (
+          photo && (
+            <img
+              key={photo.url}
+              src={photo.url}
+              alt={referenceSpecies.comName}
+              className={`w-full h-full object-contain transition-opacity duration-500 ${visible ? 'opacity-100' : 'opacity-0'}`}
+              onLoad={() => setImgLoadedUrls(prev => new Set(prev).add(photo.url))}
+            />
+          )
+        )}
+        {!isTitle && photo?.credit && (
+          <span className="absolute bottom-1 right-1 bg-black/50 text-white/50 text-[10px] px-1.5 py-0.5 rounded max-w-[60%] truncate">
+            {photo.credit}
+          </span>
+        )}
+        {allSlides > 1 && (
+          <>
+            <button
+              onClick={() => setPhotoIdx(i => (i - 1 + allSlides) % allSlides)}
+              className="absolute left-1 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm"
+            >‹</button>
+            <button
+              onClick={() => setPhotoIdx(i => (i + 1) % allSlides)}
+              className="absolute right-1 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm"
+            >›</button>
+            {!isTitle && (
+              <span className="absolute top-8 right-1 bg-black/50 text-white text-xs px-1 py-0.5 rounded-full">
+                {photoIdx}/{total}
+              </span>
+            )}
+          </>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="relative bg-slate-900 h-full overflow-hidden">
       {/* Slide track */}
@@ -356,40 +422,34 @@ export function RelatedSpeciesCarousel({
               style={{ width: `${100 / n}%` }}
             >
               {slide.kind === 'title' ? (
-                referencePhoto ? (
-                  <>
-                    <img
-                      src={referencePhoto.url}
-                      alt={slide.comName}
-                      className={`w-full h-full object-contain transition-opacity duration-500 ${imgLoadedUrls.has(referencePhoto.url) ? 'opacity-100' : 'opacity-0'}`}
-                      onLoad={() => setImgLoadedUrls(prev => new Set(prev).add(referencePhoto.url))}
-                    />
-                    <div className="absolute inset-x-0 top-0 flex items-center bg-black/60 px-2 py-1.5 gap-2">
-                      <span className="flex-1 min-w-0 text-xs text-white/80 font-semibold truncate">
-                        {slide.comName} ({slide.sciName})
-                      </span>
-                      <span className="shrink-0 text-xs text-slate-400 whitespace-nowrap">Related →</span>
-                    </div>
-                    {referencePhoto.credit && (
-                      <span className="absolute bottom-1 right-1 bg-black/50 text-white/50 text-[10px] px-1.5 py-0.5 rounded max-w-[60%] truncate">
-                        {referencePhoto.credit}
-                      </span>
-                    )}
-                    {/* Listen button — photo layout */}
+                showReferencePhoto ? (
+                  // Browse mode: text-only mode switcher card
+                  <div className="flex flex-col items-center justify-center h-full px-4 text-center gap-1">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Related Species</p>
+                    {n > 1
+                      ? <p className="text-xs text-slate-400 mt-4 leading-relaxed">Scroll to compare →</p>
+                      : <p className="text-xs text-slate-400 mt-4 leading-relaxed">No related species photos to show</p>
+                    }
                     {n > 1 && !listenMode && (
-                      <div className="absolute bottom-1 left-1">
-                        {listenButton}
-                      </div>
+                      <div className="mt-2">{listenButton}</div>
                     )}
-                  </>
+                    {subjectPhotos.length > 0 && !listenMode && (
+                      <button
+                        onClick={() => { stopAutoScroll(); setPhotoMode('photos'); setPhotoIdx(0); }}
+                        className="mt-2 flex items-center gap-1 bg-black/60 hover:bg-black/80 text-white text-xs rounded-full px-3 py-1.5 transition-colors"
+                      >
+                        📷 Switch to bird photos
+                      </button>
+                    )}
+                  </div>
                 ) : (
+                  // Quiz mode: unchanged
                   <div className="flex flex-col items-center justify-center h-full px-4 text-center gap-1">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Related Species</p>
                     <p className="text-base font-bold text-white leading-tight mt-1">{slide.comName}</p>
                     <p className="text-xs italic text-slate-400">{slide.sciName}</p>
                     <p className="text-xs text-slate-500">{slide.familyComName}</p>
                     <p className="text-xs text-slate-400 mt-4 leading-relaxed">Scroll to see and compare related species →</p>
-                    {/* Listen button — text layout */}
                     {n > 1 && !listenMode && (
                       <div className="mt-2">{listenButton}</div>
                     )}
