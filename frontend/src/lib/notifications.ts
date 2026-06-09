@@ -4,7 +4,7 @@ export interface AppNotification {
   id: string;
   senderUserId: string;
   senderDisplayName: string;
-  type: 'login' | 'victory' | 'logout' | 'session';
+  type: 'login' | 'victory' | 'logout' | 'session' | 'report_resolved';
   data: Record<string, unknown>;
   createdAt: string;
   read: boolean;
@@ -67,6 +67,19 @@ export function formatNotificationMessage(n: AppNotification): string {
       const m = d.birdsMasteredCount ?? 0;
       const masteryPart = m > 0 ? `, mastering ${m} bird${m !== 1 ? 's' : ''}` : '';
       return `${name} played ${r} round${r !== 1 ? 's' : ''}, answering ${q} question${q !== 1 ? 's' : ''}${masteryPart}.`;
+    }
+    case 'report_resolved': {
+      const d = n.data as { action?: string; blockScope?: string; comName?: string; mediaType?: string; note?: string };
+      const outcome =
+        d.action === 'blocked' && d.blockScope === 'question'
+          ? 'The media has been blocked from quiz questions but will remain visible in the bird info screen for reference.'
+        : d.action === 'blocked'
+          ? 'The media has been removed from the game entirely — it will not appear in quiz questions or the bird info screen.'
+        : d.action === 'marked_valid'
+          ? 'Your concern was noted, but after review the media was found to be appropriate for its current use — no changes were made.'
+          : 'After review, this report was found to be inaccurate and has been closed.';
+      const msg = `Your ${d.mediaType ?? 'media'} report for ${d.comName ?? 'a bird'} has been reviewed. ${outcome}`;
+      return d.note ? `${msg} Note from reviewer: "${d.note}"` : msg;
     }
     default:
       return `New notification from ${name}.`;

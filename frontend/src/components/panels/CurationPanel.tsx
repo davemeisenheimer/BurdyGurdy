@@ -5,6 +5,7 @@ import { AudioCurationPanel } from './AudioCurationPanel';
 import {
   fetchPendingReports, fetchBlockedReports,
   blockReport, invalidateReport, deleteReport, unblockReport,
+  sendReportResolution,
 } from '../../lib/adminSync';
 import type { MediaReport } from '../../lib/adminSync';
 import { fetchAdminBlockedMedia } from '../../services/remote/sync';
@@ -127,11 +128,29 @@ function ReportDetail({
   onAction: () => void;
 }) {
   const [blockScope, setBlockScope] = useState<'full' | 'question'>('full');
+  const [curatorNote, setCuratorNote] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const act = async (fn: () => Promise<void>) => {
+  const act = async (fn: () => Promise<void>, notifAction?: 'blocked' | 'marked_valid' | 'deleted', scope?: 'full' | 'question') => {
     setBusy(true);
-    try { await fn(); onAction(); }
+    try {
+      await fn();
+      if (notifAction) {
+        const sub = report.submissions[0];
+        if (sub?.reporterId) {
+          await sendReportResolution(
+            sub.reporterId,
+            sub.notifyEmail ? (sub.reporterEmail ?? null) : null,
+            report.comName,
+            report.mediaType,
+            notifAction,
+            curatorNote.trim() || null,
+            scope ?? null,
+          );
+        }
+      }
+      onAction();
+    }
     catch (e) { console.error(e); }
     finally { setBusy(false); }
   };
@@ -142,6 +161,11 @@ function ReportDetail({
         <button onClick={onBack} className="text-slate-500 hover:text-slate-700 text-xl leading-none">←</button>
         <span className="text-sm font-semibold text-slate-700">{report.comName}</span>
         <span className="ml-auto text-xs text-slate-400">{report.submissions.length} report{report.submissions.length !== 1 ? 's' : ''}</span>
+        {report.invalidatedCount > 0 && (
+          <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">
+            {report.invalidatedCount} prior invalidation{report.invalidatedCount !== 1 ? 's' : ''}
+          </span>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
@@ -197,23 +221,31 @@ function ReportDetail({
               ))}
             </div>
 
+            <textarea
+              placeholder="Optional note to reporter…"
+              value={curatorNote}
+              onChange={e => setCuratorNote(e.target.value.slice(0, 500))}
+              rows={2}
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-forest-400"
+            />
+
             <button
               disabled={busy}
-              onClick={() => act(() => blockReport(report.id, blockScope))}
+              onClick={() => act(() => blockReport(report.id, blockScope), 'blocked', blockScope)}
               className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-medium disabled:opacity-50"
             >
               Block
             </button>
             <button
               disabled={busy}
-              onClick={() => act(() => invalidateReport(report.id))}
+              onClick={() => act(() => invalidateReport(report.id), 'marked_valid')}
               className="w-full py-2 border border-amber-400 text-amber-700 hover:bg-amber-50 rounded-xl text-sm font-medium disabled:opacity-50"
             >
               Mark as valid (keep tracking)
             </button>
             <button
               disabled={busy}
-              onClick={() => act(() => deleteReport(report.id))}
+              onClick={() => act(() => deleteReport(report.id), 'deleted')}
               className="w-full py-2 border border-slate-300 text-slate-500 hover:bg-slate-50 rounded-xl text-sm font-medium disabled:opacity-50"
             >
               Delete (bogus report)

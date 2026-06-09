@@ -37,6 +37,7 @@ interface Props {
   onToggleExcluded: () => void;
   onNext: () => void;
   onSkip?: () => void;
+  userEmail?: string | null;
   onReportError?: (data: ReportErrorData & { mediaUrl: string; mediaType: 'photo' | 'audio' }) => void;
   onSightingClick?: (sighting: RecentSighting, speciesCode: string, comName: string, sciName: string) => void;
 }
@@ -105,6 +106,7 @@ export function QuizScreen({
   onToggleExcluded,
   onNext,
   onSkip,
+  userEmail,
   onReportError,
   onSightingClick,
 }: Props) {
@@ -643,6 +645,7 @@ export function QuizScreen({
           mediaType={reportMediaType}
           mediaUrl={reportMediaUrl}
           comName={question.comName}
+          userEmail={userEmail}
           onClose={() => setShowReportModal(false)}
           onSubmit={data => {
             onReportError?.({ ...data, mediaUrl: reportMediaUrl, mediaType: reportMediaType });

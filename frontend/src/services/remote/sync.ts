@@ -394,6 +394,7 @@ export interface SubmitReportParams {
   wrongBird:   string | null;
   description: string | null;
   regionCode:  string | null;
+  notifyEmail: boolean;
 }
 
 export async function submitMediaReport(p: SubmitReportParams): Promise<void> {
@@ -411,6 +412,7 @@ export async function submitMediaReport(p: SubmitReportParams): Promise<void> {
     wrongBird:   p.wrongBird,
     description: p.description,
     regionCode:  p.regionCode,
+    notifyEmail: p.notifyEmail,
   }, { headers });
 }
 

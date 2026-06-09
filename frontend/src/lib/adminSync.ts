@@ -70,39 +70,43 @@ export interface MediaReportSubmission {
   wrongBird:            string | null;
   description:          string | null;
   regionCode:           string | null;
+  notifyEmail:          boolean;
   createdAt:            string;
 }
 
 export interface MediaReport {
-  id:          string;
-  url:         string;
-  mediaType:   'photo' | 'audio';
-  service:     string | null;
-  speciesCode: string;
-  comName:     string;
-  status:      'pending' | 'blocked' | 'invalidated';
-  blockScope:  'full' | 'question' | null;
-  createdAt:   string;
-  resolvedAt:  string | null;
-  submissions: MediaReportSubmission[];
+  id:               string;
+  url:              string;
+  mediaType:        'photo' | 'audio';
+  service:          string | null;
+  speciesCode:      string;
+  comName:          string;
+  status:           'pending' | 'blocked' | 'invalidated';
+  blockScope:       'full' | 'question' | null;
+  createdAt:        string;
+  resolvedAt:       string | null;
+  submissions:      MediaReportSubmission[];
+  invalidatedCount: number;
 }
 
 function mapReport(
   r: Record<string, unknown>,
   reporterMap: Map<string, { displayName: string | null; email: string | null }> = new Map(),
+  invalidatedCountMap: Map<string, number> = new Map(),
 ): MediaReport {
   const subs = (r.media_report_submissions as Record<string, unknown>[] | null) ?? [];
   return {
-    id:          r.id           as string,
-    url:         r.url          as string,
-    mediaType:   r.media_type   as 'photo' | 'audio',
-    service:     r.service      as string | null,
-    speciesCode: r.species_code as string,
-    comName:     r.com_name     as string,
-    status:      r.status       as 'pending' | 'blocked' | 'invalidated',
-    blockScope:  r.block_scope  as 'full' | 'question' | null,
-    createdAt:   r.created_at   as string,
-    resolvedAt:  r.resolved_at  as string | null,
+    id:               r.id           as string,
+    url:              r.url          as string,
+    mediaType:        r.media_type   as 'photo' | 'audio',
+    service:          r.service      as string | null,
+    speciesCode:      r.species_code as string,
+    comName:          r.com_name     as string,
+    status:           r.status       as 'pending' | 'blocked' | 'invalidated',
+    blockScope:       r.block_scope  as 'full' | 'question' | null,
+    createdAt:        r.created_at   as string,
+    resolvedAt:       r.resolved_at  as string | null,
+    invalidatedCount: invalidatedCountMap.get(r.url as string) ?? 0,
     submissions: subs.map(s => {
       const reporterId = s.reporter_id as string | null;
       const reporter = reporterId ? (reporterMap.get(reporterId) ?? null) : null;
@@ -113,9 +117,10 @@ function mapReport(
         reporterEmail:       reporter?.email       ?? null,
         issueType:           s.issue_type   as MediaReportSubmission['issueType'],
         wrongBird:           s.wrong_bird   as string | null,
-        description:         s.description as string | null,
-        regionCode:          s.region_code as string | null,
-        createdAt:           s.created_at  as string,
+        description:         s.description  as string | null,
+        regionCode:          s.region_code  as string | null,
+        notifyEmail:         (s.notify_email as boolean | null) ?? false,
+        createdAt:           s.created_at   as string,
       };
     }),
   };
@@ -156,9 +161,19 @@ export async function fetchPendingReports(): Promise<MediaReport[]> {
     .order('created_at', { ascending: false });
   if (error || !data) return [];
   const rows = data as Record<string, unknown>[];
+
   const reporterIds = extractReporterIds(rows);
-  const reporterMap = await fetchReporterMap(reporterIds);
-  return rows.map(r => mapReport(r, reporterMap));
+  const [reporterMap, invalidatedResult] = await Promise.all([
+    fetchReporterMap(reporterIds),
+    supabase.from('media_reports').select('url').eq('status', 'invalidated'),
+  ]);
+
+  const invalidatedCountMap = new Map<string, number>();
+  for (const row of (invalidatedResult.data ?? []) as { url: string }[]) {
+    invalidatedCountMap.set(row.url, (invalidatedCountMap.get(row.url) ?? 0) + 1);
+  }
+
+  return rows.map(r => mapReport(r, reporterMap, invalidatedCountMap));
 }
 
 export async function fetchBlockedReports(): Promise<MediaReport[]> {
@@ -285,6 +300,32 @@ export async function unblockAudioDirectly(url: string, speciesCode: string): Pr
     }
   }
   await db.adminBlockedMedia.delete([url, speciesCode]);
+}
+
+export async function sendReportResolution(
+  reporterUserId: string,
+  reporterEmail:  string | null,
+  comName:        string,
+  mediaType:      'photo' | 'audio',
+  action:         'blocked' | 'marked_valid' | 'deleted',
+  note:           string | null,
+  blockScope?:    'full' | 'question' | null,
+): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) return;
+  await api.post(
+    '/birds/report-resolved',
+    {
+      reporterUserId,
+      ...(reporterEmail ? { reporterEmail } : {}),
+      comName,
+      mediaType,
+      action,
+      ...(blockScope ? { blockScope } : {}),
+      ...(note ? { note } : {}),
+    },
+    { headers: { Authorization: `Bearer ${session.access_token}` } },
+  );
 }
 
 /** Unblocks a directly-blocked photo. Deletes rows with no submissions; resets others to pending. */

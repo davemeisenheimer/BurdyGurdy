@@ -6,14 +6,16 @@ export interface ReportErrorData {
   issueType:   ReportIssueType;
   wrongBird:   string;
   description: string;
+  notifyEmail: boolean;
 }
 
 interface Props {
-  mediaType: 'photo' | 'audio';
-  mediaUrl:  string;
-  comName:   string;
-  onSubmit:  (data: ReportErrorData) => void;
-  onClose:   () => void;
+  mediaType:  'photo' | 'audio';
+  mediaUrl:   string;
+  comName:    string;
+  userEmail?: string | null;
+  onSubmit:   (data: ReportErrorData) => void;
+  onClose:    () => void;
 }
 
 const ISSUE_LABELS: Record<ReportIssueType, string> = {
@@ -25,11 +27,12 @@ const ISSUE_LABELS: Record<ReportIssueType, string> = {
   other:        'Other',
 };
 
-export function ReportErrorModal({ mediaType, mediaUrl, comName, onSubmit, onClose }: Props) {
-  const [issueType, setIssueType]   = useState<ReportIssueType | null>(null);
-  const [wrongBird, setWrongBird]   = useState('');
+export function ReportErrorModal({ mediaType, mediaUrl, comName, userEmail, onSubmit, onClose }: Props) {
+  const [issueType, setIssueType]     = useState<ReportIssueType | null>(null);
+  const [wrongBird, setWrongBird]     = useState('');
   const [description, setDescription] = useState('');
-  const [playing, setPlaying]       = useState(false);
+  const [notifyEmail, setNotifyEmail] = useState(false);
+  const [playing, setPlaying]         = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const toggleAudio = () => {
@@ -42,7 +45,7 @@ export function ReportErrorModal({ mediaType, mediaUrl, comName, onSubmit, onClo
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!issueType) return;
-    onSubmit({ issueType, wrongBird: wrongBird.trim(), description: description.trim() });
+    onSubmit({ issueType, wrongBird: wrongBird.trim(), description: description.trim(), notifyEmail });
   };
 
   return (
@@ -121,6 +124,21 @@ export function ReportErrorModal({ mediaType, mediaUrl, comName, onSubmit, onClo
           />
           <p className="text-xs text-slate-400 text-right mt-0.5">{description.length}/240</p>
         </div>
+
+        {/* Email opt-in */}
+        {userEmail && (
+          <label className="flex items-start gap-2.5 cursor-pointer mb-4">
+            <input
+              type="checkbox"
+              checked={notifyEmail}
+              onChange={e => setNotifyEmail(e.target.checked)}
+              className="mt-0.5 w-4 h-4 accent-forest-600 shrink-0"
+            />
+            <span className="text-sm text-slate-700 leading-snug">
+              Email me at <strong>{userEmail}</strong> when this report is resolved
+            </span>
+          </label>
+        )}
 
         {/* Actions */}
         <div className="flex gap-2">

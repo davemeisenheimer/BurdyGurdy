@@ -789,6 +789,7 @@ export default function App() {
       wrongBird: data.wrongBird || null,
       description: data.description || null,
       regionCode: config.regionCode,
+      notifyEmail: data.notifyEmail,
     }).catch(err => console.error('[report-media]', err));
   };
 
@@ -1149,6 +1150,7 @@ export default function App() {
           onAnswer={submitAnswer}
           onToggleFavourite={toggleFavourite}
           onToggleExcluded={toggleExcluded}
+          userEmail={user?.email ?? null}
           onNext={handleNext}
           onSkip={nextQuestion}
           onReportError={(data) => handleReportError({ ...data, speciesCode: currentQuestion.speciesCode, comName: currentQuestion.comName })}

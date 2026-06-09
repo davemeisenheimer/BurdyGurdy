@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import axios from 'axios';
+import { Resend } from 'resend';
 import { getTaxonomy, getRegionalSpecies, ebirdClient, getCommonSpeciesCodes, getSpeciesList, type CommonSpeciesEntry } from '../services/ebird';
 import { getRecordings, parseXCLength } from '../services/xenocanto';
 import { getSpeciesPhotoUrl, getSpeciesPhotoUrls, getSpeciesPhotoUrlsForQuestion } from '../services/macaulay';
@@ -651,12 +652,9 @@ router.get('/photos/:speciesCode', async (req, res) => {
 });
 
 // POST /api/birds/report-media
-// Submits a media error report. Uses direct table inserts via the service-role
-// admin client so both guest and authenticated users can report.
-// NOTE: requires media_report_submissions.reporter_id to be nullable in Supabase
-// (guests have no user ID).
+// Submits a media error report. Requires authentication.
 router.post('/report-media', async (req, res) => {
-  const { url, mediaType, service, speciesCode, comName, issueType, wrongBird, description, regionCode } = req.body ?? {};
+  const { url, mediaType, service, speciesCode, comName, issueType, wrongBird, description, regionCode, notifyEmail } = req.body ?? {};
   if (!url || !mediaType || !speciesCode || !comName || !issueType) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
@@ -665,6 +663,7 @@ router.post('/report-media', async (req, res) => {
     ? req.headers.authorization.slice(7)
     : null;
   const reporterId = token ? (decodeJwt(token)?.sub ?? null) : null;
+  if (!reporterId) return res.status(401).json({ error: 'Authentication required to submit reports' });
 
   try {
     const admin = getSupabaseAdmin();
@@ -702,6 +701,7 @@ router.post('/report-media', async (req, res) => {
         wrong_bird:   wrongBird ?? null,
         description:  description ?? null,
         region_code:  regionCode ?? null,
+        notify_email: notifyEmail === true,
       });
     if (subErr) {
       console.error('[report-media] create submission:', subErr.message);
@@ -714,6 +714,82 @@ router.post('/report-media', async (req, res) => {
     console.error('[report-media]', msg);
     res.status(500).json({ error: msg });
   }
+});
+
+// POST /api/birds/report-resolved
+// Called by an admin after resolving a media report. Creates an in-app notification
+// (via service-role client to bypass RLS) and optionally sends an email.
+router.post('/report-resolved', async (req, res) => {
+  const token = req.headers.authorization?.startsWith('Bearer ')
+    ? req.headers.authorization.slice(7)
+    : null;
+  if (!token) return res.status(401).json({ error: 'Missing auth token' });
+
+  let admin: ReturnType<typeof getSupabaseAdmin>;
+  try { admin = getSupabaseAdmin(); }
+  catch (e) { return res.status(500).json({ error: (e as Error).message }); }
+
+  const { data: { user: caller }, error: authErr } = await admin.auth.getUser(token);
+  if (authErr || !caller) return res.status(401).json({ error: 'Invalid token' });
+  if (caller.user_metadata?.is_admin !== true) return res.status(403).json({ error: 'Forbidden' });
+
+  const { reporterUserId, reporterEmail, comName, mediaType, action, note, blockScope } = req.body ?? {};
+  if (!reporterUserId || !comName || !mediaType || !action) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const actionLabel =
+    action === 'blocked' && blockScope === 'question'
+      ? 'Blocked from questions — the media has been blocked from quiz questions but will remain visible in the bird info screen for reference.'
+    : action === 'blocked'
+      ? 'Removed from game — the media has been removed from the game entirely.'
+    : action === 'marked_valid'
+      ? 'Acceptable — your concern was noted, but after review the media was found to be appropriate for its current use. No changes were made.'
+      : 'Dismissed — after review, this report was found to be inaccurate and has been closed.';
+  const callerDisplayName: string =
+    (caller.user_metadata?.full_name as string | undefined) ??
+    (caller.user_metadata?.name      as string | undefined) ??
+    caller.email ?? 'BirdyGurdy';
+
+  // Create in-app notification using service-role client (bypasses RLS)
+  const { error: notifErr } = await admin.from('notifications').insert({
+    recipient_user_id:   reporterUserId,
+    sender_user_id:      caller.id,
+    sender_display_name: callerDisplayName,
+    type:                'report_resolved',
+    data:                { action, comName, mediaType, ...(blockScope ? { blockScope } : {}), ...(note ? { note } : {}) },
+    read:                false,
+  });
+  if (notifErr) {
+    console.error('[report-resolved] notification insert:', notifErr.message);
+    return res.status(500).json({ error: notifErr.message });
+  }
+
+  // Send email if reporter opted in
+  if (reporterEmail) {
+    const apiKey   = process.env.RESEND_API_KEY;
+    const fromEmail = process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev';
+    if (apiKey) {
+      const resend = new Resend(apiKey);
+      resend.emails.send({
+        from:    `BurdyGurdy <${fromEmail}>`,
+        to:      reporterEmail,
+        subject: 'Your BurdyGurdy report has been reviewed',
+        text:    `Your ${mediaType} report for ${comName} has been reviewed.\n\n${actionLabel}${note ? `\n\nNote from reviewer: ${note}` : ''}\n\nThank you for helping improve BurdyGurdy!`,
+        html: `
+          <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
+            <h2 style="color: #2d6a4f;">Your report has been reviewed</h2>
+            <p>Your <strong>${mediaType}</strong> report for <strong>${comName}</strong> has been reviewed.</p>
+            <p>${actionLabel}</p>
+            ${note ? `<p><strong>Note from reviewer:</strong> ${note}</p>` : ''}
+            <p style="color: #666; font-size: 13px;">Thank you for helping improve BurdyGurdy!</p>
+          </div>
+        `,
+      }).catch(err => console.error('[report-resolved] email:', (err as Error).message));
+    }
+  }
+
+  res.json({ ok: true });
 });
 
 // POST /api/birds/regional-presence/refresh
