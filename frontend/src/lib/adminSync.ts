@@ -59,6 +59,22 @@ export async function deleteBirdFact(id: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function importBirdFacts(
+  facts: Omit<BirdFact, 'id' | 'createdAt'>[],
+): Promise<{ imported: number; error: string | null }> {
+  if (facts.length === 0) return { imported: 0, error: null };
+  const rows = facts.map(f => ({
+    fact_text:     f.factText,
+    source_url:    f.sourceUrl   || null,
+    species_codes: f.speciesCodes.length ? f.speciesCodes : null,
+    family_names:  f.familyNames.length  ? f.familyNames  : null,
+    is_active:     f.isActive,
+  }));
+  const { error } = await supabase.from('bird_facts').insert(rows);
+  if (error) return { imported: 0, error: error.message };
+  return { imported: rows.length, error: null };
+}
+
 // ── Media reports ─────────────────────────────────────────────────────────────
 
 export interface MediaReportSubmission {

@@ -4,7 +4,7 @@ export interface AppNotification {
   id: string;
   senderUserId: string;
   senderDisplayName: string;
-  type: 'login' | 'victory' | 'logout' | 'session' | 'report_resolved';
+  type: 'login' | 'victory' | 'logout' | 'session' | 'report_resolved' | 'new_report';
   data: Record<string, unknown>;
   createdAt: string;
   read: boolean;
@@ -80,6 +80,19 @@ export function formatNotificationMessage(n: AppNotification): string {
           : 'After review, this report was found to be inaccurate and has been closed.';
       const msg = `Your ${d.mediaType ?? 'media'} report for ${d.comName ?? 'a bird'} has been reviewed. ${outcome}`;
       return d.note ? `${msg} Note from reviewer: "${d.note}"` : msg;
+    }
+    case 'new_report': {
+      const d = n.data as { comName?: string; mediaType?: string; issueType?: string };
+      const issueLabel: Record<string, string> = {
+        wrong_bird:   'wrong bird',
+        poor_quality: 'poor quality',
+        confusing:    'confusing',
+        nest:         'contains nest',
+        egg:          'contains egg',
+        other:        'other issue',
+      };
+      const issue = issueLabel[d.issueType ?? ''] ?? (d.issueType ?? 'issue');
+      return `New ${d.mediaType ?? 'media'} report for ${d.comName ?? 'a bird'} — ${issue} (submitted by ${name}).`;
     }
     default:
       return `New notification from ${name}.`;

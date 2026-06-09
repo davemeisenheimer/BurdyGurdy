@@ -1232,6 +1232,7 @@ export default function App() {
           onDeleteNotifications={ids => {
             setNotifications(prev => prev.filter(n => !ids.includes(n.id)));
           }}
+          onOpenCuration={isDesktop ? () => { setRightPanelTab('curation'); setScreen('home'); } : undefined}
         />
       )}
 

@@ -709,6 +709,66 @@ router.post('/report-media', async (req, res) => {
     }
 
     res.json({ ok: true });
+
+    // Fire-and-forget: send in-app + email notifications to all admins
+    (async () => {
+      try {
+        // Resolve reporter display name
+        const { data: reporterData } = await admin.auth.admin.getUserById(reporterId);
+        const reporterName: string =
+          (reporterData?.user?.user_metadata?.full_name as string | undefined) ??
+          (reporterData?.user?.user_metadata?.name      as string | undefined) ??
+          reporterData?.user?.email ?? 'A user';
+
+        // Fetch all admin users
+        const { data: usersPage } = await admin.auth.admin.listUsers({ perPage: 1000 });
+        const adminUsers = (usersPage?.users ?? []).filter(u => u.user_metadata?.is_admin === true);
+
+        const issueLabels: Record<string, string> = {
+          wrong_bird:   'wrong bird',
+          poor_quality: 'poor quality',
+          confusing:    'confusing',
+          nest:         'contains nest',
+          egg:          'contains egg',
+          other:        'other issue',
+        };
+        const issueLabel = issueLabels[issueType] ?? issueType;
+
+        const apiKey    = process.env.RESEND_API_KEY;
+        const fromEmail = process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev';
+        const resend    = apiKey ? new Resend(apiKey) : null;
+
+        for (const adminUser of adminUsers) {
+          await admin.from('notifications').insert({
+            recipient_user_id:   adminUser.id,
+            sender_user_id:      reporterId,
+            sender_display_name: reporterName,
+            type:                'new_report',
+            data:                { comName, mediaType, issueType },
+            read:                false,
+          });
+
+          if (resend && adminUser.email) {
+            resend.emails.send({
+              from:    `BurdyGurdy <${fromEmail}>`,
+              to:      adminUser.email,
+              subject: `New ${mediaType} report for ${comName}`,
+              text:    `${reporterName} submitted a new ${mediaType} report for ${comName}.\n\nIssue: ${issueLabel}\n\nLog in and open the Curation panel to review it.`,
+              html: `
+                <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
+                  <h2 style="color: #2d6a4f;">New media report</h2>
+                  <p><strong>${reporterName}</strong> submitted a new <strong>${mediaType}</strong> report for <strong>${comName}</strong>.</p>
+                  <p>Issue: ${issueLabel}</p>
+                  <p style="color: #666; font-size: 13px;">Log in and open the Curation panel to review it.</p>
+                </div>
+              `,
+            }).catch(err => console.error('[report-media] email:', (err as Error).message));
+          }
+        }
+      } catch (err) {
+        console.error('[report-media] admin notify:', (err as Error).message);
+      }
+    })();
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Internal error';
     console.error('[report-media]', msg);

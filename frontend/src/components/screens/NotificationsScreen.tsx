@@ -7,6 +7,7 @@ interface Props {
   onBack: () => void;
   onNotificationsRead: (ids: string[]) => void;
   onDeleteNotifications: (ids: string[]) => void;
+  onOpenCuration?: () => void;
 }
 
 function timeLabel(iso: string): string {
@@ -23,7 +24,7 @@ function timeLabel(iso: string): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-export function NotificationsScreen({ notifications, onBack, onNotificationsRead, onDeleteNotifications }: Props) {
+export function NotificationsScreen({ notifications, onBack, onNotificationsRead, onDeleteNotifications, onOpenCuration }: Props) {
   const [expandedSender, setExpandedSender] = useState<string | null>(null);
 
   // Group by sender, sorted by most recent
@@ -111,6 +112,14 @@ export function NotificationsScreen({ notifications, onBack, onNotificationsRead
                     <li key={n.id} className="px-4 py-3 flex items-start gap-2">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-slate-700">{formatNotificationMessage(n)}</p>
+                        {n.type === 'new_report' && onOpenCuration && (
+                          <button
+                            onClick={onOpenCuration}
+                            className="mt-2 text-xs px-3 py-1 rounded-full bg-sky-100 text-sky-700 hover:bg-sky-200 font-medium"
+                          >
+                            Open Curation Panel
+                          </button>
+                        )}
                         <p className="text-xs text-slate-400 mt-1">
                           {new Date(n.createdAt).toLocaleString(undefined, {
                             month: 'short', day: 'numeric',
