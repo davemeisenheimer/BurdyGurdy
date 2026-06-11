@@ -57,6 +57,9 @@ export function RelatedSpeciesCarousel({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showReferencePhoto, referenceSpecies.speciesCode]);
 
+  const containerRef                    = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   // Audio state
   const [recordings, setRecordings]  = useState<Map<string, CarouselRecording[] | null>>(new Map());
   const fetchingAudioRef = useRef<Set<string>>(new Set());
@@ -324,6 +327,18 @@ export function RelatedSpeciesCarousel({
   // Pause on unmount
   useEffect(() => () => { audioRef.current?.pause(); }, []);
 
+  useEffect(() => {
+    const handler = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handler);
+    return () => document.removeEventListener('fullscreenchange', handler);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!containerRef.current) return;
+    if (isFullscreen) document.exitFullscreen().catch(() => {});
+    else containerRef.current.requestFullscreen().catch(() => {});
+  };
+
   const n        = slides.length;
   const prevCode = slides[(idx - 1 + n) % n]?.speciesCode ?? '';
   const nextCode = slides[(idx + 1) % n]?.speciesCode ?? '';
@@ -347,7 +362,7 @@ export function RelatedSpeciesCarousel({
     const photo     = !isTitle ? (subjectPhotos[photoIdx - 1] ?? null) : null;
     const visible   = photo?.url ? imgLoadedUrls.has(photo.url) : false;
     return (
-      <div className="relative bg-slate-800 h-full overflow-hidden">
+      <div ref={containerRef} className="relative bg-slate-800 h-full overflow-hidden">
         {isTitle ? (
           <div className="flex flex-col items-center justify-center h-full px-4 text-center gap-1">
             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Bird Photos</p>
@@ -396,12 +411,17 @@ export function RelatedSpeciesCarousel({
             )}
           </>
         )}
+        <button
+          onClick={toggleFullscreen}
+          className="absolute top-1 left-1 z-10 bg-black/50 hover:bg-black/70 text-white text-xs rounded px-1.5 py-0.5"
+          aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+        >{isFullscreen ? '✕' : '⛶'}</button>
       </div>
     );
   }
 
   return (
-    <div className="relative bg-slate-900 h-full overflow-hidden">
+    <div ref={containerRef} className="relative bg-slate-900 h-full overflow-hidden">
       {/* Slide track */}
       <div
         className="flex h-full"
@@ -567,6 +587,11 @@ export function RelatedSpeciesCarousel({
           }
         }}
       />
+      <button
+        onClick={toggleFullscreen}
+        className="absolute top-1 left-1 z-10 bg-black/50 hover:bg-black/70 text-white text-xs rounded px-1.5 py-0.5"
+        aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+      >{isFullscreen ? '✕' : '⛶'}</button>
     </div>
   );
 }
