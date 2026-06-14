@@ -882,13 +882,40 @@ router.post('/regional-presence/refresh', async (req, res) => {
     const observations = await getRegionalSpecies(regionCode, back);
     if (observations.length === 0) return res.json({ updated: false });
 
+    // Fetch existing dates so we can detect returns after long absences.
+    const speciesCodes = observations.map((o: { speciesCode: string }) => o.speciesCode);
+    const { data: existing } = await admin
+      .from('regional_presence')
+      .select('species_code, last_seen_date')
+      .eq('region_code', regionCode)
+      .in('species_code', speciesCodes);
+
+    const existingMap = new Map(
+      ((existing ?? []) as Array<{ species_code: string; last_seen_date: string }>)
+        .map(r => [r.species_code, r.last_seen_date]),
+    );
+
+    const RETURNEE_GAP_DAYS = 31;
+    const msPerDay = 86_400_000;
+
     // Upsert last_seen_date using the actual eBird observation date (obsDt), not today.
-    const rows = observations.map((obs: { speciesCode: string; obsDt: string }) => ({
-      region_code:    regionCode,
-      species_code:   obs.speciesCode,
-      last_seen_date: obs.obsDt.slice(0, 10), // "YYYY-MM-DD HH:MM" → "YYYY-MM-DD"
-      updated_at:     new Date().toISOString(),
-    }));
+    // When a species returns after a gap of 31+ days, preserve the old date in
+    // prev_last_seen_date so the frontend can detect it as a returnee before the
+    // absence evidence is overwritten.
+    const rows = observations.map((obs: { speciesCode: string; obsDt: string }) => {
+      const newDate  = obs.obsDt.slice(0, 10);
+      const oldDate  = existingMap.get(obs.speciesCode);
+      const gapDays  = oldDate
+        ? (new Date(newDate).getTime() - new Date(oldDate).getTime()) / msPerDay
+        : 0;
+      return {
+        region_code:         regionCode,
+        species_code:        obs.speciesCode,
+        last_seen_date:      newDate,
+        prev_last_seen_date: gapDays >= RETURNEE_GAP_DAYS ? oldDate : null,
+        updated_at:          new Date().toISOString(),
+      };
+    });
 
     const { error: upsertErr } = await admin
       .from('regional_presence')

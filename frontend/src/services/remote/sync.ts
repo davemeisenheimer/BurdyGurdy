@@ -442,12 +442,14 @@ export async function fetchAdminBlockedMedia(): Promise<void> {
 export async function fetchRegionalPresence(regionCode: string): Promise<Map<string, Date>> {
   const { data, error } = await supabase
     .from('regional_presence')
-    .select('species_code, last_seen_date')
+    .select('species_code, last_seen_date, prev_last_seen_date')
     .eq('region_code', regionCode);
   if (error || !data) return new Map();
+  // Use prev_last_seen_date when present — it holds the pre-return date that
+  // proves a long absence, before last_seen_date was overwritten by the new sighting.
   return new Map(
-    (data as Array<{ species_code: string; last_seen_date: string }>)
-      .map(r => [r.species_code, new Date(r.last_seen_date)]),
+    (data as Array<{ species_code: string; last_seen_date: string; prev_last_seen_date: string | null }>)
+      .map(r => [r.species_code, new Date(r.prev_last_seen_date ?? r.last_seen_date)]),
   );
 }
 

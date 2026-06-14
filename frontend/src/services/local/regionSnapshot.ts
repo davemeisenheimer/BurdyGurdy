@@ -102,6 +102,14 @@ export function computeRegionUpdate(
   const unchanged = currentNonHistorical.filter(s => snapshotCodes.has(s.speciesCode));
 
   if (added.length === 0 && dropped.length === 0) return null;
-  const returnees = computeReturnees(added, presenceMap);
+  // Skip returnee detection when the snapshot is stale — an old snapshot produces
+  // a bloated `added` list that doesn't reflect genuine recent absences.
+  const STALE_SNAPSHOT_DAYS = 14;
+  const snapshotAgeMs = snapshot.savedAt
+    ? Date.now() - new Date(snapshot.savedAt).getTime()
+    : Infinity;
+  const returnees = snapshotAgeMs <= STALE_SNAPSHOT_DAYS * 86_400_000
+    ? computeReturnees(added, presenceMap)
+    : [];
   return { added, dropped, unchanged, back: snapshot.back, savedAt: snapshot.savedAt, returnees };
 }
