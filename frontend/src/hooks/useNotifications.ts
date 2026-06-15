@@ -109,6 +109,7 @@ export function useNotifications({
     } else {
       await sendFriendNotification('logout', {});
     }
+    localStorage.removeItem('burdygurdy_stay_signed_in');
     supabase.auth.signOut();
   }
 

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { STAY_SIGNED_IN_KEY } from '../../lib/settings';
 
 interface Props {
   onClose: () => void;
@@ -13,7 +14,8 @@ export function AuthPanel({ onClose, onSignIn, onSignUp }: Props) {
   const [mode, setMode]         = useState<Mode>('signin');
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
-  const [newsOptIn, setNewsOptIn] = useState(false);
+  const [newsOptIn, setNewsOptIn]         = useState(false);
+  const [staySignedIn, setStaySignedIn]   = useState(true);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
   const [sent, setSent]         = useState(false);   // email confirmation sent
@@ -29,6 +31,8 @@ export function AuthPanel({ onClose, onSignIn, onSignUp }: Props) {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) { setError(error.message); setLoading(false); return; }
       if (newsOptIn) await supabase.auth.updateUser({ data: { news_opt_in: true } });
+      if (staySignedIn) localStorage.setItem(STAY_SIGNED_IN_KEY, '1');
+      else              localStorage.removeItem(STAY_SIGNED_IN_KEY);
       onSignIn();
       onClose();
     } else {
@@ -37,6 +41,8 @@ export function AuthPanel({ onClose, onSignIn, onSignUp }: Props) {
         options: { data: { news_opt_in: newsOptIn } },
       });
       if (error) { setError(error.message); setLoading(false); return; }
+      if (staySignedIn) localStorage.setItem(STAY_SIGNED_IN_KEY, '1');
+      else              localStorage.removeItem(STAY_SIGNED_IN_KEY);
       // Supabase sends a confirmation email by default
       setSent(true);
       onSignUp();
@@ -49,7 +55,7 @@ export function AuthPanel({ onClose, onSignIn, onSignUp }: Props) {
     setLoading(true);
     setError(null);
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin,
+      redirectTo: window.location.href,
     });
     setLoading(false);
     if (error) setError(error.message);
@@ -62,7 +68,7 @@ export function AuthPanel({ onClose, onSignIn, onSignUp }: Props) {
     if (newsOptIn) localStorage.setItem('burdygurdy_news_opt_in', '1');
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: window.location.origin },
+      options: { redirectTo: window.location.href },
     });
     if (error) { setError(error.message); setLoading(false); }
     // On success the page redirects - no further action needed here
@@ -190,6 +196,15 @@ export function AuthPanel({ onClose, onSignIn, onSignUp }: Props) {
                   </button>
                 </p>
               )}
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={staySignedIn}
+                  onChange={e => setStaySignedIn(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300 text-forest-600 focus:ring-forest-500"
+                />
+                <span className="text-xs text-slate-600">Stay signed in on this device</span>
+              </label>
               <button
                 type="submit"
                 disabled={loading}

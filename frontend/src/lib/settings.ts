@@ -36,6 +36,8 @@ const SETTINGS_KEY   = 'settings';
 const QUIZ_PREFS_KEY = 'quizPrefs';
 const FOCUS_KEY      = 'focusStruggling';
 
+export const STAY_SIGNED_IN_KEY = 'burdygurdy_stay_signed_in';
+
 // Legacy localStorage keys — migrated into IndexedDB on first read then deleted
 const LEGACY_SETTINGS_KEY   = 'birdygurdy_settings';
 const LEGACY_QUIZ_PREFS_KEY = 'birdygurdy_quiz_prefs';

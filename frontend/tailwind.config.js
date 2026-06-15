@@ -3,6 +3,36 @@ export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
+      animation: {
+        'fade-in':        'fadeIn 0.4s ease-in-out',
+        'caption-scroll': 'captionScroll 3.5s linear forwards',
+        'caption-drop':   'captionDrop 3.2s ease-in-out forwards',
+        'caption-rise':   'captionRise 3.2s ease-in-out forwards',
+      },
+      keyframes: {
+        fadeIn: {
+          '0%':   { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+        captionScroll: {
+          '0%':   { transform: 'translateX(110vw)',  opacity: '0' },
+          '6%':   {                                  opacity: '1' },
+          '85%':  {                                  opacity: '1' },
+          '100%': { transform: 'translateX(-110vw)', opacity: '0' },
+        },
+        captionDrop: {
+          '0%':   { transform: 'translateY(-50px)', opacity: '0' },
+          '20%':  { transform: 'translateY(0px)',   opacity: '1' },
+          '75%':  { transform: 'translateY(0px)',   opacity: '1' },
+          '100%': {                                 opacity: '0' },
+        },
+        captionRise: {
+          '0%':   { transform: 'translateY(50px)', opacity: '0' },
+          '20%':  { transform: 'translateY(0px)',  opacity: '1' },
+          '75%':  { transform: 'translateY(0px)',  opacity: '1' },
+          '100%': {                                opacity: '0' },
+        },
+      },
       colors: {
         forest: {
           50: '#f0fdf4',

@@ -22,7 +22,7 @@ import { Toast } from './components/ui/Toast';
 import { DialogGeneric } from './components/ui/DialogGeneric';
 import { useQuiz } from './hooks/useQuiz';
 import { useNotifications } from './hooks/useNotifications';
-import { loadSettings, saveSettings, loadQuizPrefs, saveQuizPrefs, resetUserSettings, loadFocusStruggling, saveFocusStruggling, DEFAULTS as SETTINGS_DEFAULTS } from './lib/settings';
+import { loadSettings, saveSettings, loadQuizPrefs, saveQuizPrefs, resetUserSettings, loadFocusStruggling, saveFocusStruggling, DEFAULTS as SETTINGS_DEFAULTS, STAY_SIGNED_IN_KEY } from './lib/settings';
 import type { AppSettings, QuizConfigPrefs } from './lib/settings';
 import { findEarnedAward, getVictorySeen, mergeVictorySeen, getVictoryLog, mergeVictoryLog, describeMastery, describeWindow, computeChallengeSnapshot, storeChallengeSnapshot } from './lib/victory';
 import type { AwardTier, VictoryLogEntry } from './lib/victory';
@@ -317,9 +317,11 @@ export default function App() {
       if (notifyTimer)  { clearTimeout(notifyTimer);  notifyTimer  = null; }
       if (signOutTimer) { clearTimeout(signOutTimer); signOutTimer = null; }
       if (userRef.current) {
-        syncTimer    = setTimeout(doIdleSync, SYNC_IDLE_MS);
-        notifyTimer  = setTimeout(sendSessionNotification, NOTIFY_IDLE_MS);
-        signOutTimer = setTimeout(() => { performSignOut(); setWasAutoSignedOut(true); }, INACTIVITY_MS);
+        syncTimer   = setTimeout(doIdleSync, SYNC_IDLE_MS);
+        notifyTimer = setTimeout(sendSessionNotification, NOTIFY_IDLE_MS);
+        if (!localStorage.getItem(STAY_SIGNED_IN_KEY)) {
+          signOutTimer = setTimeout(() => { performSignOut(); setWasAutoSignedOut(true); }, INACTIVITY_MS);
+        }
       }
     };
 
