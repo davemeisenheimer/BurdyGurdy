@@ -66,6 +66,9 @@ export function AuthPanel({ onClose, onSignIn, onSignUp }: Props) {
     setLoading(true);
     setError(null);
     if (newsOptIn) localStorage.setItem('burdygurdy_news_opt_in', '1');
+    // Set before the redirect so it survives the OAuth round-trip
+    if (staySignedIn) localStorage.setItem(STAY_SIGNED_IN_KEY, '1');
+    else              localStorage.removeItem(STAY_SIGNED_IN_KEY);
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: { redirectTo: window.location.href },
