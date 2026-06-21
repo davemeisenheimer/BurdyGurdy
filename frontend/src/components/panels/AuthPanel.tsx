@@ -55,7 +55,7 @@ export function AuthPanel({ onClose, onSignIn, onSignUp }: Props) {
     setLoading(true);
     setError(null);
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.href,
+      redirectTo: window.location.origin + window.location.pathname,
     });
     setLoading(false);
     if (error) setError(error.message);
@@ -71,7 +71,7 @@ export function AuthPanel({ onClose, onSignIn, onSignUp }: Props) {
     else              localStorage.removeItem(STAY_SIGNED_IN_KEY);
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: window.location.href },
+      options: { redirectTo: window.location.origin + window.location.pathname },
     });
     if (error) { setError(error.message); setLoading(false); }
     // On success the page redirects - no further action needed here
