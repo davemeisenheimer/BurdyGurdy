@@ -36,10 +36,13 @@ app.post('/api/admin/cache-clear', (req, res) => {
   res.json({ ok: true, message: 'Server cache cleared' });
 });
 
-// Serve frontend in production
-const frontendDist = path.join(__dirname, '../../frontend/dist');
-app.use(express.static(frontendDist));
-app.get('*', (_req, res) => res.sendFile(path.join(frontendDist, 'index.html')));
+// Serve frontend in production only - in dev, the Vite dev server (localhost:5173) serves
+// the app and proxies /api here, so this must not shadow it with a stale local build.
+if (process.env.NODE_ENV === 'production') {
+  const frontendDist = path.join(__dirname, '../../frontend/dist');
+  app.use(express.static(frontendDist));
+  app.get('*', (_req, res) => res.sendFile(path.join(frontendDist, 'index.html')));
+}
 
 app.listen(PORT, () => {
   console.log(`BurdyGurdy backend running on http://localhost:${PORT}`);

@@ -10,6 +10,7 @@ const INAT_TAXA_API = 'https://api.inaturalist.org/v1/taxa';
 const TTL       = 7 * 24 * 60 * 60 * 1000; // 7 days  — successful photo fetches
 const RETRY_TTL = 5 * 60 * 1000;            // 5 minutes — failed fetches, retried next round
 const HEADERS = { 'User-Agent': 'BurdyGurdy/1.0 (bird identification learning app)' };
+const TIMEOUT_MS = 10_000;
 
 // Option C timeout strategy: 1s initial window, 500ms trailing window after first resolves
 const INITIAL_MS = 2500;
@@ -34,6 +35,7 @@ async function fetchMacaulayPhoto(speciesCode: string): Promise<AttributedPhoto 
   const res = await axios.get(MACAULAY_SEARCH, {
     params: { taxonCode: speciesCode, mediaType: 'Photo', count: 1, sort: 'rating_rank_desc' },
     headers: HEADERS,
+    timeout: TIMEOUT_MS,
   });
   const content = res.data?.results?.content;
   console.log(`[macaulay] ${speciesCode} → ${content?.length ?? 0} results in ${Date.now() - t0}ms`);
@@ -52,6 +54,7 @@ async function fetchInatPhoto(sciName: string): Promise<AttributedPhoto | null> 
   const res = await axios.get(INAT_TAXA_API, {
     params: { q: sciName, is_active: true, per_page: 20 },
     headers: HEADERS,
+    timeout: TIMEOUT_MS,
   });
   type InatTaxon = { name: string; default_photo?: { large_url?: string; medium_url?: string; attribution?: string } };
   const results: InatTaxon[] = res.data?.results ?? [];
@@ -193,7 +196,9 @@ export async function getSpeciesPhotoUrl(
 
   const allPhotos = [primary, ...optional].filter((p): p is AttributedPhoto => !!p);
   const suitable = allPhotos.filter(p =>
-    !QUESTION_EXCLUDE.test(filenameFromUrl(p.url)) && !blockedUrls.has(p.url),
+    !QUESTION_EXCLUDE.test(filenameFromUrl(p.url)) &&
+    !blockedUrls.has(p.url) &&
+    !(p.imageKey && blockedUrls.has(p.imageKey)),
   );
 
   if (suitable.length === 0) return { photo: null, noPhoto: false };

@@ -780,7 +780,7 @@ export default function App() {
     return 'Unknown';
   }
 
-  const handleReportError = (data: ReportErrorData & { mediaUrl: string; mediaType: 'photo' | 'audio'; speciesCode: string; comName: string }) => {
+  const handleReportError = (data: ReportErrorData & { mediaUrl: string; mediaType: 'photo' | 'audio'; mediaImageKey: string | null; speciesCode: string; comName: string }) => {
     submitMediaReport({
       url: data.mediaUrl,
       mediaType: data.mediaType,
@@ -792,6 +792,7 @@ export default function App() {
       description: data.description || null,
       regionCode: config.regionCode,
       notifyEmail: data.notifyEmail,
+      imageKey: data.mediaImageKey,
     }).catch(err => console.error('[report-media]', err));
   };
 

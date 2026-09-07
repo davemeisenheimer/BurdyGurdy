@@ -7,6 +7,7 @@ export function ebirdClient() {
   return axios.create({
     baseURL: EBIRD_BASE,
     headers: { 'X-eBirdApiToken': process.env.EBIRD_API_KEY },
+    timeout: 10_000,
   });
 }
 

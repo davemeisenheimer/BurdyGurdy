@@ -38,7 +38,7 @@ interface Props {
   onNext: () => void;
   onSkip?: () => void;
   userEmail?: string | null;
-  onReportError?: (data: ReportErrorData & { mediaUrl: string; mediaType: 'photo' | 'audio' }) => void;
+  onReportError?: (data: ReportErrorData & { mediaUrl: string; mediaType: 'photo' | 'audio'; mediaImageKey: string | null }) => void;
   onSightingClick?: (sighting: RecentSighting, speciesCode: string, comName: string, sciName: string) => void;
 }
 
@@ -127,6 +127,7 @@ export function QuizScreen({
     : stimType === 'sono'
     ? (question.sonoUrl ?? null)
     : (question.audioUrl ?? null);
+  const reportImageKey = stimType === 'image' ? (questionPhoto?.imageKey ?? null) : null;
   const canReport = !!onReportError && !!reportMediaUrl
     && (stimType === 'image' || stimType === 'song' || stimType === 'sono');
 
@@ -648,7 +649,7 @@ export function QuizScreen({
           userEmail={userEmail}
           onClose={() => setShowReportModal(false)}
           onSubmit={data => {
-            onReportError?.({ ...data, mediaUrl: reportMediaUrl, mediaType: reportMediaType });
+            onReportError?.({ ...data, mediaUrl: reportMediaUrl, mediaType: reportMediaType, mediaImageKey: reportImageKey });
             setShowReportModal(false);
           }}
         />

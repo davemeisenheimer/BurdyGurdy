@@ -27,6 +27,10 @@ export interface AttributedPhoto {
   url: string;
   credit: string;
   source?: 'macaulay' | 'inat' | 'wiki';
+  // Stable Commons filename, independent of which resolution/thumb variant `url`
+  // resolved to on this fetch. Only set for source: 'wiki'. Used as the block/report
+  // identity key so the same image isn't treated as different across fetches.
+  imageKey?: string;
 }
 
 export interface BirdPhotos {

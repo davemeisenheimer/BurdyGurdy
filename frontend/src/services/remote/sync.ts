@@ -395,6 +395,7 @@ export interface SubmitReportParams {
   description: string | null;
   regionCode:  string | null;
   notifyEmail: boolean;
+  imageKey?:   string | null;
 }
 
 export async function submitMediaReport(p: SubmitReportParams): Promise<void> {
@@ -413,6 +414,7 @@ export async function submitMediaReport(p: SubmitReportParams): Promise<void> {
     description: p.description,
     regionCode:  p.regionCode,
     notifyEmail: p.notifyEmail,
+    imageKey:    p.imageKey ?? null,
   }, { headers });
 }
 
@@ -420,7 +422,7 @@ export async function submitMediaReport(p: SubmitReportParams): Promise<void> {
 export async function fetchAdminBlockedMedia(): Promise<void> {
   const { data, error } = await supabase
     .from('media_reports')
-    .select('url, species_code, media_type, block_scope')
+    .select('url, species_code, media_type, block_scope, image_key')
     .eq('status', 'blocked');
   if (error || !data) return;
   await db.adminBlockedMedia.clear();
@@ -432,6 +434,7 @@ export async function fetchAdminBlockedMedia(): Promise<void> {
         speciesCode: r.species_code as string,
         mediaType:   r.media_type   as 'photo' | 'audio',
         blockScope:  (r.block_scope ?? 'full') as 'full' | 'question',
+        ...(r.image_key ? { imageKey: r.image_key as string } : {}),
       })),
   );
 }

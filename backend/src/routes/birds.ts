@@ -233,6 +233,7 @@ router.get('/info/:speciesCode', async (req, res) => {
       axios.get('https://api.inaturalist.org/v1/taxa', {
         params: { q: sciName, is_active: true, per_page: 1 },
         headers: { 'User-Agent': 'BurdyGurdy/1.0 (bird identification learning app)' },
+        timeout: 10_000,
       }),
     ]);
 
@@ -414,6 +415,7 @@ router.get('/regions/locate', async (req, res) => {
     const nominatim = await axios.get('https://nominatim.openstreetmap.org/reverse', {
       params: { lat, lon: lng, format: 'json', zoom: nominatimZoom },
       headers: { 'User-Agent': 'BurdyGurdy/1.0 (bird identification learning app)' },
+      timeout: 10_000,
     });
 
     const data = nominatim.data;
@@ -654,7 +656,7 @@ router.get('/photos/:speciesCode', async (req, res) => {
 // POST /api/birds/report-media
 // Submits a media error report. Requires authentication.
 router.post('/report-media', async (req, res) => {
-  const { url, mediaType, service, speciesCode, comName, issueType, wrongBird, description, regionCode, notifyEmail } = req.body ?? {};
+  const { url, mediaType, service, speciesCode, comName, issueType, wrongBird, description, regionCode, notifyEmail, imageKey } = req.body ?? {};
   if (!url || !mediaType || !speciesCode || !comName || !issueType) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
@@ -668,21 +670,34 @@ router.post('/report-media', async (req, res) => {
   try {
     const admin = getSupabaseAdmin();
 
-    // Find or create the media_reports row for this URL + species.
-    const { data: existing } = await admin
+    // Find or create the media_reports row for this URL + species. Also match on
+    // image_key when provided, since the same logical image (e.g. a Wikipedia photo)
+    // can resolve to a different `url` string on different fetches - matching by url
+    // alone would create a duplicate, unblocked row for an already-blocked image.
+    const { data: existingByUrl } = await admin
       .from('media_reports')
       .select('id')
       .eq('url', url)
       .eq('species_code', speciesCode)
       .maybeSingle();
+    const existing = existingByUrl ?? (imageKey
+      ? (await admin
+          .from('media_reports')
+          .select('id')
+          .eq('image_key', imageKey)
+          .eq('species_code', speciesCode)
+          .maybeSingle()).data
+      : null);
 
     let reportId: string;
     if (existing) {
       reportId = (existing as { id: string }).id;
+      // Backfill image_key on older rows that predate this field, or if it was missing.
+      if (imageKey) await admin.from('media_reports').update({ image_key: imageKey }).eq('id', reportId).is('image_key', null);
     } else {
       const { data: created, error: createErr } = await admin
         .from('media_reports')
-        .insert({ url, media_type: mediaType, service: service ?? null, species_code: speciesCode, com_name: comName, status: 'pending' })
+        .insert({ url, media_type: mediaType, service: service ?? null, species_code: speciesCode, com_name: comName, status: 'pending', image_key: imageKey ?? null })
         .select('id')
         .single();
       if (createErr || !created) {

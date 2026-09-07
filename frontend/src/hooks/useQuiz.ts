@@ -139,13 +139,16 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
           db.progress.get([q.speciesCode, q.type]),
         ]);
         if (cancelled) return;
-        const blockedUserUrls  = new Set(blocked.map(b => b.url));
-        const adminBlockedUrls = new Set(adminBlocked.filter(b => b.speciesCode === q.speciesCode).map(b => b.url));
-        const isPhotoBlocked   = (url: string) => blockedUserUrls.has(url) || adminBlockedUrls.has(url);
+        const speciesAdminBlocked = adminBlocked.filter(b => b.speciesCode === q.speciesCode);
+        const blockedUserUrls     = new Set(blocked.map(b => b.url));
+        const adminBlockedUrls    = new Set(speciesAdminBlocked.map(b => b.url));
+        const adminBlockedKeys    = new Set(speciesAdminBlocked.filter(b => b.imageKey).map(b => b.imageKey!));
+        const isPhotoBlocked      = (p: AttributedPhoto) =>
+          blockedUserUrls.has(p.url) || adminBlockedUrls.has(p.url) || (!!p.imageKey && adminBlockedKeys.has(p.imageKey));
 
-        const inatPhoto     = primary                                                              && !isPhotoBlocked(primary.url)  ? primary     : null;
-        const macaulayPhoto = optional.find(p => p.source === 'macaulay' && !isPhotoBlocked(p.url)) ?? null;
-        const wikiPhotos    = optional.filter(p => p.source === 'wiki'   && !isPhotoBlocked(p.url));
+        const inatPhoto     = primary                                                          && !isPhotoBlocked(primary) ? primary     : null;
+        const macaulayPhoto = optional.find(p => p.source === 'macaulay' && !isPhotoBlocked(p)) ?? null;
+        const wikiPhotos    = optional.filter(p => p.source === 'wiki'   && !isPhotoBlocked(p));
 
         const mastery = progressRecord?.masteryLevel ?? 0;
 
@@ -205,12 +208,16 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
         db.blockedPhotos.toArray(),
         db.adminBlockedMedia.toArray(),
       ]);
+      // Reveal carousel only hides fully-blocked photos - 'question'-scoped blocks should still show here.
+      const fullyBlocked     = adminBlocked.filter(b => b.speciesCode === currentQuestion.speciesCode && b.blockScope === 'full');
       const blockedUserUrls  = new Set(blocked.map(b => b.url));
-      const adminBlockedUrls = new Set(adminBlocked.filter(b => b.speciesCode === currentQuestion.speciesCode).map(b => b.url));
-      const isPhotoBlocked   = (url: string) => blockedUserUrls.has(url) || adminBlockedUrls.has(url);
+      const adminBlockedUrls = new Set(fullyBlocked.map(b => b.url));
+      const adminBlockedKeys = new Set(fullyBlocked.filter(b => b.imageKey).map(b => b.imageKey!));
+      const isPhotoBlocked   = (p: AttributedPhoto) =>
+        blockedUserUrls.has(p.url) || adminBlockedUrls.has(p.url) || (!!p.imageKey && adminBlockedKeys.has(p.imageKey));
       setRevealPhotos({
-        primary: primary && !isPhotoBlocked(primary.url) ? primary : null,
-        optional: optional.filter(p => !isPhotoBlocked(p.url)),
+        primary: primary && !isPhotoBlocked(primary) ? primary : null,
+        optional: optional.filter(p => !isPhotoBlocked(p)),
       });
       setRevealRangeMapUrl(info?.rangeMapUrl ?? null);
       setRevealSightings(sightings);

@@ -3,6 +3,7 @@ import { cache } from '../cache';
 
 const XC_BASE = 'https://xeno-canto.org/api/3';
 const TTL_24H = 24 * 60 * 60 * 1000;
+const TIMEOUT_MS = 10_000;
 
 export interface XCRecording {
   id: string;
@@ -50,6 +51,7 @@ export async function getRecordings(sciName: string): Promise<XCRecording[]> {
     const spQuery = `sp:"${sciName}" type:song q:A`;
     const res = await axios.get<XCResponse>(`${XC_BASE}/recordings`, {
       params: { query: spQuery, key: xcKey() },
+      timeout: TIMEOUT_MS,
     });
 
     // Guard against HTML error pages returned with a 200 status
@@ -64,6 +66,7 @@ export async function getRecordings(sciName: string): Promise<XCRecording[]> {
     if (recordings.length === 0) {
       const fallback = await axios.get<XCResponse>(`${XC_BASE}/recordings`, {
         params: { query: `sp:"${sciName}"`, key: xcKey() },
+        timeout: TIMEOUT_MS,
       });
       if (typeof fallback.data === 'object' && Array.isArray(fallback.data.recordings)) {
         recordings = fallback.data.recordings;

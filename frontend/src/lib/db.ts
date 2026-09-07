@@ -6,6 +6,9 @@ export interface AdminBlockedMediaEntry {
   speciesCode: string;
   mediaType:   'photo' | 'audio';
   blockScope:  'full' | 'question';
+  // Stable Commons filename for wiki-sourced photos; not indexed, so no schema version
+  // bump is needed to add it. See AttributedPhoto.imageKey for why this exists.
+  imageKey?:   string;
 }
 
 class BirdyGurdyDB extends Dexie {

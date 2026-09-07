@@ -4,7 +4,7 @@ import { fetchBirdPhotos, fetchAllSpecies } from '../../services/remote/api';
 import { blockPhotoDirectly, unblockPhotoDirectly } from '../../lib/adminSync';
 import type { AllSpeciesEntry } from '../../services/remote/api';
 
-interface PhotoEntry { url: string; label: string; }
+interface PhotoEntry { url: string; label: string; imageKey?: string; }
 
 const MAX_LIST = 5000;
 const DOUBLE_CLICK_MS = 250;
@@ -71,11 +71,11 @@ export function PhotoCurationPanel() {
       setBlocked(new Map(blockedRows.map(r => [r.url, r.blockScope])));
       let wikiIdx = 0;
       setPhotos([
-        ...(primary ? [{ url: primary.url, label: 'Primary: iNat' }] : []),
+        ...(primary ? [{ url: primary.url, label: 'Primary: iNat', imageKey: primary.imageKey }] : []),
         ...optional.map(p => {
-          if (p.source === 'macaulay') return { url: p.url, label: 'Secondary: Mac' };
+          if (p.source === 'macaulay') return { url: p.url, label: 'Secondary: Mac', imageKey: p.imageKey };
           wikiIdx++;
-          return { url: p.url, label: `Opt ${wikiIdx}: Wiki` };
+          return { url: p.url, label: `Opt ${wikiIdx}: Wiki`, imageKey: p.imageKey };
         }),
       ]);
     } finally {
@@ -83,13 +83,13 @@ export function PhotoCurationPanel() {
     }
   }, []);
 
-  const doBlock = useCallback(async (url: string, scope: 'full' | 'question') => {
+  const doBlock = useCallback(async (url: string, scope: 'full' | 'question', imageKey?: string) => {
     const bird = selectedRef.current;
     if (!bird) return;
     setBlockScope(scope);
     setBusy(prev => new Set([...prev, url]));
     try {
-      await blockPhotoDirectly(url, bird.speciesCode, bird.comName, scope);
+      await blockPhotoDirectly(url, bird.speciesCode, bird.comName, scope, imageKey);
       setBlocked(prev => new Map([...prev, [url, scope]]));
     } catch (e) {
       console.error('block failed', e);
@@ -112,7 +112,7 @@ export function PhotoCurationPanel() {
     }
   }, []);
 
-  const handlePhotoClick = useCallback((url: string) => {
+  const handlePhotoClick = useCallback((url: string, imageKey?: string) => {
     if (busyRef.current.has(url)) return;
 
     const currentBlocked = blockedRef.current;
@@ -130,7 +130,7 @@ export function PhotoCurationPanel() {
       if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
       clickTimerRef.current = null;
       pendingUrlRef.current = null;
-      doBlock(url, 'full');
+      doBlock(url, 'full', imageKey);
     } else {
       // First click - wait to see if double click arrives
       if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
@@ -139,7 +139,7 @@ export function PhotoCurationPanel() {
         clickTimerRef.current = null;
         if (pendingUrlRef.current === url) {
           pendingUrlRef.current = null;
-          doBlock(url, 'question');
+          doBlock(url, 'question', imageKey);
         }
       }, DOUBLE_CLICK_MS);
     }
@@ -239,14 +239,14 @@ export function PhotoCurationPanel() {
               </div>
 
               <div className="grid grid-cols-5 gap-1.5">
-                {photos.map(({ url, label }) => {
+                {photos.map(({ url, label, imageKey }) => {
                   const scope = blocked.get(url);
                   const isBlocked = scope !== undefined;
                   const isBusy = busy.has(url);
                   return (
                     <button
                       key={url}
-                      onClick={() => handlePhotoClick(url)}
+                      onClick={() => handlePhotoClick(url, imageKey)}
                       disabled={isBusy}
                       className={`relative rounded-lg overflow-hidden border-2 transition-all ${
                         isBlocked ? 'border-red-500' : 'border-transparent hover:border-slate-300'

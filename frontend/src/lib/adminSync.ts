@@ -243,27 +243,33 @@ export async function blockPhotoDirectly(
   speciesCode: string,
   comName: string,
   blockScope: 'full' | 'question',
+  imageKey?: string,
 ): Promise<void> {
-  const { data: existing } = await supabase
+  const { data: existingByUrl } = await supabase
     .from('media_reports')
     .select('id')
     .eq('url', url)
     .limit(1)
     .maybeSingle();
+  // Also match on image_key: the same Wikipedia photo can resolve to a different `url`
+  // string on a later fetch, so a url-only lookup can miss an already-blocked image.
+  const existing = existingByUrl ?? (imageKey
+    ? (await supabase.from('media_reports').select('id').eq('image_key', imageKey).limit(1).maybeSingle()).data
+    : null);
 
   if (existing) {
     const { error } = await supabase
       .from('media_reports')
-      .update({ status: 'blocked', block_scope: blockScope, resolved_at: new Date().toISOString() })
+      .update({ status: 'blocked', block_scope: blockScope, resolved_at: new Date().toISOString(), ...(imageKey ? { image_key: imageKey } : {}) })
       .eq('id', (existing as { id: string }).id);
     if (error) throw error;
   } else {
     const { error } = await supabase
       .from('media_reports')
-      .insert({ url, media_type: 'photo', species_code: speciesCode, com_name: comName, status: 'blocked', block_scope: blockScope, resolved_at: new Date().toISOString() });
+      .insert({ url, media_type: 'photo', species_code: speciesCode, com_name: comName, status: 'blocked', block_scope: blockScope, resolved_at: new Date().toISOString(), image_key: imageKey ?? null });
     if (error) throw error;
   }
-  await db.adminBlockedMedia.put({ url, speciesCode, mediaType: 'photo', blockScope });
+  await db.adminBlockedMedia.put({ url, speciesCode, mediaType: 'photo', blockScope, ...(imageKey ? { imageKey } : {}) });
 }
 
 /** Blocks an audio recording directly (without a user report), writing to Supabase and local cache. */

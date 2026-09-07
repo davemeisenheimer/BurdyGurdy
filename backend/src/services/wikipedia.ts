@@ -3,11 +3,17 @@ import { cache } from '../cache';
 
 const TTL = 7 * 24 * 60 * 60 * 1000; // 7 days - Wikipedia content is stable
 const HEADERS = { 'User-Agent': 'BurdyGurdy/1.0 (bird identification learning app)' };
+const TIMEOUT_MS = 10_000;
 
 export interface AttributedPhoto {
   url: string;
   credit: string; // e.g. "© John Smith · Wikimedia Commons (CC BY-SA 4.0)"
   source?: 'macaulay' | 'inat' | 'wiki';
+  // Stable Commons filename (e.g. "Foo_bar.jpg"), independent of which resolution/thumb
+  // variant `url` happened to resolve to on a given fetch. Only set for source: 'wiki'.
+  // Used as the block/report identity key so re-fetches of the same file aren't treated
+  // as a different image just because Wikipedia returned a different thumb size.
+  imageKey?: string;
 }
 
 export interface WikiSummary {
@@ -52,6 +58,7 @@ export async function getWikipediaRangeMapLegend(sciName: string, comName: strin
           redirects: 1,
         },
         headers: HEADERS,
+        timeout: TIMEOUT_MS,
       });
 
       const html: string = res.data?.parse?.text?.['*'] ?? '';
@@ -113,6 +120,7 @@ async function fetchWikiAttribution(titles: string[]): Promise<Map<string, strin
         origin: '*',
       },
       headers: HEADERS,
+      timeout: TIMEOUT_MS,
     });
     const pages = res.data?.query?.pages ?? {};
     const map = new Map<string, string>();
@@ -159,7 +167,7 @@ export async function getWikipediaPhotos(sciName: string, comName: string): Prom
     try {
       const res = await axios.get(
         `https://en.wikipedia.org/api/rest_v1/page/media-list/${encodeURIComponent(title)}`,
-        { headers: HEADERS },
+        { headers: HEADERS, timeout: TIMEOUT_MS },
       );
       const items: Array<{
         title?: string;
@@ -198,6 +206,7 @@ export async function getWikipediaPhotos(sciName: string, comName: string): Prom
           url: f.url,
           credit: attribution.get(f.title) ?? 'Wikimedia Commons',
           source: 'wiki' as const,
+          imageKey: f.title.replace(/^File:/i, ''),
         }));
         cache.set(cacheKey, photos, TTL);
         return photos;
@@ -231,7 +240,7 @@ export async function getWikipediaRangeMap(sciName: string, comName: string): Pr
     try {
       const res = await axios.get(
         `https://en.wikipedia.org/api/rest_v1/page/media-list/${encodeURIComponent(title)}`,
-        { headers: HEADERS },
+        { headers: HEADERS, timeout: TIMEOUT_MS },
       );
       const items: Array<{
         title?: string;
@@ -296,6 +305,7 @@ export async function getWikipediaSummary(sciName: string, comName: string): Pro
           redirects:   1,
         },
         headers: HEADERS,
+        timeout: TIMEOUT_MS,
       });
 
       const pages = res.data?.query?.pages as Record<string, { pageid?: number; title?: string; extract?: string; thumbnail?: { source?: string } }> | undefined;

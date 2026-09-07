@@ -107,10 +107,14 @@ async function getBlockedPhotoUrls(): Promise<Set<string>> {
     const admin = getSupabaseAdmin();
     const { data } = await admin
       .from('media_reports')
-      .select('url')
+      .select('url, image_key')
       .eq('status', 'blocked')
       .eq('media_type', 'photo');
-    const urls = new Set<string>((data ?? []).map((r: { url: string }) => r.url));
+    const urls = new Set<string>();
+    for (const r of (data ?? []) as { url: string; image_key: string | null }[]) {
+      urls.add(r.url);
+      if (r.image_key) urls.add(r.image_key);
+    }
     cache.set(CACHE_KEY, urls, 5 * 60 * 1000);
     return urls;
   } catch {

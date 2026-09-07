@@ -48,10 +48,13 @@ export function RelatedSpeciesCarousel({
     Promise.all([
       fetchBirdPhotos(speciesCode, comName, sciName),
       db.blockedPhotos.toArray(),
-      db.adminBlockedMedia.filter(r => r.speciesCode === speciesCode).toArray(),
+      db.adminBlockedMedia.filter(r => r.speciesCode === speciesCode && r.blockScope === 'full').toArray(),
     ]).then(([{ primary, optional }, blocked, adminBlocked]) => {
       const blockedUrls = new Set([...blocked.map(b => b.url), ...adminBlocked.map(b => b.url)]);
-      const all = [primary, ...(optional ?? [])].filter((p): p is AttributedPhoto => !!p && !blockedUrls.has(p.url));
+      const blockedKeys = new Set(adminBlocked.filter(b => b.imageKey).map(b => b.imageKey!));
+      const all = [primary, ...(optional ?? [])].filter((p): p is AttributedPhoto =>
+        !!p && !blockedUrls.has(p.url) && !(p.imageKey && blockedKeys.has(p.imageKey)),
+      );
       setSubjectPhotos(all);
     }).catch(() => { setSubjectPhotos([]); });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -264,14 +267,17 @@ export function RelatedSpeciesCarousel({
       Promise.all([
         fetchBirdPhotos(speciesCode, comName, sciName),
         db.blockedPhotos.toArray(),
-        db.adminBlockedMedia.filter(r => r.speciesCode === speciesCode).toArray(),
+        db.adminBlockedMedia.filter(r => r.speciesCode === speciesCode && r.blockScope === 'full').toArray(),
       ]).then(([{ primary, optional }, blocked, adminBlocked]) => {
         if (genRef.current !== gen) return;
         const blockedUrls = new Set([
           ...blocked.map(b => b.url),
           ...adminBlocked.map(b => b.url),
         ]);
-        const photo = [primary, ...(optional ?? [])].find(p => p && !blockedUrls.has(p.url)) ?? null;
+        const blockedKeys = new Set(adminBlocked.filter(b => b.imageKey).map(b => b.imageKey!));
+        const photo = [primary, ...(optional ?? [])].find(p =>
+          p && !blockedUrls.has(p.url) && !(p.imageKey && blockedKeys.has(p.imageKey)),
+        ) ?? null;
         setPhotos(prev => new Map(prev).set(speciesCode, photo));
         setFetchedCodes(prev => new Set(prev).add(speciesCode));
       }).catch(() => {
