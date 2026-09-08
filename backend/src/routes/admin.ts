@@ -41,15 +41,17 @@ router.get('/users', async (req, res) => {
     return rows;
   }
 
-  // Run all three independent fetches in parallel now that admin access is confirmed.
+  // Run all independent fetches in parallel now that admin access is confirmed.
   const [
     { data: usersData, error: usersErr },
     allProgress,
     { data: profiles },
+    { data: settingsRows },
   ] = await Promise.all([
     admin.auth.admin.listUsers({ perPage: 1000 }),
     fetchAllProgress(),
     admin.from('profiles').select('id, display_name'),
+    admin.from('user_settings').select('user_id, quiz_prefs'),
   ]);
   if (usersErr) return res.status(500).json({ error: usersErr.message });
 
@@ -71,6 +73,11 @@ router.get('/users', async (req, res) => {
   const profileMap = new Map(
     ((profiles ?? []) as Array<{ id: string; display_name: string | null }>)
       .map(p => [p.id, p.display_name]),
+  );
+
+  const regionMap = new Map(
+    ((settingsRows ?? []) as Array<{ user_id: string; quiz_prefs: Record<string, unknown> | null }>)
+      .map(r => [r.user_id, (r.quiz_prefs?.regionCode as string | undefined) ?? null]),
   );
 
   const result = usersData.users.map(u => {
@@ -97,6 +104,8 @@ router.get('/users', async (req, res) => {
                      ?? (u.user_metadata?.name     as string | undefined)
                      ?? null,
       lastSignIn:    u.last_sign_in_at ?? null,
+      dateRegistered: u.created_at ?? null,
+      regionCode:    regionMap.get(u.id) ?? null,
       birdsSeen:     bySpecies?.size ?? 0,
       masteredAll,
       masteredByType,

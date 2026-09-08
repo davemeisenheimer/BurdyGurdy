@@ -7,13 +7,15 @@ interface UserRow {
   email:          string | null;
   username:       string | null;
   lastSignIn:     string | null;
+  dateRegistered: string | null;
+  regionCode:     string | null;
   birdsSeen:      number;
   masteredAll:    number;
   masteredByType: Record<string, number>;
 }
 
 type SortField =
-  | 'username' | 'email' | 'lastSignIn' | 'birdsSeen' | 'masteredAll'
+  | 'username' | 'email' | 'lastSignIn' | 'dateRegistered' | 'regionCode' | 'birdsSeen' | 'masteredAll'
   | { type: string };
 
 interface SortState {
@@ -49,10 +51,12 @@ function sortFieldEqual(a: SortField, b: SortField): boolean {
 }
 
 function getRowValue(row: UserRow, field: SortField): string | number | null {
-  if (field === 'username')   return row.username;
-  if (field === 'email')      return row.email;
-  if (field === 'lastSignIn') return row.lastSignIn;
-  if (field === 'birdsSeen')  return row.birdsSeen;
+  if (field === 'username')       return row.username;
+  if (field === 'email')          return row.email;
+  if (field === 'lastSignIn')     return row.lastSignIn;
+  if (field === 'dateRegistered') return row.dateRegistered;
+  if (field === 'regionCode')     return row.regionCode;
+  if (field === 'birdsSeen')      return row.birdsSeen;
   if (field === 'masteredAll') return row.masteredAll;
   if (typeof field === 'object') return row.masteredByType[field.type] ?? 0;
   return null;
@@ -155,6 +159,12 @@ export function DatabasePanel() {
                 <th rowSpan={2} onClick={() => handleSort('lastSignIn')} className={thBase}>
                   Last login {arrow('lastSignIn')}
                 </th>
+                <th rowSpan={2} onClick={() => handleSort('dateRegistered')} className={thBase}>
+                  Registered {arrow('dateRegistered')}
+                </th>
+                <th rowSpan={2} onClick={() => handleSort('regionCode')} className={thBase}>
+                  Region {arrow('regionCode')}
+                </th>
                 <th rowSpan={2} onClick={() => handleSort('birdsSeen')}  className={thRight}>
                   Birds seen {arrow('birdsSeen')}
                 </th>
@@ -197,6 +207,14 @@ export function DatabasePanel() {
                       ? new Date(row.lastSignIn).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                       : <span className="text-slate-400 italic">Never</span>}
                   </td>
+                  <td className="px-3 py-2 text-slate-500 whitespace-nowrap">
+                    {row.dateRegistered
+                      ? new Date(row.dateRegistered).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                      : <span className="text-slate-400 italic">—</span>}
+                  </td>
+                  <td className="px-3 py-2 text-slate-600 whitespace-nowrap">
+                    {row.regionCode ?? <span className="text-slate-400 italic">—</span>}
+                  </td>
                   <td className="px-3 py-2 text-slate-700 text-right">{row.birdsSeen}</td>
                   <td className="px-3 py-2 text-slate-700 text-right font-medium">{row.masteredAll}</td>
                   {activeTypes.map(qt => (
@@ -208,7 +226,7 @@ export function DatabasePanel() {
               ))}
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={4 + masteredColspan} className="px-3 py-8 text-center text-sm text-slate-400">
+                  <td colSpan={6 + masteredColspan} className="px-3 py-8 text-center text-sm text-slate-400">
                     No users found
                   </td>
                 </tr>
