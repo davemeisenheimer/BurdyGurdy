@@ -49,7 +49,7 @@ export function SpectrogramCanvas({ audioUrl, height, className, onReady, onZoom
     setZoomWindow([0, 1]);
   }, [audioUrl]);
 
-  // Re-render whenever the zoom window changes (skip [0,1] — already drawn by drawSpectrogram)
+  // Re-render whenever the zoom window changes (skip [0,1] - already drawn by drawSpectrogram)
   useEffect(() => {
     if (!isZoomed || !canvasRef.current || !dataRef.current || status !== 'done') return;
     renderSpectrogramWindow(canvasRef.current, dataRef.current, zoomWindow[0], zoomWindow[1]);
@@ -168,7 +168,7 @@ export function SpectrogramCanvas({ audioUrl, height, className, onReady, onZoom
       } else if (e.touches.length === 1 && isDragging.current) {
         const [start, end] = dragStartWindow.current;
         const width = end - start;
-        if (width >= 0.999) return;   // not zoomed — let the page scroll
+        if (width >= 0.999) return;   // not zoomed - let the page scroll
         e.preventDefault();
         hasDragged.current = true;
         const rect      = el.getBoundingClientRect();

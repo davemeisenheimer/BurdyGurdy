@@ -39,7 +39,7 @@ const TIER_CONTENT: Record<AwardTier, TierContent> = {
     emoji: '🏆',
     description: (window, mastery) =>
       `You've mastered every bird spotted in your region ${window} by their ${mastery}.`,
-    whatsNext: 'Work on historical birds — rare visitors and year-round residents — to become a Regional Champion.',
+    whatsNext: 'Work on historical birds - rare visitors and year-round residents - to become a Regional Champion.',
   },
   regionalChampion: {
     emoji: '👑',
@@ -86,7 +86,7 @@ export function VictoryScreen({ awardTier, recentWindow, questionTypes, onKeepPl
             <p className="text-sm font-semibold text-amber-800 mb-1">Keep your skills sharp</p>
             <p className="text-sm text-amber-700">
               Turn on <span className="font-medium">Expire mastered birds after 90 days</span> in Settings.
-              Birds you haven't practiced in 3 months will cycle back into your quiz when they return to your area — keeping mastery seasonal and meaningful.
+              Birds you haven't practiced in 3 months will cycle back into your quiz when they return to your area - keeping mastery seasonal and meaningful.
             </p>
           </div>
         )}

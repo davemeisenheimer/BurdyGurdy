@@ -36,8 +36,8 @@ export function useAudioProgress(
       if (a) {
         // Resolve best-known duration:
         //  1. Native a.duration (Infinity for VBR MP3s without XING header)
-        //  2. seekable.end() — browser estimates from Content-Length + byte ranges
-        //  3. estDurRef — learned via loop-back detection
+        //  2. seekable.end() - browser estimates from Content-Length + byte ranges
+        //  3. estDurRef - learned via loop-back detection
         let dur = a.duration;
         if (!isFinite(dur) && a.seekable.length > 0) {
           dur = a.seekable.end(a.seekable.length - 1);
@@ -49,7 +49,7 @@ export function useAudioProgress(
         const ct = a.currentTime;
 
         // Loop-back detection: currentTime dropping below our running peak means
-        // the track looped — record the peak as the estimated duration.
+        // the track looped - record the peak as the estimated duration.
         if (ct < maxTimeRef.current - 1 && maxTimeRef.current > 1) {
           estDurRef.current  = maxTimeRef.current;
           dur                = estDurRef.current;

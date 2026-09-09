@@ -125,7 +125,7 @@ export function SightingsMap({ allSightings, selectedSighting, mode, speciesSigh
     // Decide whether to refit the viewport or just pan to the new selection.
     // Refit when: first render, mode changed, or the number of visible pins changed.
     // Only pan when the selection changed within the same mode+count (e.g. user clicked
-    // a different row while "All sightings" was active — keep the current zoom level).
+    // a different row while "All sightings" was active - keep the current zoom level).
     const isFirstRun   = prevModeRef.current === null;
     const modeChanged  = prevModeRef.current !== mode;
     const countChanged = prevCountRef.current !== visibleSightings.length;
@@ -139,7 +139,7 @@ export function SightingsMap({ allSightings, selectedSighting, mode, speciesSigh
         mapRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
       }
     } else if (selectedSighting.lat != null && selectedSighting.lng != null) {
-      // Selection changed — pan without resetting zoom.
+      // Selection changed - pan without resetting zoom.
       mapRef.current.panTo([selectedSighting.lat, selectedSighting.lng]);
     }
 
@@ -152,6 +152,6 @@ export function SightingsMap({ allSightings, selectedSighting, mode, speciesSigh
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, visibleSightings.length, selectedSighting, mode]);
 
-  // The map container fills 100% of its parent — the parent must have an explicit height.
+  // The map container fills 100% of its parent - the parent must have an explicit height.
   return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />;
 }

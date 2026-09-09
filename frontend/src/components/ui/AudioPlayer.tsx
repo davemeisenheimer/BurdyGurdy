@@ -99,7 +99,7 @@ export function AudioPlayer({ url, tracks, onAudioUnavailable, durationSeconds }
 
   return (
     <div className="w-full bg-slate-900 rounded-xl overflow-hidden select-none">
-      {/* Audio element — src set imperatively; SpectrogramPlayer reads it via audioRef */}
+      {/* Audio element - src set imperatively; SpectrogramPlayer reads it via audioRef */}
       <audio
         key={retryKey}
         ref={audioRef}
@@ -140,7 +140,7 @@ export function AudioPlayer({ url, tracks, onAudioUnavailable, durationSeconds }
           />
         </div>
 
-        {/* AudioPlayer overlay — covers the spectrogram area */}
+        {/* AudioPlayer overlay - covers the spectrogram area */}
         <div className={`absolute top-0 inset-x-0 h-[140px] sm:h-[160px] ${playing ? 'pointer-events-none' : ''}`}>
           <div
             className={`absolute inset-0 flex items-center justify-center bg-black/40 transition-opacity duration-200 ${

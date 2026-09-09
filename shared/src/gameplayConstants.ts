@@ -34,7 +34,7 @@ export const MAX_LEVEL_0_SIZE_THIRD  = 11;
 export const MAX_LEVEL_0_SIZE        = 12;
 
 /**
- * Maximum palette size for advanced (expert) birders — deliberately larger than
+ * Maximum palette size for advanced (expert) birders - deliberately larger than
  * MAX_LEVEL_0_SIZE.
  *
  * For novice and intermediate, the palette naturally grows beyond the entry-level
@@ -43,7 +43,7 @@ export const MAX_LEVEL_0_SIZE        = 12;
  * can easily have 30–40 birds in active rotation across all three levels.
  *
  * For advanced birders, birds start at level 2 (Hard) and graduate directly to
- * Mastered — there are no higher active levels to overflow into.  This means the
+ * Mastered - there are no higher active levels to overflow into.  This means the
  * entry-level cap IS the total palette cap, and 12 birds would make the expert
  * experience much easier than intended (small palette → fewer distractors to
  * discriminate between, faster cycling).  We therefore use a higher ceiling so
@@ -194,7 +194,7 @@ export const ACTIVE_PALETTE_MIN_WEIGHT = 5;
 //   Remaining 3 slots → any valid candidate (often mastered review)
 
 /**
- * Minimum fraction of each round reserved for "needs practice" candidates —
+ * Minimum fraction of each round reserved for "needs practice" candidates -
  * unmastered palette birds and struggling mastered birds combined.
  * Applied as: Math.ceil(questionsPerRound × PALETTE_AND_SM_RATIO).
  */
@@ -238,7 +238,7 @@ export const AFFINITY_GENUS_BOOST = 15;
 /**
  * Multiplier applied to a mastered bird's weight when it shares a family (but not
  * genus) with any unmastered or struggling-mastered bird (advanced mode only).
- * Weaker than AFFINITY_GENUS_BOOST — used only when no genus-level relatives exist.
+ * Weaker than AFFINITY_GENUS_BOOST - used only when no genus-level relatives exist.
  */
 export const AFFINITY_FAMILY_BOOST = 4;
 

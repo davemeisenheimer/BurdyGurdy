@@ -130,7 +130,7 @@ router.post('/notify', async (req, res) => {
 });
 
 // POST /api/friends/notify-beacon
-// Beacon variant of /notify — accepts the auth token in the request body so it
+// Beacon variant of /notify - accepts the auth token in the request body so it
 // can be called from navigator.sendBeacon() (which cannot set custom headers).
 router.post('/notify-beacon', async (req, res) => {
   const { type, data, token } = req.body as { type: string; data: Record<string, unknown>; token: string };

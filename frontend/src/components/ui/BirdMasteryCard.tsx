@@ -141,7 +141,7 @@ export function BirdMasteryCard({ comName, records, sighting, isSelected = false
         </>
       )}
 
-      {/* Sighting row — locName left, time + count right */}
+      {/* Sighting row - locName left, time + count right */}
       {sighting && (
         <div className="flex items-start justify-between mt-2 pt-2 border-t border-slate-100">
           <div className="min-w-0">

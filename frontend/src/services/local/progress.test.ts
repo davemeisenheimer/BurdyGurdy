@@ -231,7 +231,7 @@ describe('typeLevel0MaxSize', () => {
   });
 
   it('returns MAX_LEVEL_ADVANCED_SIZE for advanced birders regardless of graduate count', () => {
-    // Advanced birds start at level 2 and graduate directly to mastered — no
+    // Advanced birds start at level 2 and graduate directly to mastered - no
     // overflow levels, so the entry-level cap is the total palette cap.
     // MAX_LEVEL_ADVANCED_SIZE is deliberately larger than MAX_LEVEL_0_SIZE to
     // give experts a palette comparable in size to novice/intermediate users.

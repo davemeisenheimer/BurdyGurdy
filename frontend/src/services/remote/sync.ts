@@ -46,7 +46,7 @@ function setNeedsUpload(userId: string, val: boolean): void {
  *
  * On success: stamps last_upload_at in the cloud AND updates localSyncedAt /
  * needsUpload in localStorage so they are always kept in sync with the upload.
- * These localStorage helpers are intentionally private to this module — all
+ * These localStorage helpers are intentionally private to this module - all
  * callers go through this function so the coupling can never be broken.
  *
  * Returns true on success, false on failure.
@@ -92,7 +92,7 @@ export async function uploadProgress(userId: string): Promise<boolean> {
     .update({ last_upload_at: new Date(ts).toISOString(), updated_at: new Date(ts).toISOString() })
     .eq('user_id', userId);
   if (tsErr) console.warn('sync: last_upload_at stamp failed:', tsErr.message);
-  // tsErr is non-fatal: no row yet means the user_settings row doesn't exist — uploadSettings will create it.
+  // tsErr is non-fatal: no row yet means the user_settings row doesn't exist - uploadSettings will create it.
 
   // Always use the same timestamp we wrote to the cloud, not Date.now() called later.
   setLocalSyncedAt(userId, ts);
@@ -195,7 +195,7 @@ export async function getCloudUploadTime(userId: string): Promise<number | null>
 
 /**
  * Downloads all cloud records for the user and REPLACES local IndexedDB with
- * them — adding/updating records that exist in the cloud and deleting local
+ * them - adding/updating records that exist in the cloud and deleting local
  * records that the cloud no longer has.  Local-only fields (masteredAt,
  * noAudio) are preserved where the record still exists in both.
  *
@@ -204,7 +204,7 @@ export async function getCloudUploadTime(userId: string): Promise<number | null>
  * this value so the caller never needs to touch localStorage directly.
  *
  * Returns the number of cloud records (> 0), 0 if cloud has no records
- * (safe no-op — local is untouched), or -1 on network error.
+ * (safe no-op - local is untouched), or -1 on network error.
  */
 export async function downloadAndReplace(userId: string, cloudTs: number | null): Promise<number> {
   const { data, error } = await supabase
@@ -216,7 +216,7 @@ export async function downloadAndReplace(userId: string, cloudTs: number | null)
     console.warn('sync: downloadAndReplace failed:', error?.message);
     return -1;
   }
-  if (data.length === 0) return 0; // no cloud records — don't wipe local
+  if (data.length === 0) return 0; // no cloud records - don't wipe local
 
   const local = await db.progress.toArray();
   const localByKey = new Map(local.map(r => [`${r.speciesCode}|${r.questionType}`, r]));
@@ -305,7 +305,7 @@ export async function uploadSettings(
       app_settings: appSettings,
       quiz_prefs:   quizPrefs,
       updated_at:   now,
-      // last_upload_at is intentionally NOT set here — it tracks progress sync
+      // last_upload_at is intentionally NOT set here - it tracks progress sync
       // only (uploadProgress owns it). Settings uploads must not advance that
       // clock or they'll trigger spurious download-and-replace on the same device.
     }, { onConflict: 'user_id' });
@@ -448,7 +448,7 @@ export async function fetchRegionalPresence(regionCode: string): Promise<Map<str
     .select('species_code, last_seen_date, prev_last_seen_date')
     .eq('region_code', regionCode);
   if (error || !data) return new Map();
-  // Use prev_last_seen_date when present — it holds the pre-return date that
+  // Use prev_last_seen_date when present - it holds the pre-return date that
   // proves a long absence, before last_seen_date was overwritten by the new sighting.
   return new Map(
     (data as Array<{ species_code: string; last_seen_date: string; prev_last_seen_date: string | null }>)

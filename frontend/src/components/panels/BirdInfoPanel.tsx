@@ -27,7 +27,7 @@ interface Props {
   onAuthClick?:               () => void;
   onSignOut?:                 () => void;
   browseSpecies?: { speciesCode: string; comName: string } | null;
-  /** Called when a blue sighting tile is clicked — navigate to sightings map. */
+  /** Called when a blue sighting tile is clicked - navigate to sightings map. */
   onSightingClick?: (sighting: RecentSighting, speciesCode: string, comName: string, sciName: string) => void;
 }
 

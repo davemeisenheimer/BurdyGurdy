@@ -815,12 +815,12 @@ router.post('/report-resolved', async (req, res) => {
 
   const actionLabel =
     action === 'blocked' && blockScope === 'question'
-      ? 'Blocked from questions — the media has been blocked from quiz questions but will remain visible in the bird info screen for reference.'
+      ? 'Blocked from questions - the media has been blocked from quiz questions but will remain visible in the bird info screen for reference.'
     : action === 'blocked'
-      ? 'Removed from game — the media has been removed from the game entirely.'
+      ? 'Removed from game - the media has been removed from the game entirely.'
     : action === 'marked_valid'
-      ? 'Acceptable — your concern was noted, but after review the media was found to be appropriate for its current use. No changes were made.'
-      : 'Dismissed — after review, this report was found to be inaccurate and has been closed.';
+      ? 'Acceptable - your concern was noted, but after review the media was found to be appropriate for its current use. No changes were made.'
+      : 'Dismissed - after review, this report was found to be inaccurate and has been closed.';
   const callerDisplayName: string =
     (caller.user_metadata?.full_name as string | undefined) ??
     (caller.user_metadata?.name      as string | undefined) ??

@@ -74,9 +74,9 @@ export function formatNotificationMessage(n: AppNotification): string {
         d.action === 'blocked' && d.blockScope === 'question'
           ? 'The media has been blocked from quiz questions but will remain visible in the bird info screen for reference.'
         : d.action === 'blocked'
-          ? 'The media has been removed from the game entirely — it will not appear in quiz questions or the bird info screen.'
+          ? 'The media has been removed from the game entirely - it will not appear in quiz questions or the bird info screen.'
         : d.action === 'marked_valid'
-          ? 'Your concern was noted, but after review the media was found to be appropriate for its current use — no changes were made.'
+          ? 'Your concern was noted, but after review the media was found to be appropriate for its current use - no changes were made.'
           : 'After review, this report was found to be inaccurate and has been closed.';
       const msg = `Your ${d.mediaType ?? 'media'} report for ${d.comName ?? 'a bird'} has been reviewed. ${outcome}`;
       return d.note ? `${msg} Note from reviewer: "${d.note}"` : msg;
@@ -92,7 +92,7 @@ export function formatNotificationMessage(n: AppNotification): string {
         other:        'other issue',
       };
       const issue = issueLabel[d.issueType ?? ''] ?? (d.issueType ?? 'issue');
-      return `New ${d.mediaType ?? 'media'} report for ${d.comName ?? 'a bird'} — ${issue} (submitted by ${name}).`;
+      return `New ${d.mediaType ?? 'media'} report for ${d.comName ?? 'a bird'} - ${issue} (submitted by ${name}).`;
     }
     default:
       return `New notification from ${name}.`;

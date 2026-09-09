@@ -7,8 +7,8 @@ export type { AttributedPhoto };
 const MACAULAY_SEARCH = 'https://search.macaulaylibrary.org/api/v1/search';
 const MACAULAY_CDN = 'https://cdn.download.ams.birds.cornell.edu/api/v1/asset';
 const INAT_TAXA_API = 'https://api.inaturalist.org/v1/taxa';
-const TTL       = 7 * 24 * 60 * 60 * 1000; // 7 days  — successful photo fetches
-const RETRY_TTL = 5 * 60 * 1000;            // 5 minutes — failed fetches, retried next round
+const TTL       = 7 * 24 * 60 * 60 * 1000; // 7 days  - successful photo fetches
+const RETRY_TTL = 5 * 60 * 1000;            // 5 minutes - failed fetches, retried next round
 const HEADERS = { 'User-Agent': 'BurdyGurdy/1.0 (bird identification learning app)' };
 const TIMEOUT_MS = 10_000;
 
@@ -82,7 +82,7 @@ async function fetchPhotoSetOnce(
   speciesCode: string,
   sc: string,
   cn: string,
-): Promise<PhotoSet> {
+): Promise<{ photoSet: PhotoSet; allResolved: boolean }> {
   let ebirdPhoto: AttributedPhoto | null | undefined = undefined;
   let inatPhoto:  AttributedPhoto | null | undefined = undefined;
   let wikiPhotos: AttributedPhoto[]     | undefined  = undefined;
@@ -105,25 +105,36 @@ async function fetchPhotoSetOnce(
     new Promise<void>(resolve => setTimeout(resolve, INITIAL_MS)),
   ]);
 
-  // Phase 2: if nothing resolved yet, wait for the first one, then a trailing window
-  const anyResolved = ebirdPhoto !== undefined || inatPhoto !== undefined || wikiPhotos !== undefined;
-  if (!anyResolved) {
-    await Promise.race([macaulayP, inatP, wikiP]);
-    await new Promise<void>(resolve => setTimeout(resolve, TRAILING_MS));
+  // Phase 2: if any service is still pending, give it a trailing window to catch up.
+  // (Checking "all resolved" rather than "any resolved" matters: without it, a fast
+  // source finishing within INITIAL_MS would short-circuit this wait and a slightly
+  // slower sibling's photos would be silently dropped instead of just delayed.)
+  let allResolved = ebirdPhoto !== undefined && inatPhoto !== undefined && wikiPhotos !== undefined;
+  if (!allResolved) {
+    await Promise.race([
+      Promise.all([macaulayP, inatP, wikiP]),
+      new Promise<void>(resolve => setTimeout(resolve, TRAILING_MS)),
+    ]);
+    allResolved = ebirdPhoto !== undefined && inatPhoto !== undefined && wikiPhotos !== undefined;
   }
 
   return {
-    primary: inatPhoto ?? null,
-    optional: (
-      [ebirdPhoto !== undefined ? ebirdPhoto : null, ...(wikiPhotos ?? [])] as Array<AttributedPhoto | null>
-    ).filter((p): p is AttributedPhoto => p !== null),
+    photoSet: {
+      primary: inatPhoto ?? null,
+      optional: (
+        [ebirdPhoto !== undefined ? ebirdPhoto : null, ...(wikiPhotos ?? [])] as Array<AttributedPhoto | null>
+      ).filter((p): p is AttributedPhoto => p !== null),
+    },
+    allResolved,
   };
 }
 
 /**
- * Returns the photo set for a species, with one automatic retry if all sources
- * return empty on the first attempt. Failed results are cached for RETRY_TTL (5 min)
- * so the next quiz round re-checks; successful results cache for 7 days.
+ * Returns the photo set for a species, with one automatic retry if the first attempt
+ * came back empty or with a source still pending (e.g. Wikipedia hadn't settled before
+ * a sibling source did). Anything short of a fully-resolved, non-empty result is cached
+ * for RETRY_TTL (5 min) so the next request re-checks rather than locking in a partial
+ * result for a week; fully-resolved successful results cache for 7 days.
  */
 async function loadPhotoSet(
   speciesCode: string,
@@ -137,18 +148,18 @@ async function loadPhotoSet(
   const sc = sciName ?? comName ?? '';
   const cn = comName ?? sc;
 
-  let photoSet = await fetchPhotoSetOnce(speciesCode, sc, cn);
+  let { photoSet, allResolved } = await fetchPhotoSetOnce(speciesCode, sc, cn);
   let hasPhotos = photoSet.primary !== null || photoSet.optional.length > 0;
 
-  if (!hasPhotos) {
-    // Retry once after a brief pause to recover from transient failures
+  if (!hasPhotos || !allResolved) {
+    // Retry once after a brief pause to recover from transient failures/stragglers
     await new Promise<void>(resolve => setTimeout(resolve, 2000));
-    photoSet = await fetchPhotoSetOnce(speciesCode, sc, cn);
+    ({ photoSet, allResolved } = await fetchPhotoSetOnce(speciesCode, sc, cn));
     hasPhotos = photoSet.primary !== null || photoSet.optional.length > 0;
   }
 
   const noPhoto = !hasPhotos;
-  cache.set(cacheKey, { photoSet, noPhoto }, noPhoto ? RETRY_TTL : TTL);
+  cache.set(cacheKey, { photoSet, noPhoto }, (noPhoto || !allResolved) ? RETRY_TTL : TTL);
   return { photoSet, noPhoto };
 }
 

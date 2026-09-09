@@ -31,9 +31,9 @@ interface Props {
   onBack:            () => void;
   /** Called once sightings are fetched, so App can share them with the map panel. */
   onSightingsLoaded?: (sightings: RegionalSighting[]) => void;
-  /** Desktop only — called when a row is selected so the map panel can react. */
+  /** Desktop only - called when a row is selected so the map panel can react. */
   onSelectSighting?: (sighting: RegionalSighting | null) => void;
-  /** Desktop only — currently selected sighting (controlled from App). */
+  /** Desktop only - currently selected sighting (controlled from App). */
   selectedSighting?: RegionalSighting | null;
 }
 
@@ -103,7 +103,7 @@ export function SightingsScreen({ regionCode, isDesktop, onBack, onSightingsLoad
     }
   };
 
-  // Deduplicate sightings for display — same species+location+date can appear multiple times.
+  // Deduplicate sightings for display - same species+location+date can appear multiple times.
   // Must be declared before any early returns to satisfy the Rules of Hooks.
   const displaySightings = useMemo(() => {
     const seen = new Set<string>();
@@ -117,7 +117,7 @@ export function SightingsScreen({ regionCode, isDesktop, onBack, onSightingsLoad
 
   const activeSelected = isDesktop ? externalSelected : null;
 
-  // Mobile map screen — rendered on top of the list.
+  // Mobile map screen - rendered on top of the list.
   if (!isDesktop && mobileSelected) {
     return (
       <div className="flex flex-col h-dvh">
@@ -136,7 +136,7 @@ export function SightingsScreen({ regionCode, isDesktop, onBack, onSightingsLoad
           </div>
         </div>
 
-        {/* Toggle — sits clearly above the Leaflet container */}
+        {/* Toggle - sits clearly above the Leaflet container */}
         <MapModeToggle mode={mapMode} onModeChange={setMapMode} speciesLoading={speciesLoading} />
 
         {/* Map fills remaining height */}

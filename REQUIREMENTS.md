@@ -1,4 +1,4 @@
-# BirdyGurdy — Requirements & Architecture
+# BirdyGurdy - Requirements & Architecture
 
 ## Overview
 
@@ -45,19 +45,19 @@ New species are introduced progressively via a **Learning Palette** and a **prom
 Fetched from eBird `/data/obs/{regionCode}/recent` with `back=30` (last 30 days), max 200 results.
 
 ### Historical species (fallback)
-Fetched from eBird `/product/spplist/{regionCode}` — every species ever recorded in the region, year-round with no seasonal constraint.
+Fetched from eBird `/product/spplist/{regionCode}` - every species ever recorded in the region, year-round with no seasonal constraint.
 
 ### Promotion queue order (most to least priority)
-1. **Recent + common** — sighted in last 30 days, in backyard/top-100 ranking
-2. **Recent + less common** — sighted in last 30 days, not in common ranking
-3. **Historical + common** — ever recorded, in common ranking
-4. **Historical + less common** — ever recorded, not in common ranking
+1. **Recent + common** - sighted in last 30 days, in backyard/top-100 ranking
+2. **Recent + less common** - sighted in last 30 days, not in common ranking
+3. **Historical + common** - ever recorded, in common ranking
+4. **Historical + less common** - ever recorded, not in common ranking
 
 Within each group, species are sorted by commonness rank (most common first). "Common" is determined by backyard private-location sighting frequency (last 7 days); falls back to eBird top-100 checklist frequency if backyard data is sparse.
 
 The `/api/birds/region/:regionCode` response includes two derived flags per species:
-- `isHistorical: boolean` — true if the species appears only in the all-time spplist, not in recent 30-day observations
-- `isCommon: boolean` — true if the species appears in the backyard or top-100 checklist frequency rankings (commonRank < 9999)
+- `isHistorical: boolean` - true if the species appears only in the all-time spplist, not in recent 30-day observations
+- `isCommon: boolean` - true if the species appears in the backyard or top-100 checklist frequency rankings (commonRank < 9999)
 
 The promotion queue is cached client-side for 7 days (`regionSpecies` IndexedDB table). **Clearing history resets the `promotionIndex` to 0**, restarting promotion from the top of the queue.
 
@@ -76,9 +76,9 @@ Palette birds are 10x more likely to appear as distractors to reinforce active l
 
 Photos are fetched from three sources in parallel with a timeout strategy (1s initial window, 500ms trailing window for stragglers):
 
-1. **Macaulay Library** (eBird/Cornell) — `search.macaulaylibrary.org/api/v1/search`
-2. **iNaturalist** — `api.inaturalist.org/v1/taxa`
-3. **Wikipedia/Wikimedia Commons** — `en.wikipedia.org/api/rest_v1/page/media-list/{title}`
+1. **Macaulay Library** (eBird/Cornell) - `search.macaulaylibrary.org/api/v1/search`
+2. **iNaturalist** - `api.inaturalist.org/v1/taxa`
+3. **Wikipedia/Wikimedia Commons** - `en.wikipedia.org/api/rest_v1/page/media-list/{title}`
 
 ### Question photo selection (mastery-based)
 | Mastery level | Source weighting |
@@ -104,17 +104,17 @@ Every photo carries a `credit` string displayed as a badge:
 
 Shown to the right of the quiz on screens >= 1024px wide. Displays after an answer is submitted:
 
-- **Answer banner** — correct/incorrect with the correct species name; when viewing a related species a "← Back to [bird]" link appears on the right
-- **Triptych** — three fixed equal-width panels (each 1/3 of available space); missing panels are omitted and the remaining ones are centred:
-  - *Range map* — Wikipedia range/distribution map with colour legend. Links to eBird interactive map.
-  - *Sonogram + audio* — xeno-canto recording spectrogram with play/pause controls and prev/next recording navigation
-  - *Related species carousel* — always present; shows primary photos of the correct species and its same-genus relatives (falls back to same-family if fewer than 2 genus matches). Candidates are filtered to recently-observed species plus historical species that are regionally common (`isCommon = true`), capping at 9 related species. Each slide has a full-width top badge ("Related species: Common name (Latin name)") and a "View info →" link (except the reference species). Clicking "View info →" replaces the panel body content (header, wiki, sightings, links) with that species' info. Navigation arrows fade in over 2 seconds once adjacent photos are loaded. Wraps around with an instant (non-animated) transition to avoid reverse-direction animation.
-  - *Auto-scroll* — on first reveal the carousel scrolls through all slides once at 1.8 s/slide then stops on the reference species. Any user interaction cancels the auto-scroll. Configurable via Settings (desktop only, default on).
+- **Answer banner** - correct/incorrect with the correct species name; when viewing a related species a "← Back to [bird]" link appears on the right
+- **Triptych** - three fixed equal-width panels (each 1/3 of available space); missing panels are omitted and the remaining ones are centred:
+  - *Range map* - Wikipedia range/distribution map with colour legend. Links to eBird interactive map.
+  - *Sonogram + audio* - xeno-canto recording spectrogram with play/pause controls and prev/next recording navigation
+  - *Related species carousel* - always present; shows primary photos of the correct species and its same-genus relatives (falls back to same-family if fewer than 2 genus matches). Candidates are filtered to recently-observed species plus historical species that are regionally common (`isCommon = true`), capping at 9 related species. Each slide has a full-width top badge ("Related species: Common name (Latin name)") and a "View info →" link (except the reference species). Clicking "View info →" replaces the panel body content (header, wiki, sightings, links) with that species' info. Navigation arrows fade in over 2 seconds once adjacent photos are loaded. Wraps around with an instant (non-animated) transition to avoid reverse-direction animation.
+  - *Auto-scroll* - on first reveal the carousel scrolls through all slides once at 1.8 s/slide then stops on the reference species. Any user interaction cancels the auto-scroll. Configurable via Settings (desktop only, default on).
   - A frosted-glass overlay covers the triptych while the initial bird info is loading and fades away (700 ms) once the data arrives.
-- **Species header** — common name, Latin name, family, IUCN conservation status; updates when viewing a related species
-- **Recent sightings** — up to N cards (configurable in Settings, default 4, max 10) showing location name, coordinates, date, and count. Fetched from eBird `/data/obs/{regionCode}/recent/{speciesCode}`, cached 1 hour server-side. Updates when viewing a related species.
-- **Wikipedia extract** — full intro text with styled section headings, scrollable; updates when viewing a related species
-- **Quick links** — eBird, All About Birds, Wikipedia, iNaturalist, Audubon, Xeno-canto; update when viewing a related species
+- **Species header** - common name, Latin name, family, IUCN conservation status; updates when viewing a related species
+- **Recent sightings** - up to N cards (configurable in Settings, default 4, max 10) showing location name, coordinates, date, and count. Fetched from eBird `/data/obs/{regionCode}/recent/{speciesCode}`, cached 1 hour server-side. Updates when viewing a related species.
+- **Wikipedia extract** - full intro text with styled section headings, scrollable; updates when viewing a related species
+- **Quick links** - eBird, All About Birds, Wikipedia, iNaturalist, Audubon, Xeno-canto; update when viewing a related species
 
 ---
 
@@ -152,7 +152,7 @@ Persists across browser sessions indefinitely unless explicitly cleared.
 
 | Store | Contents | Expires |
 |---|---|---|
-| `progress` (IndexedDB) | All quiz history — correct/incorrect counts, mastery levels, weights, streaks, favourite/excluded flags | Never (user-managed) |
+| `progress` (IndexedDB) | All quiz history - correct/incorrect counts, mastery levels, weights, streaks, favourite/excluded flags | Never (user-managed) |
 | `regionSpecies` (IndexedDB) | Ordered promotion queue per region, including `promotionIndex` | 7 days (re-fetched from backend) |
 | `blockedPhotos` (IndexedDB) | URLs of photos the user has dismissed from carousels | Never |
 | `birdygurdy_settings` (localStorage) | App settings | Never |

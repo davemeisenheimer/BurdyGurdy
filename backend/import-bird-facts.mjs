@@ -10,13 +10,13 @@
  * The script reads SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY from the
  * environment (or from the .env file if you source it first).
  *
- * CSV format — first row must be a header, column order doesn't matter:
+ * CSV format - first row must be a header, column order doesn't matter:
  *
  *   fact_text       (required) The fact sentence.
  *   source_url      (optional) URL to the source.
  *   species_codes   (optional) Semicolon-separated eBird species codes, e.g. amro;bcch
  *   family_names    (optional) Semicolon-separated family sci names, e.g. Turdidae;Paridae
- *   is_active       (optional) true/false — defaults to true if omitted.
+ *   is_active       (optional) true/false - defaults to true if omitted.
  *
  * Example row:
  *   "American Robins can hear earthworms moving underground.",https://example.com,amro,,true
@@ -134,4 +134,4 @@ if (error) {
   process.exit(1);
 }
 
-console.log(`Done — ${facts.length} fact(s) added.\n`);
+console.log(`Done - ${facts.length} fact(s) added.\n`);

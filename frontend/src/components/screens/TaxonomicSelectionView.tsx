@@ -170,19 +170,19 @@ function buildDialogBody(comName: string, priorityGroup: PriorityGroup | undefin
   let whenText: string;
   switch (priorityGroup) {
     case 'recentCommon':
-      whenText = `${comName} has been spotted in your area recently and is a common sighting — you would have seen it in your next few sessions.`;
+      whenText = `${comName} has been spotted in your area recently and is a common sighting - you would have seen it in your next few sessions.`;
       break;
     case 'recentUncommon':
-      whenText = `${comName} was spotted in your area recently but isn't a frequent visitor — it would have come up once the more common birds were covered.`;
+      whenText = `${comName} was spotted in your area recently but isn't a frequent visitor - it would have come up once the more common birds were covered.`;
       break;
     case 'regionCommon':
-      whenText = `${comName} is a regular in your region but hasn't been spotted in recent reports — it would have appeared eventually during a quieter period for recent sightings.`;
+      whenText = `${comName} is a regular in your region but hasn't been spotted in recent reports - it would have appeared eventually during a quieter period for recent sightings.`;
       break;
     case 'regionUncommon':
-      whenText = `${comName} isn't seen often in your area and hasn't appeared in recent reports — it could have been a while before it came up naturally.`;
+      whenText = `${comName} isn't seen often in your area and hasn't appeared in recent reports - it could have been a while before it came up naturally.`;
       break;
     case 'rareUncommon':
-      whenText = `${comName} is a rare visitor to your area — without selecting it, you might not have seen it for a long time.`;
+      whenText = `${comName} is a rare visitor to your area - without selecting it, you might not have seen it for a long time.`;
       break;
     default:
       whenText = `${comName} was waiting in line to be introduced based on how recently and how often it's been sighted in your area.`;
@@ -540,12 +540,12 @@ export function TaxonomicSelectionView({ initialPrefs, onSave, onClose, regionCo
           );
         })}
 
-        {/* Orphans — species without taxonomy data */}
+        {/* Orphans - species without taxonomy data */}
         {!loading && orphans.length > 0 && (
           <div className="mb-1 mt-2">
             <div className="px-3 py-2 rounded-lg bg-amber-50 border border-amber-200">
               <p className="text-xs text-amber-700 font-medium mb-1">
-                Species without taxonomy data ({orphans.length}) — will appear after next quiz round
+                Species without taxonomy data ({orphans.length}) - will appear after next quiz round
               </p>
               {orphans.map(sp => (
                 <div

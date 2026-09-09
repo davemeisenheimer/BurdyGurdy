@@ -48,10 +48,10 @@ describe('selectDistractors – level 0 (easy)', () => {
 
   it('falls back to similarOrAll when fewer than count different-family birds exist', () => {
     const target = sp('target', 'Setophaga', 'Parulidae');
-    // Only 1 different-family bird — not enough for count=3
+    // Only 1 different-family bird - not enough for count=3
     const pool   = [target, sp('samefam', 'Geothlypis', 'Parulidae'), sp('other1', 'Cardinalis', 'Cardinalidae')];
     const result = selectDistractors(target, pool, 0, 3, NO_PALETTE);
-    // Falls back to all others — should still return as many as possible
+    // Falls back to all others - should still return as many as possible
     expect(result.length).toBeGreaterThan(0);
   });
 });
@@ -77,12 +77,12 @@ describe('selectDistractors – level 1 (medium)', () => {
     const target = sp('target', 'Setophaga', 'Parulidae');
     const pool   = [
       target,
-      sp('samegenus', 'Setophaga', 'Parulidae'), // same genus — less preferred
+      sp('samegenus', 'Setophaga', 'Parulidae'), // same genus - less preferred
       sp('dg1',       'Geothlypis', 'Parulidae'),
       sp('dg2',       'Mniotilta',  'Parulidae'),
       sp('dg3',       'Vermivora',  'Parulidae'),
     ];
-    // Run many times — diff-genus birds should always win when there are 3 of them
+    // Run many times - diff-genus birds should always win when there are 3 of them
     for (let i = 0; i < 20; i++) {
       const result = selectDistractors(target, pool, 1, 3, NO_PALETTE);
       expect(result.every(s => s.sciName.split(' ')[0] !== 'Setophaga')).toBe(true);
@@ -99,7 +99,7 @@ describe('selectDistractors – level 1 (medium)', () => {
       sp('diff', 'Cardinalis', 'Cardinalidae'),
     ];
     const result = selectDistractors(target, pool, 1, 3, NO_PALETTE);
-    // Can't fill 3 from diff-genus only — falls back to all same-family
+    // Can't fill 3 from diff-genus only - falls back to all same-family
     expect(result.every(s => s.tax!.familySciName === 'Parulidae')).toBe(true);
     expect(result).toHaveLength(3);
   });
@@ -228,7 +228,7 @@ describe('selectDistractors – custom-selection override', () => {
     expect(result.every(s => s.tax!.familySciName === 'Parulidae')).toBe(true);
   });
 
-  it('empty speciesFilterSet causes no change — regression guard', () => {
+  it('empty speciesFilterSet causes no change - regression guard', () => {
     const target = sp('target', 'Setophaga', 'Parulidae');
     const pool   = [
       target,
@@ -345,7 +345,7 @@ describe('selectDistractors – introduced-codes preference', () => {
     expect(result.some(s => s.speciesCode === 'unintro')).toBe(false);
   });
 
-  it('empty introducedCodes causes no change to level 1 behaviour — regression guard', () => {
+  it('empty introducedCodes causes no change to level 1 behaviour - regression guard', () => {
     const target = sp('target', 'Setophaga', 'Parulidae');
     const pool   = [
       target,
@@ -440,7 +440,7 @@ describe('selectDistractors – introduced-codes preference', () => {
         bothPalettePicked++;
       }
     }
-    // P(nonpal wins a slot against pal1+pal2 at 10× each) ≈ 1/21 per pick — both palette birds
+    // P(nonpal wins a slot against pal1+pal2 at 10× each) ≈ 1/21 per pick - both palette birds
     // should appear together in the vast majority of runs.
     expect(bothPalettePicked).toBeGreaterThan(80);
   });
@@ -506,7 +506,7 @@ describe('selectDistractors – introduced-codes preference', () => {
     }
   });
 
-  it('level 1: introduced preference is still applied when sameFamily IS large enough — regression guard for fix', () => {
+  it('level 1: introduced preference is still applied when sameFamily IS large enough - regression guard for fix', () => {
     // Ensure the fix does not accidentally remove introduced preference from the constrained path.
     const target = sp('target',  'Setophaga', 'Parulidae');
     const pool   = [
@@ -522,7 +522,7 @@ describe('selectDistractors – introduced-codes preference', () => {
     expect(result.some(s => s.speciesCode === 'unintro')).toBe(false);
   });
 
-  it('level 2: introduced preference is still applied when sameFamily IS large enough — regression guard for fix', () => {
+  it('level 2: introduced preference is still applied when sameFamily IS large enough - regression guard for fix', () => {
     const target = sp('target',  'Setophaga', 'Parulidae');
     const pool   = [
       target,
@@ -538,7 +538,7 @@ describe('selectDistractors – introduced-codes preference', () => {
     expect(result.some(s => s.speciesCode === 'unintro')).toBe(false);
   });
 
-  it('empty introducedCodes causes no change to level 2 behaviour — regression guard', () => {
+  it('empty introducedCodes causes no change to level 2 behaviour - regression guard', () => {
     const target = sp('target', 'Setophaga', 'Parulidae');
     const pool   = [
       target,

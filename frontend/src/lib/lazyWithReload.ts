@@ -21,7 +21,7 @@ export function lazyWithReload<T extends ComponentType<any>>(
       if (!sessionStorage.getItem('chunkReloadAttempted')) {
         sessionStorage.setItem('chunkReloadAttempted', '1');
         window.location.reload();
-        // Never resolves — the reload will happen before this matters.
+        // Never resolves - the reload will happen before this matters.
         return new Promise<{ default: T }>(() => {});
       }
       // Already reloaded once; let the error bubble to an error boundary.

@@ -2,7 +2,7 @@ import { DIALOGS } from './dialogData';
 
 interface Props {
   dialogId: string;
-  /** Extra content appended after the data-file children — for dynamic text at the call site. */
+  /** Extra content appended after the data-file children - for dynamic text at the call site. */
   extraChildren?: React.ReactNode;
   onConfirm?: () => void;
   onCancel?: () => void;

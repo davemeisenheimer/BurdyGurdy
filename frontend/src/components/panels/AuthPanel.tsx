@@ -136,7 +136,7 @@ export function AuthPanel({ onClose, onSignIn, onSignUp }: Props) {
           </form>
         ) : (
           <>
-            {/* News opt-in — only relevant when creating an account */}
+            {/* News opt-in - only relevant when creating an account */}
             {mode === 'signup' && (
               <label className="flex items-start gap-2.5 mb-4 cursor-pointer select-none">
                 <input

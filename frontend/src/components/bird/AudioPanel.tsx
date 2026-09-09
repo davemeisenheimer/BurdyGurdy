@@ -22,7 +22,7 @@ export function AudioPanel({ recordings, autoplay = false, pauseRef, fillHeight 
     const audio = audioRef.current;
     setIdx(0);
     if (autoplay && audio) {
-      // Attempt autoplay (desktop only — iOS blocks this, which is expected browser behaviour)
+      // Attempt autoplay (desktop only - iOS blocks this, which is expected browser behaviour)
       audio.play().catch(() => setPlaying(false));
       setPlaying(true);
     } else {
@@ -37,7 +37,7 @@ export function AudioPanel({ recordings, autoplay = false, pauseRef, fillHeight 
   }, [pauseRef]);
 
   // Pause when playing becomes false or when the track index changes.
-  // play() is intentionally NOT called here — iOS Safari blocks audio.play()
+  // play() is intentionally NOT called here - iOS Safari blocks audio.play()
   // unless it is called synchronously inside a user gesture handler.
   useEffect(() => {
     if (!audioRef.current) return;
@@ -66,7 +66,7 @@ export function AudioPanel({ recordings, autoplay = false, pauseRef, fillHeight 
 
   return (
     <div className={`flex flex-col bg-slate-900 overflow-hidden ${fillHeight ? 'h-full' : ''}`}>
-      {/* Audio element — src managed via toProxyUrl for Content-Length / seekable range */}
+      {/* Audio element - src managed via toProxyUrl for Content-Length / seekable range */}
       <audio ref={audioRef} src={toProxyUrl(rec.file)} onEnded={() => setPlaying(false)} />
 
       {/* Spectrogram + position indicator + duration pill */}

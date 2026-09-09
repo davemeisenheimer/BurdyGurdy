@@ -446,7 +446,7 @@ export function QuizScreen({
                     Range Map
                   </span>
                 )}
-                {/* Play/pause button for song audio — not shown on sono player slide (has its own controls) */}
+                {/* Play/pause button for song audio - not shown on sono player slide (has its own controls) */}
                 {showMediaInCarousel && question.audioUrl && !currentRevealPhoto.isSonoPlayer && (
                   <button
                     onClick={toggleRevealAudio}

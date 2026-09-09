@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '../../../lib/supabase';
 import { AuthPanel } from '../../panels/AuthPanel';
@@ -20,8 +20,11 @@ const FEATURES = [
 type Slide =
   | { kind: 'hero' }
   | { kind: 'features' }
+  | { kind: 'video'; videoId: string; caption: string }
   | { kind: 'single'; src: string; caption: string }
   | { kind: 'triple'; src1: string; src2: string; src3: string; caption: string };
+
+const DEMO_VIDEO_ID = '3Z6gZXRQdmM';
 
 const DESKTOP_SLIDES: Slide[] = [
   { kind: 'hero' },
@@ -30,6 +33,7 @@ const DESKTOP_SLIDES: Slide[] = [
   { kind: 'single', src: '/AnswerRevealBirdInfo.jpg', caption: 'Rich bird info, range maps, and recent sightings on every answer' },
   { kind: 'single', src: '/LifeListBirdInfo.jpg',     caption: 'Track your progress - see every species you\'ve mastered' },
   { kind: 'single', src: '/SightingsMap.png',         caption: 'See recent local sightings on a map for every bird you study' },
+  { kind: 'video', videoId: DEMO_VIDEO_ID, caption: 'Watch the full walkthrough' },
 ];
 
 const MOBILE_SLIDES: Slide[] = [
@@ -42,10 +46,42 @@ const MOBILE_SLIDES: Slide[] = [
   { kind: 'single', src: '/SightingsListMobile.png',  caption: 'Browse recent local sightings by species' },
   { kind: 'single', src: '/SightingsMapMobile.png',   caption: 'See where each species has been spotted near you' },
   { kind: 'single', src: '/AnswerRevealBirdInfo.jpg', caption: 'The desktop version offers rich bird info all in one screen.' },
+  { kind: 'video', videoId: DEMO_VIDEO_ID, caption: 'Watch the full walkthrough' },
 ];
 
 const SLIDE_MS_DESKTOP = 4500;
 const SLIDE_MS_MOBILE  = 6500;
+
+// ── Aspect-ratio letterbox ──────────────────────────────────────────────────────
+// Iframes don't respect `object-fit` the way images/video do - the embedded
+// document just reflows to fill whatever box it's given, so a plain w-full/h-full
+// iframe stretches instead of letterboxing. This measures the actual available
+// space and sizes the child to the largest rect matching `ratio`.
+
+function AspectFitBox({ ratio, children }: { ratio: number; children: ReactNode }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const fit = () => {
+      const { width: w, height: h } = el.getBoundingClientRect();
+      if (w <= 0 || h <= 0) return;
+      setSize(w / h > ratio ? { width: h * ratio, height: h } : { width: w, height: w / ratio });
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ratio]);
+
+  return (
+    <div ref={containerRef} className="w-full h-full flex items-center justify-center">
+      <div style={size ?? { width: '100%', height: '100%' }}>{children}</div>
+    </div>
+  );
+}
 
 // ── Unified slideshow ─────────────────────────────────────────────────────────
 
@@ -60,10 +96,13 @@ function UnifiedSlideshow({ user, displayName, onSignInClick }: SlideshowProps) 
   const [paused, setPaused]        = useState(false);
   const [lightboxSrc, setLightbox] = useState<string | null>(null);
   const [isMobile, setIsMobile]    = useState(() => window.innerWidth < 1024);
-  const pausedRef     = useRef(false);
-  const slidesLenRef  = useRef(0);
+  const [videoPlaying, setVideoPlaying] = useState(false);
+  const pausedRef       = useRef(false);
+  const videoPlayingRef = useRef(false);
+  const slidesLenRef    = useRef(0);
 
   useEffect(() => { pausedRef.current = paused; }, [paused]);
+  useEffect(() => { videoPlayingRef.current = videoPlaying; }, [videoPlaying]);
 
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 1024);
@@ -77,6 +116,11 @@ function UnifiedSlideshow({ user, displayName, onSignInClick }: SlideshowProps) 
   // Reset to first slide when switching between desktop and mobile slide sets
   useEffect(() => { setIdx(0); }, [isMobile]);
 
+  // Stop the video (unmount its iframe) whenever we navigate away from its slide
+  useEffect(() => {
+    if (slides[idx]?.kind !== 'video' && videoPlaying) setVideoPlaying(false);
+  }, [idx, isMobile]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Mobile scrolls right-to-left; desktop drops in from above
   const captionAnim = isMobile
     ? 'captionScroll 7s ease-in-out forwards'
@@ -86,7 +130,7 @@ function UnifiedSlideshow({ user, displayName, onSignInClick }: SlideshowProps) 
 
   useEffect(() => {
     const t = setInterval(() => {
-      if (!pausedRef.current) setIdx(i => (i + 1) % slidesLenRef.current);
+      if (!pausedRef.current && !videoPlayingRef.current) setIdx(i => (i + 1) % slidesLenRef.current);
     }, slideMs);
     return () => clearInterval(t);
   }, [isMobile]);
@@ -156,6 +200,39 @@ function UnifiedSlideshow({ user, displayName, onSignInClick }: SlideshowProps) 
           </div>
         )}
 
+        {slide.kind === 'video' && (
+          <div key="video" className="absolute inset-0 animate-fade-in">
+            <AspectFitBox ratio={16 / 9}>
+              {videoPlaying ? (
+                <iframe
+                  className="w-full h-full"
+                  src={`https://www.youtube-nocookie.com/embed/${slide.videoId}?autoplay=1&rel=0`}
+                  title={slide.caption}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              ) : (
+                <button
+                  onClick={() => setVideoPlaying(true)}
+                  className="relative w-full h-full group cursor-pointer"
+                  aria-label={`Play video: ${slide.caption}`}
+                >
+                  <img
+                    src={`https://i.ytimg.com/vi/${slide.videoId}/hqdefault.jpg`}
+                    alt={slide.caption}
+                    className="w-full h-full object-contain"
+                  />
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/40 transition-colors">
+                    <span className="w-20 h-20 rounded-full bg-red-600 flex items-center justify-center shadow-lg">
+                      <span className="ml-1 border-l-[22px] border-l-white border-y-[14px] border-y-transparent" />
+                    </span>
+                  </span>
+                </button>
+              )}
+            </AspectFitBox>
+          </div>
+        )}
+
         {slide.kind === 'single' && (
           <img
             key={slide.src}
@@ -174,7 +251,7 @@ function UnifiedSlideshow({ user, displayName, onSignInClick }: SlideshowProps) 
           </div>
         )}
 
-        {(slide.kind === 'single' || slide.kind === 'triple') && (
+        {(slide.kind === 'single' || slide.kind === 'triple' || (slide.kind === 'video' && !videoPlaying)) && (
           <div
             key={`caption-${idx}`}
             className="absolute bottom-10 left-0 right-0 text-center pointer-events-none"
@@ -302,7 +379,7 @@ export function LandingPage() {
       </div>
 
       {/* ── Full-width slideshow ──────────────────────────────────────────────── */}
-      {/* Explicit height so h-full works inside — flex-1 on a min-h-screen parent resolves to 0 */}
+      {/* Explicit height so h-full works inside - flex-1 on a min-h-screen parent resolves to 0 */}
       <div className="overflow-hidden flex flex-col pt-6" style={{ height: 'clamp(650px, calc(100vh - 500px), 1100px)' }}>
         <UnifiedSlideshow
           user={user}

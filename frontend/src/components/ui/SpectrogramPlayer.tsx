@@ -9,7 +9,7 @@ interface Props {
   /** Let CSS control the canvas height (e.g. inside a flex-1 container). */
   fillHeight?: boolean;
   className?: string;
-  /** Known duration in seconds — shown immediately before the hook resolves it. */
+  /** Known duration in seconds - shown immediately before the hook resolves it. */
   durationHint?: number;
   /** Suppress the built-in play/pause pill (callers that provide their own controls). */
   hideButton?: boolean;
@@ -76,7 +76,7 @@ export function SpectrogramPlayer({
   return (
     <div className={`${fillHeight ? 'flex flex-col' : ''} ${className ?? ''}`}>
 
-      {/* Own audio element — uncontrolled mode only */}
+      {/* Own audio element - uncontrolled mode only */}
       {!isControlled && audioUrl && (
         <audio
           ref={internalRef}
@@ -99,7 +99,7 @@ export function SpectrogramPlayer({
           onZoomChange={onZoomChange}
         />
 
-        {/* Playback position line — adjusted for zoom window */}
+        {/* Playback position line - adjusted for zoom window */}
         {(() => {
           const [zStart, zEnd] = zoomWindow;
           const adj = (progress - zStart) / (zEnd - zStart);

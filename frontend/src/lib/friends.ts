@@ -223,7 +223,7 @@ export async function notifyFriends(
 }
 
 /**
- * Sends a notification via navigator.sendBeacon — safe to call from a pagehide
+ * Sends a notification via navigator.sendBeacon - safe to call from a pagehide
  * handler where the page may be unloading. Uses a separate backend endpoint that
  * accepts the auth token in the request body (sendBeacon cannot set headers).
  */

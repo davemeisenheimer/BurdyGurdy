@@ -181,7 +181,7 @@ async function promoteNextForType(
  */
 export function typeLevel0MaxSize(graduateCount: number, initialMasteryLevel = 0): number {
   // Advanced birders (initialMasteryLevel === 2) start at Hard and graduate directly
-  // to Mastered — there are no higher active levels to overflow into, so the entry-level
+  // to Mastered - there are no higher active levels to overflow into, so the entry-level
   // cap IS the total palette cap.  We use a higher ceiling to give them a palette
   // comparable in size to novice/intermediate users.  See MAX_LEVEL_ADVANCED_SIZE in
   // gameplayConstants.ts for the full explanation.

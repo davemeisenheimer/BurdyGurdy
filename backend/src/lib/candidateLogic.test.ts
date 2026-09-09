@@ -151,7 +151,7 @@ describe('buildCandidates - speciesFilterSet', () => {
     expect(c!.weight).toBeCloseTo(20 * 0.05);
   });
 
-  it('empty speciesFilterSet (no selection) includes all non-recent birds — no regression', () => {
+  it('empty speciesFilterSet (no selection) includes all non-recent birds - no regression', () => {
     const recentPool  = [];
     const allPool     = [makeSpecies('bird1'), makeSpecies('bird2')];
     const recentCodes = new Set<string>();
@@ -278,7 +278,7 @@ describe('applyPaletteSMGuarantee', () => {
     const recentCodes = new Set(['a', 'b']);
     const weightsMap = { 'a:image': 1, 'b:image': 1 };
     const allValid = [makeQ('a'), makeQ('b'), makeQ('old1'), makeQ('old2')];
-    // No paletteKeySet or strugglingKeySet — all go to otherValid
+    // No paletteKeySet or strugglingKeySet - all go to otherValid
     const result = applyPaletteSMGuarantee(allValid, recentCodes, weightsMap, 4, 2);
     expect(result).toHaveLength(4);
   });

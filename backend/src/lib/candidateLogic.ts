@@ -92,7 +92,7 @@ export function buildCandidates(
           // Unmastered palette: light discount, stay above active floor
           weight = Math.max(w * NON_RECENT_PALETTE_DISCOUNT, ACTIVE_PALETTE_MIN_WEIGHT);
         } else if (strugglingKeys.has(key)) {
-          // Struggling mastered: same light discount as palette — still needs active practice
+          // Struggling mastered: same light discount as palette - still needs active practice
           weight = w * NON_RECENT_PALETTE_DISCOUNT;
         } else {
           // Non-struggling mastered: heavy discount, occasional review only
@@ -116,7 +116,7 @@ export function buildCandidates(
  * smFloor  = total − ruFloor           - minimum struggling-mastered
  *
  * Within each bucket, window birds are sorted first (then by weight descending),
- * so window-unmastered birds naturally fill the first RU slots — acting as a
+ * so window-unmastered birds naturally fill the first RU slots - acting as a
  * window guarantee without a hard-coded reservation.
  *
  * Each bucket backfills for the other's shortfall, then regular mastered
@@ -185,12 +185,12 @@ export function applyPaletteSMGuarantee<T extends { speciesCode: string; type: s
 /**
  * Weighted sampling without replacement up to `target`.
  * If the pool is smaller than target, round-robin replacement fill is used so
- * every bird appears floor(target/pool.size) or ceil(...) times — weighted
+ * every bird appears floor(target/pool.size) or ceil(...) times - weighted
  * within each pass via Efraimidis-Spirakis reservoir sampling so higher-weight
  * birds get the extra slot on uneven cycles.
  *
  * When target ≤ pool.length no fill fires and every picked bird is unique.
- * When target > pool.length fill fires and some birds will repeat — this is the
+ * When target > pool.length fill fires and some birds will repeat - this is the
  * intended behaviour for a learning palette smaller than the round size.
  */
 export function pickFromPool(pool: Candidate[], target: number): Candidate[] {

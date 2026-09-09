@@ -274,14 +274,14 @@ router.post('/questions', async (req, res) => {
 
       // Unmastered and struggling birds use target=count+5 so replacement fill lets them
       // repeat to fill a round (e.g. 3 struggling birds across 5 questions).
-      // Non-struggling mastered birds use target=pool size — each appears at most once,
+      // Non-struggling mastered birds use target=pool size - each appears at most once,
       // preventing a single recently-mastered species from crowding out review slots.
       const pickedRU = pickFromPool(ruCandidates, count + 5);
       const pickedSM = pickFromPool(smCandidates, count + 5);
       const anchorSpecies = [...ruCandidates, ...smCandidates].map(c => c.species);
 
       // In struggling-only mode the weightsMap only contains struggling birds, so
-      // otherCandidates is empty — synthesize affinity fill from introduced related
+      // otherCandidates is empty - synthesize affinity fill from introduced related
       // species so the round can be padded with birds the user already knows from
       // the same genus or family. Not applied when speciesFilterSet is active (Life
       // List Selections) since the user explicitly chose which birds to practise.
@@ -331,7 +331,7 @@ router.post('/questions', async (req, res) => {
         const masteryKey   = `${species.speciesCode}:${type}`;
         const masteryLevel = (masteryLevels as Record<string, number>)[masteryKey] ?? 0;
 
-        // For order/family questions, distractors must come from a different order/family —
+        // For order/family questions, distractors must come from a different order/family -
         // otherwise multiple answer options would be correct.
         const distractorPool = type === 'order'
           ? filteredPool.filter(s => s.tax?.order !== species.tax!.order)
@@ -412,7 +412,7 @@ router.post('/questions', async (req, res) => {
           // Pick up to 3 paired tracks so the frontend can fall back if a URL fails.
           // Sono questions already filtered to short clips above; for audio questions use
           // weighted sampling (weight = 1/duration) so shorter clips are preferred while
-          // variety is preserved — longer clips remain in the pool and can still be picked.
+          // variety is preserved - longer clips remain in the pool and can still be picked.
           const shuffledRecs = isSonoType
             ? [...candidateRecs].sort(() => Math.random() - 0.5).slice(0, 3)
             : weightedSampleByDuration(candidateRecs, 3);

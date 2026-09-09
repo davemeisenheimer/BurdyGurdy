@@ -160,7 +160,7 @@ function selectDistractorsImpl(
       }
       if (picked.length >= count) return picked.slice(0, count);
     }
-    // Selected pool too small — fall through to mastery-level logic with the full pool
+    // Selected pool too small - fall through to mastery-level logic with the full pool
   }
 
   // ── Priority 2: mastery-level taxonomy tiers ─────────────────────────────────
@@ -212,13 +212,13 @@ function selectDistractorsImpl(
 /**
  * Selects `count` distractor species for a quiz question.
  *
- * Priority 1 — Custom-selection override:
+ * Priority 1 - Custom-selection override:
  *   When speciesFilterSet is active and contains ≥ count other species, all
  *   distractors come from the selected pool: same-family selected first, then
  *   same-order (different family), then any remaining selected species.
  *   Falls through to mastery-level logic only when the selected pool is too small.
  *
- * Priority 2 — Mastery-level greedy fill:
+ * Priority 2 - Mastery-level greedy fill:
  *   Each question randomly picks between two tier orderings:
  *   - Mode 1 (introduced-first): all intro tiers exhausted before any unintro tier
  *   - Mode 2 (relatedness-first): intro+unintro interleaved within each taxonomic level
@@ -246,7 +246,7 @@ export function selectDistractors(
   );
 }
 
-/** Mode 1 (introduced-first) — for deterministic testing. */
+/** Mode 1 (introduced-first) - for deterministic testing. */
 export function selectDistractorsMode1(
   target: PoolSpecies,
   pool: PoolSpecies[],
@@ -261,7 +261,7 @@ export function selectDistractorsMode1(
   );
 }
 
-/** Mode 2 (relatedness-first) — for deterministic testing. */
+/** Mode 2 (relatedness-first) - for deterministic testing. */
 export function selectDistractorsMode2(
   target: PoolSpecies,
   pool: PoolSpecies[],

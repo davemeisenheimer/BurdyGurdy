@@ -14,10 +14,10 @@
 import { INFERNO_LUT } from './spectrogramColours';
 
 const FFT_SIZE    = 1024;  // frequency resolution
-const HOP_SIZE    = 256;   // 75% overlap — smoother time resolution
+const HOP_SIZE    = 256;   // 75% overlap - smoother time resolution
 const MAX_DB_RANGE = 60;   // dynamic range shown (dB below peak)
 
-// Hann window coefficients — precomputed once, shared across all calls
+// Hann window coefficients - precomputed once, shared across all calls
 const HANN = Float32Array.from(
   { length: FFT_SIZE },
   (_, i) => 0.5 * (1 - Math.cos((2 * Math.PI * i) / (FFT_SIZE - 1))),
@@ -156,7 +156,7 @@ export async function drawSpectrogram(
   const numFrames  = Math.floor((samples.length - FFT_SIZE) / HOP_SIZE);
   if (numFrames <= 0) throw new Error('Audio too short to generate spectrogram');
 
-  // Cap at 10 kHz — covers virtually all bird vocalizations
+  // Cap at 10 kHz - covers virtually all bird vocalizations
   const maxBin = Math.min(FFT_SIZE >> 1, Math.round(10_000 / (sampleRate / FFT_SIZE)));
 
   // ── STFT ─────────────────────────────────────────────────────────────────

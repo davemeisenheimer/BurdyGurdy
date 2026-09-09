@@ -45,10 +45,10 @@ export function SightingsMapPanel({ allSightings, selectedSighting, regionCode }
 
   return (
     <div className="flex flex-col" style={{ height: '100%' }}>
-      {/* Toggle bar — lives outside the Leaflet container so layout is unambiguous */}
+      {/* Toggle bar - lives outside the Leaflet container so layout is unambiguous */}
       <MapModeToggle mode={mode} onModeChange={setMode} speciesLoading={speciesLoading} />
 
-      {/* Map — fills remaining height */}
+      {/* Map - fills remaining height */}
       <div className="flex-1 min-h-0 relative">
         <Suspense fallback={
           <div className="absolute inset-0 flex items-center justify-center">

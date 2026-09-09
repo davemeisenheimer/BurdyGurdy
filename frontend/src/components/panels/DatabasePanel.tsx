@@ -177,7 +177,7 @@ export function DatabasePanel() {
                   </th>
                 )}
               </tr>
-              {/* Row 2 — sub-columns under Mastered */}
+              {/* Row 2 - sub-columns under Mastered */}
               <tr>
                 <th onClick={() => handleSort('masteredAll')} className={thRight}>
                   All {arrow('masteredAll')}
@@ -197,10 +197,10 @@ export function DatabasePanel() {
               {sorted.map(row => (
                 <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50">
                   <td className="px-3 py-2 text-slate-700 font-medium max-w-[120px] truncate">
-                    {row.username ?? <span className="text-slate-400 italic">—</span>}
+                    {row.username ?? <span className="text-slate-400 italic">-</span>}
                   </td>
                   <td className="px-3 py-2 text-slate-600 max-w-[160px] truncate">
-                    {row.email ?? <span className="text-slate-400 italic">—</span>}
+                    {row.email ?? <span className="text-slate-400 italic">-</span>}
                   </td>
                   <td className="px-3 py-2 text-slate-500 whitespace-nowrap">
                     {row.lastSignIn
@@ -210,10 +210,10 @@ export function DatabasePanel() {
                   <td className="px-3 py-2 text-slate-500 whitespace-nowrap">
                     {row.dateRegistered
                       ? new Date(row.dateRegistered).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                      : <span className="text-slate-400 italic">—</span>}
+                      : <span className="text-slate-400 italic">-</span>}
                   </td>
                   <td className="px-3 py-2 text-slate-600 whitespace-nowrap">
-                    {row.regionCode ?? <span className="text-slate-400 italic">—</span>}
+                    {row.regionCode ?? <span className="text-slate-400 italic">-</span>}
                   </td>
                   <td className="px-3 py-2 text-slate-700 text-right">{row.birdsSeen}</td>
                   <td className="px-3 py-2 text-slate-700 text-right font-medium">{row.masteredAll}</td>

@@ -191,10 +191,10 @@ function allMasteredWithAccuracy(
  * Returns the highest tier earned and marks it seen, or null.
  *
  * Graduation requirements (prevents spurious repeats when the window shrinks):
- *   firstStep / backyardBirder  — any graduation this round
- *   patchRegular                — must have graduated a recentCommon bird
- *   localLegend                 — must have graduated any non-historical (window) bird
- *   regionalChampion            — any graduation (including historical birds)
+ *   firstStep / backyardBirder  - any graduation this round
+ *   patchRegular                - must have graduated a recentCommon bird
+ *   localLegend                 - must have graduated any non-historical (window) bird
+ *   regionalChampion            - any graduation (including historical birds)
  */
 export async function findEarnedAward(
   regionCode: string,

@@ -28,7 +28,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,svg,png,gif,woff2}'],
         runtimeCaching: [
           {
-            // Live sightings — never serve from cache, always hit the network.
+            // Live sightings - never serve from cache, always hit the network.
             urlPattern: /\/api\/birds\/recent-all/,
             handler: 'NetworkOnly',
           },

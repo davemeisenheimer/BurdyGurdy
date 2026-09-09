@@ -62,7 +62,7 @@ export const DIALOGS: Record<string, DialogConfig> = {
     confirmLabel: 'Select anyway',
     cancelLabel: 'Cancel',
     confirmClassName: 'bg-sky-700 hover:bg-sky-800',
-    // All body content is dynamic — injected via extraChildren at the call site.
+    // All body content is dynamic - injected via extraChildren at the call site.
     children: <></>,
   },
 };

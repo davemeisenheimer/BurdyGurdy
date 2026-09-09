@@ -83,7 +83,7 @@ export function AchievementsScreen({ log, onBack, friendDisplayName }: Props) {
         {log.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-2">
             <span className="text-4xl">🏅</span>
-            <p className="text-sm">No achievements yet — keep playing!</p>
+            <p className="text-sm">No achievements yet - keep playing!</p>
           </div>
         ) : (
           <div className="max-w-2xl mx-auto w-full px-4 py-4 space-y-6">

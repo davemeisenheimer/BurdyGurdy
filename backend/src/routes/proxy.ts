@@ -45,7 +45,7 @@ router.get('/sono', async (req, res) => {
     });
 
     const contentType = upstream.headers['content-type'] ?? 'unknown';
-    console.log(`[proxy/sono] upstream ${upstream.status} content-type: ${contentType} — ${url}`);
+    console.log(`[proxy/sono] upstream ${upstream.status} content-type: ${contentType} - ${url}`);
 
     if (!contentType.startsWith('image/')) {
       console.error(`[proxy/sono] upstream returned non-image content (Cloudflare challenge?)`);
@@ -58,7 +58,7 @@ router.get('/sono', async (req, res) => {
     upstream.data.pipe(res);
   } catch (err) {
     const e = err as { response?: { status: number } };
-    console.error(`[proxy/sono] failed to fetch ${url} — HTTP ${e.response?.status ?? 'no response'}:`, (err as Error).message);
+    console.error(`[proxy/sono] failed to fetch ${url} - HTTP ${e.response?.status ?? 'no response'}:`, (err as Error).message);
     res.status(502).json({ error: 'Failed to fetch spectrogram' });
   }
 });
@@ -101,7 +101,7 @@ router.get('/audio', async (req, res) => {
       timeout: 15_000,
     });
 
-    console.log(`[proxy/audio] upstream ${upstream.status} content-type: ${upstream.headers['content-type'] ?? 'unknown'} — ${url}`);
+    console.log(`[proxy/audio] upstream ${upstream.status} content-type: ${upstream.headers['content-type'] ?? 'unknown'} - ${url}`);
     res.set('Content-Type', upstream.headers['content-type'] ?? 'audio/mpeg');
     res.set('Cache-Control', 'public, max-age=604800');
     // Pass Content-Length so the browser can estimate seekable range (needed for
@@ -112,7 +112,7 @@ router.get('/audio', async (req, res) => {
     upstream.data.pipe(res);
   } catch (err) {
     const e = err as { response?: { status: number } };
-    console.error(`[proxy/audio] failed ${url} — HTTP ${e.response?.status ?? 'no response'}:`, (err as Error).message);
+    console.error(`[proxy/audio] failed ${url} - HTTP ${e.response?.status ?? 'no response'}:`, (err as Error).message);
     res.status(502).json({ error: 'Failed to fetch audio' });
   }
 });

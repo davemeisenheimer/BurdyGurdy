@@ -12,15 +12,15 @@
  */
 
 const STOPS: [number, number, number][] = [
-  [  0,   0,   4],  // t = 0.000 — near-black
-  [ 51,   6, 128],  // t = 0.125 — dark purple
-  [101,   7, 122],  // t = 0.250 — purple
-  [146,  35,  85],  // t = 0.375 — red-purple
-  [183,  70,  37],  // t = 0.500 — dark red
-  [213, 117,   4],  // t = 0.625 — orange
-  [235, 164,  12],  // t = 0.750 — orange-yellow
-  [248, 217,  69],  // t = 0.875 — yellow
-  [252, 255, 164],  // t = 1.000 — bright yellow-white
+  [  0,   0,   4],  // t = 0.000 - near-black
+  [ 51,   6, 128],  // t = 0.125 - dark purple
+  [101,   7, 122],  // t = 0.250 - purple
+  [146,  35,  85],  // t = 0.375 - red-purple
+  [183,  70,  37],  // t = 0.500 - dark red
+  [213, 117,   4],  // t = 0.625 - orange
+  [235, 164,  12],  // t = 0.750 - orange-yellow
+  [248, 217,  69],  // t = 0.875 - yellow
+  [252, 255, 164],  // t = 1.000 - bright yellow-white
 ];
 
 function buildLut(): Uint8Array {

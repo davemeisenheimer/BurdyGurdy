@@ -177,10 +177,10 @@ export function RelatedSpeciesCarousel({
     clearListenTimer();
 
     if (recs === undefined) {
-      // Still fetching — wait up to 5 s then advance
+      // Still fetching - wait up to 5 s then advance
       listenTimerRef.current = setTimeout(advance, 5000);
     } else if (recs === null || recs.length === 0) {
-      // No audio available — pause 2 s so the user can see the bird, then advance
+      // No audio available - pause 2 s so the user can see the bird, then advance
       listenTimerRef.current = setTimeout(advance, 2000);
     } else {
       // Play audio; 30 s fallback in case onEnded never fires

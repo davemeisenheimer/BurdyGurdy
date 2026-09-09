@@ -338,7 +338,7 @@ function CodeSearchInput({
         </div>
       )}
 
-      {/* Manual search — always shown when no auto-match; on-demand otherwise */}
+      {/* Manual search - always shown when no auto-match; on-demand otherwise */}
       {(!autoMatch || showSearch) && (
         <div className="space-y-1">
           <div className="flex gap-1">
@@ -506,7 +506,7 @@ function ImportReview({
             : 'bg-green-50 border-green-200 text-green-700'
         }`}>
           {unverifiedCount > 0
-            ? <><strong>{unverifiedCount} species code{unverifiedCount !== 1 ? 's' : ''}</strong> not found in the local cache — correct them below before importing.</>
+            ? <><strong>{unverifiedCount} species code{unverifiedCount !== 1 ? 's' : ''}</strong> not found in the local cache - correct them below before importing.</>
             : <>All {totalCodes} species code{totalCodes !== 1 ? 's' : ''} verified.</>
           }
         </div>

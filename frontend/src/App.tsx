@@ -106,7 +106,7 @@ export default function App() {
     () => sessionStorage.getItem('pendingInvite') ? 'friends' : 'home',
   );
   const [selectedSighting, setSelectedSighting] = useState<RegionalSighting | null>(null);
-  // All sightings loaded by SightingsScreen — lifted here so the map panel can access them.
+  // All sightings loaded by SightingsScreen - lifted here so the map panel can access them.
   const [allSightings, setAllSightings] = useState<RegionalSighting[]>([]);
   const [prevScreen, setPrevScreen] = useState<'progress' | 'recentprogress' | 'friendprogress' | 'friendrecentprogress'>('progress');
   const [recentProgressBack, setRecentProgressBack] = useState<'result' | 'progress'>('result');
@@ -237,7 +237,7 @@ export default function App() {
   }, [user]);
 
   // Stable helper: apply downloaded cloud settings/prefs into local state.
-  // Only uses stable React setters and module-level functions — safe to call
+  // Only uses stable React setters and module-level functions - safe to call
   // from any closure regardless of capture time.
   const applyCloudSettings = async (remote: Awaited<ReturnType<typeof downloadSettings>>) => {
     if (!remote) return;
@@ -265,7 +265,7 @@ export default function App() {
     await mergeVictoryLog(remote.victoryLog);
   };
 
-  // Three debounced inactivity timers — all reset on any user interaction.
+  // Three debounced inactivity timers - all reset on any user interaction.
   // Timers fire proactively between interactions (not on the next user action),
   // so sign-out and sync never interrupt a user gesture.
   //
@@ -295,7 +295,7 @@ export default function App() {
         if (cloudTs !== null) {
           const localTs = getLocalSyncedAt(u.id) ?? 0;
           if (localTs < cloudTs) {
-            // Cloud is newer — abort quiz if active, then download.
+            // Cloud is newer - abort quiz if active, then download.
             if (quizActiveRef.current) setScreen('home');
             setCloudSyncing(true);
             try {
@@ -417,7 +417,7 @@ export default function App() {
       switchToUserDb(session?.user?.id ?? null);
       void initAppData();
       setUser(session?.user ?? null);
-      // Password-reset link redirects back here — show the set-new-password dialog.
+      // Password-reset link redirects back here - show the set-new-password dialog.
       if (event === 'PASSWORD_RECOVERY') { setShowPasswordReset(true); return; }
       // When a session appears (OAuth redirect back), merge cloud data
       if (session?.user) {
@@ -430,7 +430,7 @@ export default function App() {
         }
         // Only download on app load or a genuine new sign-in.
         // TOKEN_REFRESHED and repeat SIGNED_IN (silent token refresh) must not
-        // trigger a download — that fires on tab return and bypasses the
+        // trigger a download - that fires on tab return and bypasses the
         // MIN_HIDDEN_MS guard in the visibility-change handler.
         const isInitialLoad   = event === 'INITIAL_SESSION';
         const isGenuineSignIn = event === 'SIGNED_IN' && prevAuthUserIdRef.current === null;
@@ -444,7 +444,7 @@ export default function App() {
               if (remoteCount > 0) {
                 setSyncVersion(v => v + 1);
               } else if (remoteCount === 0) {
-                // No cloud records — offer to upload guest progress for the first user on this device
+                // No cloud records - offer to upload guest progress for the first user on this device
                 const localCount = await db.progress.count();
                 if (localCount > 0) {
                   const dbs = await indexedDB.databases().catch(() => [] as IDBDatabaseInfo[]);
@@ -528,7 +528,7 @@ export default function App() {
   // Smart cross-device sync on visibility changes.
   //
   // On hide: if this device is current (localSyncedAt >= cloudTs), upload.
-  //   If cloud is newer skip the upload — show handler will download on reactivation.
+  //   If cloud is newer skip the upload - show handler will download on reactivation.
   //   If cloud check fails, attempt the upload anyway (uploadProgress sets needsUpload on failure).
   //
   // On show: if cloud is newer than our last sync, abort any in-progress quiz,
@@ -544,7 +544,7 @@ export default function App() {
       const cloudTs = await getCloudUploadTime(userId).catch(() => null);
       const localSyncedAt = getLocalSyncedAt(userId) ?? 0;
       if (cloudTs === null || localSyncedAt >= cloudTs) {
-        // Can't check cloud, or we're current — upload (uploadProgress owns bookkeeping).
+        // Can't check cloud, or we're current - upload (uploadProgress owns bookkeeping).
         await uploadProgress(userId).catch(() => {});
       }
       // If cloud is newer: skip upload so we don't overwrite a trim.
@@ -558,7 +558,7 @@ export default function App() {
       if (cloudTs !== null) {
         const localSyncedAt = getLocalSyncedAt(userId) ?? 0;
         if (localSyncedAt < cloudTs) {
-          // Cloud is newer — abort quiz if active, then download.
+          // Cloud is newer - abort quiz if active, then download.
           if (quizActiveRef.current) setScreen('home');
           setCloudSyncing(true);
           try {
