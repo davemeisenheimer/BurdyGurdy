@@ -65,6 +65,10 @@ export function RelatedSpeciesCarousel({
 
   // Audio state
   const [recordings, setRecordings]  = useState<Map<string, CarouselRecording[] | null>>(new Map());
+  // Species whose audio fetch failed (vs. genuinely having no recordings) - tracked
+  // separately so playback logic elsewhere can keep treating both as "nothing to play"
+  // while the render below shows a distinct "unavailable" indicator for a real failure.
+  const [audioFailed, setAudioFailed] = useState<Set<string>>(new Set());
   const fetchingAudioRef = useRef<Set<string>>(new Set());
   const [playingCode, setPlayingCode] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -205,6 +209,7 @@ export function RelatedSpeciesCarousel({
     setImgLoadedUrls(new Set());
     fetchingRef.current = new Set([referenceSpecies.speciesCode]);
     setRecordings(new Map());
+    setAudioFailed(new Set());
     fetchingAudioRef.current = new Set();
     setPlayingCode(null);
     audioRef.current?.pause();
@@ -305,6 +310,7 @@ export function RelatedSpeciesCarousel({
         .catch(() => {
           if (genRef.current !== gen) return;
           setRecordings(prev => new Map(prev).set(sp.speciesCode, null));
+          setAudioFailed(prev => new Set(prev).add(sp.speciesCode));
         });
     }
   }, [idx, slides]);
@@ -506,7 +512,16 @@ export function RelatedSpeciesCarousel({
                     const recs = recordings.get(slide.speciesCode);
                     const isPlaying = playingCode === slide.speciesCode;
                     if (recs === undefined) return null;
-                    if (recs === null) return null;
+                    if (recs === null) {
+                      if (audioFailed.has(slide.speciesCode)) {
+                        return (
+                          <span className="absolute bottom-1 left-1 bg-black/50 text-white/70 text-[10px] px-2 py-0.5 rounded-full">
+                            audio unavailable
+                          </span>
+                        );
+                      }
+                      return null;
+                    }
                     return (
                       <button
                         onClick={e => {

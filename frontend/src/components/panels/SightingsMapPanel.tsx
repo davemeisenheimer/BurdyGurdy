@@ -32,6 +32,9 @@ export function SightingsMapPanel({ allSightings, selectedSighting, regionCode }
     fetchSpeciesSightings(selectedSighting.speciesCode, regionCode).then(data => {
       setSpeciesSightings(data);
       setSpeciesLoading(false);
+    }).catch(() => {
+      // Secondary map view - fall back to empty rather than blocking on a dedicated error state.
+      setSpeciesLoading(false);
     });
   }, [mode, selectedSighting, regionCode]);
 

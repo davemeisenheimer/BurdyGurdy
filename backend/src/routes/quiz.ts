@@ -11,6 +11,7 @@ import {
 import { buildCandidates, applyPaletteSMGuarantee, applyAffinityBoosts, pickFromPool, splitCandidates } from '../lib/candidateLogic';
 import { filterRecordings, weightedSampleByDuration } from '../lib/recordingFilter';
 import { selectDistractors, pickRandom } from '../lib/distractorLogic';
+import { classifyUpstreamError, identifyUpstreamService } from '../lib/upstreamError';
 import type { PoolSpecies, Candidate } from '../lib/candidateLogic';
 
 const router = Router();
@@ -479,13 +480,19 @@ router.post('/questions', async (req, res) => {
 
     res.json(finalQuestions);
   } catch (err: unknown) {
-    const message  = err instanceof Error ? err.message : String(err);
-    const axiosMsg = (err as { response?: { status: number; data: unknown } })?.response;
-    console.error('Quiz error:', message, axiosMsg ? JSON.stringify(axiosMsg.data) : '');
+    const message    = err instanceof Error ? err.message : String(err);
+    const axiosMsg   = (err as { response?: { status: number; data: unknown } })?.response;
+    const classified = classifyUpstreamError(err);
+    const service     = identifyUpstreamService(err);
+    console.error('Quiz error:', message, service ?? '', axiosMsg ? JSON.stringify(axiosMsg.data) : '');
     res.status(500).json({
       error: 'Failed to generate quiz questions',
+      code: classified.code,
+      service,
+      statusCode: classified.statusCode,
+      // Kept for logs/support - the frontend now renders `code`/`service` as friendly copy
+      // instead of showing this raw message to the user.
       detail: message,
-      ebirdResponse: axiosMsg ? { status: axiosMsg.status, data: axiosMsg.data } : undefined,
     });
   }
 });

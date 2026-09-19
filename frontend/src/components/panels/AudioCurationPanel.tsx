@@ -90,7 +90,9 @@ export function AudioCurationPanel() {
     setLoadingRecs(true);
     try {
       const [recs, blockedRows] = await Promise.all([
-        fetchBirdAudio(bird.sciName),
+        // fetchBirdAudio now throws on failure (see api.ts) - caught below so a
+        // fetch error just leaves the list empty instead of crashing this handler.
+        fetchBirdAudio(bird.sciName).catch(() => [] as CarouselRecording[]),
         db.adminBlockedMedia.filter(r => r.speciesCode === bird.speciesCode && r.mediaType === 'audio').toArray(),
       ]);
       setBlocked(new Map(blockedRows.map(r => [r.url, r.blockScope])));

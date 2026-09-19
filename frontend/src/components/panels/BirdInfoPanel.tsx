@@ -13,6 +13,14 @@ import { RangeMap }              from '../bird/RangeMap';
 import { QuickLinks }            from '../bird/QuickLinks';
 import { BirdSearchInput }       from '../bird/BirdSearchInput';
 import type { SlideSpecies }     from '../bird/types';
+import { describeUpstreamError, type UpstreamErrorPayload } from '../../lib/upstreamErrorMessages';
+
+const INFO_FALLBACK = "Couldn't load info for this bird right now. Please try again.";
+
+function describeInfoError(err: unknown): string {
+  const payload = (err as { response?: { data?: UpstreamErrorPayload } })?.response?.data;
+  return describeUpstreamError(payload, INFO_FALLBACK);
+}
 
 interface Props {
   question:            QuizQuestion | null;
@@ -39,11 +47,13 @@ export function BirdInfoPanel({
   const mainAudioPauseRef = useRef<(() => void) | null>(null);
 
   const [questionInfo, setQuestionInfo]           = useState<BirdInfoData | null>(null);
+  const [questionInfoError, setQuestionInfoError] = useState<string | null>(null);
   const [loading, setLoading]                     = useState(false);
   const [questionSightings, setQuestionSightings] = useState<RecentSighting[]>([]);
 
   const [viewingSpecies, setViewingSpecies]   = useState<SlideSpecies | null>(null);
   const [viewedInfo, setViewedInfo]           = useState<BirdInfoData | null>(null);
+  const [viewedInfoError, setViewedInfoError] = useState<string | null>(null);
   const [viewedSightings, setViewedSightings] = useState<RecentSighting[]>([]);
 
   const [browseResolved, setBrowseResolved] = useState<SlideSpecies | null>(null);
@@ -78,13 +88,18 @@ export function BirdInfoPanel({
     if (!browseResolved) return;
     setLoading(true);
     setQuestionInfo(null);
+    setQuestionInfoError(null);
     setQuestionSightings([]);
     fetchBirdInfo(browseResolved.speciesCode, browseResolved.comName, browseResolved.sciName)
       .then(data => { setQuestionInfo(data); setLoading(false); })
-      .catch(() => setLoading(false));
+      .catch((err: unknown) => { setQuestionInfoError(describeInfoError(err)); setLoading(false); });
     if (regionCode && maxRecentSightings > 0) {
+      // Sightings here are a small supplementary strip - fall back to empty on
+      // failure rather than blocking the rest of the panel. See SightingsScreen
+      // for the dedicated sightings view's error handling.
       fetchRecentSightings(browseResolved.speciesCode, regionCode, maxRecentSightings)
-        .then(setQuestionSightings);
+        .then(setQuestionSightings)
+        .catch(() => {});
     }
   }, [browseResolved?.speciesCode]);
 
@@ -93,19 +108,23 @@ export function BirdInfoPanel({
     if (browseResolved) return;
     if (!isAnswered || !question) {
       setQuestionInfo(null);
+      setQuestionInfoError(null);
       setQuestionSightings([]);
       setViewingSpecies(null);
       setViewedInfo(null);
+      setViewedInfoError(null);
       setViewedSightings([]);
       return;
     }
     setLoading(true);
+    setQuestionInfoError(null);
     fetchBirdInfo(question.speciesCode, question.comName, question.sciName)
       .then(data => { setQuestionInfo(data); setLoading(false); })
-      .catch(() => setLoading(false));
+      .catch((err: unknown) => { setQuestionInfoError(describeInfoError(err)); setLoading(false); });
     if (regionCode && maxRecentSightings > 0) {
       fetchRecentSightings(question.speciesCode, regionCode, maxRecentSightings)
-        .then(setQuestionSightings);
+        .then(setQuestionSightings)
+        .catch(() => {});
     }
   }, [question?.speciesCode, isAnswered, !!browseResolved]);
 
@@ -113,11 +132,14 @@ export function BirdInfoPanel({
   useEffect(() => {
     if (!viewingSpecies) return;
     let cancelled = false;
+    setViewedInfoError(null);
     fetchBirdInfo(viewingSpecies.speciesCode, viewingSpecies.comName, viewingSpecies.sciName)
-      .then(data => { if (!cancelled) setViewedInfo(data); });
+      .then(data => { if (!cancelled) setViewedInfo(data); })
+      .catch((err: unknown) => { if (!cancelled) setViewedInfoError(describeInfoError(err)); });
     if (regionCode && maxRecentSightings > 0) {
       fetchRecentSightings(viewingSpecies.speciesCode, regionCode, maxRecentSightings)
-        .then(data => { if (!cancelled) setViewedSightings(data); });
+        .then(data => { if (!cancelled) setViewedSightings(data); })
+        .catch(() => {});
     }
     return () => { cancelled = true; };
   }, [viewingSpecies?.speciesCode]);
@@ -137,6 +159,7 @@ export function BirdInfoPanel({
 
   // Derived display state
   const info      = viewingSpecies ? viewedInfo      : questionInfo;
+  const infoError = viewingSpecies ? viewedInfoError : questionInfoError;
   const sightings = viewingSpecies ? viewedSightings : questionSightings;
   const primarySpecies: SlideSpecies = browseResolved ?? {
     speciesCode:   question!.speciesCode,
@@ -150,7 +173,7 @@ export function BirdInfoPanel({
   const sp: SlideSpecies = viewingSpecies ?? primarySpecies;
 
   const ebirdUrl = `https://ebird.org/species/${sp.speciesCode}`;
-  const contentLoading = loading || (viewingSpecies !== null && viewedInfo === null);
+  const contentLoading = loading || (viewingSpecies !== null && viewedInfo === null && viewedInfoError === null);
 
   const bannerLabel = browseResolved
     ? browseResolved.comName
@@ -210,6 +233,10 @@ export function BirdInfoPanel({
         {contentLoading ? (
           <div className="flex-1 flex items-center justify-center">
             <p className="text-slate-400 text-sm">Loading bird info…</p>
+          </div>
+        ) : infoError ? (
+          <div className="flex-1 flex items-center justify-center px-6">
+            <p className="text-sm text-red-500 text-center">{infoError}</p>
           </div>
         ) : (
           <>

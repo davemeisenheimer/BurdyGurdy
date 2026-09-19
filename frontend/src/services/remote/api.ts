@@ -91,23 +91,24 @@ export interface BirdInfoData {
   photos: { primary: AttributedPhoto | null; optional: AttributedPhoto[] };
 }
 
+/**
+ * Throws on failure (rather than swallowing to null) so callers can tell "this
+ * bird genuinely has no info" apart from "the fetch failed" and show a specific
+ * message via describeUpstreamError - see UpstreamErrorPayload.
+ */
 export async function fetchBirdInfo(
   speciesCode: string,
   comName?: string,
   sciName?: string,
-): Promise<BirdInfoData | null> {
+): Promise<BirdInfoData> {
   const params: Record<string, string> = {};
   if (comName) params.comName = comName;
   if (sciName) params.sciName = sciName;
-  try {
-    const res = await api.get<BirdInfoData>(`/birds/info/${speciesCode}`, { params });
-    const data = res.data;
-    // xeno-canto occasionally returns recordings with a null `file` field at runtime
-    data.recordings = data.recordings.filter(r => !!r.file);
-    return data;
-  } catch {
-    return null;
-  }
+  const res = await api.get<BirdInfoData>(`/birds/info/${speciesCode}`, { params });
+  const data = res.data;
+  // xeno-canto occasionally returns recordings with a null `file` field at runtime
+  data.recordings = data.recordings.filter(r => !!r.file);
+  return data;
 }
 
 export async function fetchBirdPhoto(speciesCode: string, comName?: string, sciName?: string): Promise<string | null> {
@@ -126,13 +127,10 @@ export interface RecentSighting {
   lng: number | null;
 }
 
+/** Throws on failure - see fetchBirdInfo's note on why these no longer swallow to []. */
 export async function fetchRecentSightings(speciesCode: string, regionCode: string, maxResults = 5): Promise<RecentSighting[]> {
-  try {
-    const res = await api.get<RecentSighting[]>(`/birds/recent/${speciesCode}`, { params: { regionCode, maxResults } });
-    return res.data;
-  } catch {
-    return [];
-  }
+  const res = await api.get<RecentSighting[]>(`/birds/recent/${speciesCode}`, { params: { regionCode, maxResults } });
+  return res.data;
 }
 
 /** A single observation from the regional 24-hour feed. */
@@ -149,22 +147,16 @@ export interface RegionalSighting {
   userDisplayName: string | null;
 }
 
+/** Throws on failure - see fetchBirdInfo's note on why these no longer swallow to []. */
 export async function fetchSpeciesSightings(speciesCode: string, regionCode: string): Promise<RegionalSighting[]> {
-  try {
-    const res = await api.get<RegionalSighting[]>(`/birds/recent-species/${speciesCode}`, { params: { regionCode } });
-    return res.data;
-  } catch {
-    return [];
-  }
+  const res = await api.get<RegionalSighting[]>(`/birds/recent-species/${speciesCode}`, { params: { regionCode } });
+  return res.data;
 }
 
+/** Throws on failure - see fetchBirdInfo's note on why these no longer swallow to []. */
 export async function fetchRegionalSightings(regionCode: string): Promise<RegionalSighting[]> {
-  try {
-    const res = await api.get<RegionalSighting[]>('/birds/recent-all', { params: { regionCode } });
-    return res.data;
-  } catch {
-    return [];
-  }
+  const res = await api.get<RegionalSighting[]>('/birds/recent-all', { params: { regionCode } });
+  return res.data;
 }
 
 export interface CarouselRecording {
@@ -174,22 +166,19 @@ export interface CarouselRecording {
   country: string | null;
 }
 
+/** Throws on failure - see fetchBirdInfo's note on why these no longer swallow to []. */
 export async function fetchBirdAudio(sciName: string): Promise<CarouselRecording[]> {
-  try {
-    const encoded = encodeURIComponent(sciName.replace(/ /g, '_'));
-    const res = await api.get<Array<{ file: string; sono: { small: string; med: string }; type: string; cnt: string }>>(
-      `/birds/audio/${encoded}`,
-    );
-    const toHttps = (u?: string) => u?.startsWith('//') ? `https:${u}` : u ?? '';
-    return res.data.map(r => ({
-      file:    toHttps(r.file),
-      sonoUrl: r.sono?.med ? toHttps(r.sono.med) : null,
-      type:    r.type  || null,
-      country: r.cnt   || null,
-    }));
-  } catch {
-    return [];
-  }
+  const encoded = encodeURIComponent(sciName.replace(/ /g, '_'));
+  const res = await api.get<Array<{ file: string; sono: { small: string; med: string }; type: string; cnt: string }>>(
+    `/birds/audio/${encoded}`,
+  );
+  const toHttps = (u?: string) => u?.startsWith('//') ? `https:${u}` : u ?? '';
+  return res.data.map(r => ({
+    file:    toHttps(r.file),
+    sonoUrl: r.sono?.med ? toHttps(r.sono.med) : null,
+    type:    r.type  || null,
+    country: r.cnt   || null,
+  }));
 }
 
 export interface BirdSuggestion {

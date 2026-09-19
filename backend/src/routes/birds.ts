@@ -10,6 +10,7 @@ import { BACKYARD_FAMILIES, ORDER_COMMON_NAMES } from '../constants';
 import { filterObservationsToKnownSpecies } from '../lib/speciesFilter';
 import { filterRecordings } from '../lib/recordingFilter';
 import { getSupabaseAdmin } from '../lib/supabase';
+import { classifyUpstreamError, identifyUpstreamService } from '../lib/upstreamError';
 
 /** Decode a JWT payload without verifying the signature. Returns null on failure or expiry. */
 function decodeJwt(jwt: string): { sub?: string; exp?: number } | null {
@@ -285,8 +286,15 @@ router.get('/info/:speciesCode', async (req, res) => {
     cache.set(cacheKey, result, 24 * 60 * 60 * 1000);
     res.json(result);
   } catch (err) {
-    console.error('Bird info error:', err);
-    res.status(500).json({ error: 'Failed to fetch bird info' });
+    const classified = classifyUpstreamError(err);
+    const service     = identifyUpstreamService(err);
+    console.error('Bird info error:', err, service ?? '');
+    res.status(500).json({
+      error: 'Failed to fetch bird info',
+      code: classified.code,
+      service,
+      statusCode: classified.statusCode,
+    });
   }
 });
 
@@ -304,8 +312,15 @@ router.get('/audio/:sciName', async (req, res) => {
     const sorted   = [...filtered].sort((a, b) => parseXCLength(a.length) - parseXCLength(b.length));
     res.json(sorted.slice(0, 5));
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to fetch audio' });
+    const classified = classifyUpstreamError(err);
+    const service     = identifyUpstreamService(err);
+    console.error('Audio error:', err, service ?? '');
+    res.status(500).json({
+      error: 'Failed to fetch audio',
+      code: classified.code,
+      service,
+      statusCode: classified.statusCode,
+    });
   }
 });
 
@@ -554,8 +569,11 @@ router.get('/recent-all', async (req, res) => {
     }));
     cache.set(cacheKey, sightings, 5 * 60 * 1000); // 5 minutes
     res.json(sightings);
-  } catch {
-    res.json([]);
+  } catch (err) {
+    const classified = classifyUpstreamError(err);
+    const service     = identifyUpstreamService(err);
+    console.error('recent-all error:', err, service ?? '');
+    res.status(500).json({ error: 'Failed to fetch sightings', code: classified.code, service, statusCode: classified.statusCode });
   }
 });
 
@@ -594,8 +612,11 @@ router.get('/recent-species/:speciesCode', async (req, res) => {
     }));
     cache.set(cacheKey, sightings, 60 * 60 * 1000); // 1 hour
     res.json(sightings);
-  } catch {
-    res.json([]);
+  } catch (err) {
+    const classified = classifyUpstreamError(err);
+    const service     = identifyUpstreamService(err);
+    console.error('recent-species error:', err, service ?? '');
+    res.status(500).json({ error: 'Failed to fetch sightings', code: classified.code, service, statusCode: classified.statusCode });
   }
 });
 
@@ -620,8 +641,11 @@ router.get('/recent/:speciesCode', async (req, res) => {
       .map(s => ({ locName: s.locName, obsDt: s.obsDt, howMany: s.howMany ?? null, lat: s.lat ?? null, lng: s.lng ?? null }));
     cache.set(cacheKey, sightings, 60 * 60 * 1000); // 1 hour
     res.json(sightings);
-  } catch {
-    res.json([]);
+  } catch (err) {
+    const classified = classifyUpstreamError(err);
+    const service     = identifyUpstreamService(err);
+    console.error('recent error:', err, service ?? '');
+    res.status(500).json({ error: 'Failed to fetch sightings', code: classified.code, service, statusCode: classified.statusCode });
   }
 });
 

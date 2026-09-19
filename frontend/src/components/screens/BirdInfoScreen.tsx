@@ -52,7 +52,7 @@ export function BirdInfoScreen({
 
   const displaySpecies = viewingSpecies ?? primarySpecies;
 
-  const { info, sightings, loading } = useBirdInfo(
+  const { info, sightings, loading, error } = useBirdInfo(
     displaySpecies?.speciesCode ?? null,
     displaySpecies?.comName     ?? '',
     displaySpecies?.sciName     ?? '',
@@ -121,6 +121,10 @@ export function BirdInfoScreen({
         {loading || primarySpecies === null ? (
           <div className="flex items-center justify-center py-16">
             <p className="text-slate-400 text-sm">Loading bird info…</p>
+          </div>
+        ) : error ? (
+          <div className="flex items-center justify-center py-16 px-6">
+            <p className="text-sm text-red-500 text-center">{error}</p>
           </div>
         ) : (
           <>

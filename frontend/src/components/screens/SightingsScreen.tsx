@@ -7,6 +7,9 @@ import type { MapMode } from '../bird/SightingsMap';
 import { MapModeToggle } from '../ui/MapModeToggle';
 import { BirdMasteryCard } from '../ui/BirdMasteryCard';
 import { lazyWithReload } from '../../lib/lazyWithReload';
+import { describeUpstreamError, type UpstreamErrorPayload } from '../../lib/upstreamErrorMessages';
+
+const SIGHTINGS_FALLBACK = 'Failed to load sightings. Please try again.';
 
 // Lazy-load the Leaflet map so its bundle is only fetched on first use.
 const SightingsMap = lazyWithReload(() =>
@@ -74,8 +77,11 @@ export function SightingsScreen({ regionCode, isDesktop, onBack, onSightingsLoad
       if (isDesktop && onSelectSighting && s.length > 0 && !externalSelected) {
         onSelectSighting(s[0]);
       }
-    }).catch(() => {
-      if (!cancelled) { setError('Failed to load sightings'); setLoading(false); }
+    }).catch((err: unknown) => {
+      if (cancelled) return;
+      const payload = (err as { response?: { data?: UpstreamErrorPayload } })?.response?.data;
+      setError(describeUpstreamError(payload, SIGHTINGS_FALLBACK));
+      setLoading(false);
     });
 
     return () => { cancelled = true; };
@@ -90,6 +96,10 @@ export function SightingsScreen({ regionCode, isDesktop, onBack, onSightingsLoad
     setSpeciesLoading(true);
     fetchSpeciesSightings(mobileSelected.speciesCode, regionCode).then(data => {
       setSpeciesSightings(data);
+      setSpeciesLoading(false);
+    }).catch(() => {
+      // Secondary map view - fall back to empty (map just shows the single-sighting
+      // pin) rather than blocking navigation with a dedicated error state here.
       setSpeciesLoading(false);
     });
   }, [mapMode, mobileSelected, regionCode]);
