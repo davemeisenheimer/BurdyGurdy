@@ -614,7 +614,7 @@ export function QuizScreen({
       )}
 
       {/* Next / Got it button */}
-      {question.noAudio ? (
+      {(question.noAudio || question.noPhoto) ? (
         <button
           onClick={answered ? onNext : () => onAnswer(question.correctAnswer)}
           className="shrink-0 w-full py-3 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-semibold text-lg cursor-pointer"

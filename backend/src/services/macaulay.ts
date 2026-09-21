@@ -129,12 +129,21 @@ async function fetchPhotoSetOnce(
   };
 }
 
+// Macaulay is currently unreachable for us (Cornell has put an anti-bot challenge in front
+// of its search API - see loadPhotoSet below), so iNaturalist and Wikipedia are effectively
+// the only two working sources. With one source permanently down, a transient hiccup in
+// either of the remaining two now surfaces directly as "no photo" instead of being masked
+// by Macaulay filling in - hence more attempts than when all three sources were healthy.
+const MAX_PHOTO_ATTEMPTS = 3;
+const PHOTO_RETRY_DELAY_MS = 2000;
+
 /**
- * Returns the photo set for a species, with one automatic retry if the first attempt
- * came back empty or with a source still pending (e.g. Wikipedia hadn't settled before
- * a sibling source did). Anything short of a fully-resolved, non-empty result is cached
- * for RETRY_TTL (5 min) so the next request re-checks rather than locking in a partial
- * result for a week; fully-resolved successful results cache for 7 days.
+ * Returns the photo set for a species, retrying up to MAX_PHOTO_ATTEMPTS times if an
+ * attempt comes back empty or with a source still pending (e.g. Wikipedia hadn't settled
+ * before a sibling source did). Stops as soon as an attempt finds a usable photo. Anything
+ * short of a fully-resolved, non-empty result is cached for RETRY_TTL (5 min) so the next
+ * request re-checks rather than locking in a partial result for a week; fully-resolved
+ * successful results cache for 7 days.
  */
 async function loadPhotoSet(
   speciesCode: string,
@@ -148,14 +157,15 @@ async function loadPhotoSet(
   const sc = sciName ?? comName ?? '';
   const cn = comName ?? sc;
 
-  let { photoSet, allResolved } = await fetchPhotoSetOnce(speciesCode, sc, cn);
-  let hasPhotos = photoSet.primary !== null || photoSet.optional.length > 0;
+  let photoSet: PhotoSet = { primary: null, optional: [] };
+  let allResolved = false;
+  let hasPhotos = false;
 
-  if (!hasPhotos || !allResolved) {
-    // Retry once after a brief pause to recover from transient failures/stragglers
-    await new Promise<void>(resolve => setTimeout(resolve, 2000));
+  for (let attempt = 1; attempt <= MAX_PHOTO_ATTEMPTS; attempt++) {
     ({ photoSet, allResolved } = await fetchPhotoSetOnce(speciesCode, sc, cn));
     hasPhotos = photoSet.primary !== null || photoSet.optional.length > 0;
+    if (hasPhotos) break; // got something usable - no need to burn further attempts
+    if (attempt < MAX_PHOTO_ATTEMPTS) await new Promise<void>(resolve => setTimeout(resolve, PHOTO_RETRY_DELAY_MS));
   }
 
   const noPhoto = !hasPhotos;

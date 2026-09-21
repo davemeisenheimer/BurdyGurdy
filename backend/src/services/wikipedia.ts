@@ -1,7 +1,9 @@
 import axios from 'axios';
 import { cache } from '../cache';
 
-const TTL = 7 * 24 * 60 * 60 * 1000; // 7 days - Wikipedia content is stable
+const TTL       = 7 * 24 * 60 * 60 * 1000; // 7 days  - Wikipedia content is stable
+const RETRY_TTL = 5 * 60 * 1000;            // 5 minutes - not-found/failed lookups, retried soon
+                                             // rather than locked in for a week (mirrors macaulay.ts)
 const HEADERS = { 'User-Agent': 'BurdyGurdy/1.0 (bird identification learning app)' };
 const TIMEOUT_MS = 10_000;
 
@@ -96,7 +98,7 @@ export async function getWikipediaRangeMapLegend(sciName: string, comName: strin
     } catch { /* try next candidate */ }
   }
 
-  cache.set(cacheKey, [], TTL);
+  cache.set(cacheKey, [], RETRY_TTL);
   return [];
 }
 
@@ -214,7 +216,7 @@ export async function getWikipediaPhotos(sciName: string, comName: string): Prom
     } catch { /* try next candidate */ }
   }
 
-  cache.set(cacheKey, [], TTL);
+  cache.set(cacheKey, [], RETRY_TTL);
   return [];
 }
 
@@ -276,7 +278,7 @@ export async function getWikipediaRangeMap(sciName: string, comName: string): Pr
     } catch { /* try next candidate */ }
   }
 
-  cache.set(cacheKey, null, TTL);
+  cache.set(cacheKey, null, RETRY_TTL);
   return null;
 }
 
@@ -325,6 +327,6 @@ export async function getWikipediaSummary(sciName: string, comName: string): Pro
     } catch { /* try next candidate */ }
   }
 
-  cache.set(cacheKey, null, TTL);
+  cache.set(cacheKey, null, RETRY_TTL);
   return null;
 }
