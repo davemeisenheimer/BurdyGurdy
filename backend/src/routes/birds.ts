@@ -12,6 +12,7 @@ import { filterObservationsToKnownSpecies } from '../lib/speciesFilter';
 import { filterRecordings } from '../lib/recordingFilter';
 import { getSupabaseAdmin } from '../lib/supabase';
 import { classifyUpstreamError, identifyUpstreamService } from '../lib/upstreamError';
+import { parseRetryAfterMs } from '../lib/hostGate';
 import { USER_AGENT } from '../lib/userAgent';
 
 /** Decode a JWT payload without verifying the signature. Returns null on failure or expiry. */
@@ -143,8 +144,23 @@ router.get('/region/:regionCode', async (req, res) => {
       return { ...rest, priorityGroup: PRIORITY_GROUPS[pgIndex(rest.isHistorical, rest.isBackyard, appearances)] };
     }));
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to fetch regional birds' });
+    const classified = classifyUpstreamError(err);
+    const service     = identifyUpstreamService(err);
+    console.error('Regional birds error:', err, service ?? '');
+    // eBird's own burst limit (25 req/5s at last check) is easy to trip here: this route fans out to
+    // getCommonSpeciesCodes' 12 parallel historic-data calls plus 3 more, ~15 eBird requests per hit.
+    // Surface its Retry-After so callers doing several regions back-to-back (e.g. the Macaulay seeding
+    // script) can back off precisely instead of guessing.
+    const retryAfterMs = classified.code === 'rate-limited'
+      ? parseRetryAfterMs((err as { response?: { headers?: Record<string, unknown> } })?.response?.headers?.['retry-after'], 5000, 60_000)
+      : undefined;
+    res.status(500).json({
+      error: 'Failed to fetch regional birds',
+      code: classified.code,
+      service,
+      statusCode: classified.statusCode,
+      ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
+    });
   }
 });
 
