@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getTaxonomy, getRegionalSpecies, getCommonSpeciesCodes, getBackyardSpeciesRanking, getSpeciesList } from '../services/ebird';
 import { getRecordings, parseXCLength } from '../services/xenocanto';
 import { getSpeciesPhotoUrl } from '../services/macaulay';
+import { warmSlots } from '../services/photoStore';
 import { BACKYARD_FAMILIES, GROUP_ORDERS, ORDER_COMMON_NAMES } from '../constants';
 import { getSupabaseAdmin } from '../lib/supabase';
 import { cache } from '../cache';
@@ -325,6 +326,12 @@ router.post('/questions', async (req, res) => {
     const xcUnique = [...new Set(picked.map(c => c.species.sciName))];
     for (let i = 0; i < xcUnique.length; i += XC_FETCH_BATCH_SIZE) {
       await Promise.all(xcUnique.slice(i, i + XC_FETCH_BATCH_SIZE).map(n => getRecordings(n)));
+    }
+
+    // Load the stored photo slots for every candidate in one query, so the per-question photo
+    // lookups below are answered from memory instead of each hitting the database.
+    if (picked.some(c => ['image', 'image-latin', 'image-song'].includes(c.type as string))) {
+      await warmSlots(picked.map(c => c.species.speciesCode));
     }
 
     const questions: QuizQuestion[] = await Promise.all(

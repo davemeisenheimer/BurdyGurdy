@@ -4,13 +4,15 @@ import { Resend } from 'resend';
 import { getTaxonomy, getRegionalSpecies, ebirdClient, getCommonSpeciesCodes, getSpeciesList, type CommonSpeciesEntry } from '../services/ebird';
 import { getRecordings, parseXCLength } from '../services/xenocanto';
 import { getSpeciesPhotoUrl, getSpeciesPhotoUrls, getSpeciesPhotoUrlsForQuestion } from '../services/macaulay';
-import { getWikipediaSummary, getWikipediaRangeMap, getWikipediaRangeMapLegend, getWikipediaPhotos } from '../services/wikipedia';
+import { getWikipediaSummary, getWikipediaRangeMap, getWikipediaRangeMapLegend } from '../services/wikipedia';
 import { cache } from '../cache';
+import { gatedGet, inatGate } from '../services/upstreamGates';
 import { BACKYARD_FAMILIES, ORDER_COMMON_NAMES } from '../constants';
 import { filterObservationsToKnownSpecies } from '../lib/speciesFilter';
 import { filterRecordings } from '../lib/recordingFilter';
 import { getSupabaseAdmin } from '../lib/supabase';
 import { classifyUpstreamError, identifyUpstreamService } from '../lib/upstreamError';
+import { USER_AGENT } from '../lib/userAgent';
 
 /** Decode a JWT payload without verifying the signature. Returns null on failure or expiry. */
 function decodeJwt(jwt: string): { sub?: string; exp?: number } | null {
@@ -231,9 +233,9 @@ router.get('/info/:speciesCode', async (req, res) => {
       getRecordings(sciName),
       getSpeciesPhotoUrls(req.params.speciesCode, comName, sciName),
       // iNaturalist taxa API for conservation status
-      axios.get('https://api.inaturalist.org/v1/taxa', {
+      gatedGet(inatGate, 'https://api.inaturalist.org/v1/taxa', {
         params: { q: sciName, is_active: true, per_page: 1 },
-        headers: { 'User-Agent': 'BurdyGurdy/1.0 (bird identification learning app)' },
+        headers: { 'User-Agent': USER_AGENT },
         timeout: 10_000,
       }),
     ]);
@@ -257,11 +259,7 @@ router.get('/info/:speciesCode', async (req, res) => {
       }
     }
 
-    // Fetch legend and Wikipedia photos in parallel (both need sciName/comName)
-    const [rangeMapLegend, wikiPhotos] = await Promise.all([
-      getWikipediaRangeMapLegend(sciName, comName),
-      getWikipediaPhotos(sciName, comName),
-    ]);
+    const rangeMapLegend = await getWikipediaRangeMapLegend(sciName, comName);
 
     const result = {
       wikipedia: wikiData,
@@ -279,8 +277,9 @@ router.get('/info/:speciesCode', async (req, res) => {
           durationSeconds: isFinite(dur) ? dur : null,
         };
       }),
-      // Primary photo from iNaturalist taxa API (high quality), optionals from Wikipedia article
-      photos: { primary: photoData.primary, optional: wikiPhotos },
+      // Primary photo from iNaturalist taxa API (high quality), optionals from the Wikipedia article.
+      // Both come from the stored photo slots, so they survive a Wikipedia or iNaturalist outage.
+      photos: { primary: photoData.primary, optional: photoData.optional.filter(p => p.source === 'wiki') },
     };
 
     cache.set(cacheKey, result, 24 * 60 * 60 * 1000);
@@ -429,7 +428,7 @@ router.get('/regions/locate', async (req, res) => {
   try {
     const nominatim = await axios.get('https://nominatim.openstreetmap.org/reverse', {
       params: { lat, lon: lng, format: 'json', zoom: nominatimZoom },
-      headers: { 'User-Agent': 'BurdyGurdy/1.0 (bird identification learning app)' },
+      headers: { 'User-Agent': USER_AGENT },
       timeout: 10_000,
     });
 

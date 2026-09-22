@@ -1,4 +1,5 @@
 import { db } from '../../lib/db';
+import { shareInFlight } from '../../lib/inFlight';
 import { fetchRegionSpecies } from '../remote/api';
 import type { BirdSpecies, CachedSpecies } from '../../types';
 
@@ -39,16 +40,21 @@ export async function getRegionSpecies(regionCode: string, back = 30): Promise<C
     return cached.species;
   }
 
-  const full = await fetchRegionSpecies(regionCode, back);
-  const species = buildSpeciesCache(full);
+  // Overlapping callers (e.g. the pre-quiz region check and the quiz itself) share one slow request.
+  return shareInFlight(regionFetchesInFlight, cacheKey, async () => {
+    const full = await fetchRegionSpecies(regionCode, back);
+    const species = buildSpeciesCache(full);
 
-  await db.regionSpecies.put({
-    regionCode: cacheKey,
-    species,
-    cachedAt: Date.now(),
+    await db.regionSpecies.put({
+      regionCode: cacheKey,
+      species,
+      cachedAt: Date.now(),
+    });
+    return species;
   });
-  return species;
 }
+
+const regionFetchesInFlight = new Map<string, Promise<CachedSpecies[]>>();
 
 /**
  * Returns the next unseen species to promote into the Learning Palette.

@@ -29,6 +29,7 @@ interface Props {
   questionPhotoFetching?: boolean;
   revealRangeMapUrl?: string | null;
   revealSightings?: RecentSighting[];
+  revealPhotosUnavailable?: boolean;
   showMediaInCarousel?: boolean;
   autoplayRevealAudio?: boolean;
   onRemoveOptionalPhoto: (url: string) => void;
@@ -96,6 +97,7 @@ export function QuizScreen({
   revealPhotos,
   revealRangeMapUrl = null,
   revealSightings = [],
+  revealPhotosUnavailable = false,
   questionPhoto,
   questionPhotoFetching = false,
   showMediaInCarousel = true,
@@ -414,6 +416,13 @@ export function QuizScreen({
                       : `${currentMastery.consecutiveCorrect}/${masteryThreshold(currentMastery.masteryLevel)} ${MASTERY_LABELS[currentMastery.masteryLevel] ?? 'Hard'}`}
                   </MasteryBadge>
                 )}
+              </div>
+            )}
+
+            {/* Photo sources could not be reached and we have nothing stored for this bird */}
+            {revealPhotosUnavailable && !revealPhotos.primary && revealPhotos.optional.length === 0 && (
+              <div className="shrink-0 px-5 py-2 border-b border-amber-100 bg-amber-50 text-amber-800 text-xs">
+                Photos are temporarily unavailable - try again in a little while.
               </div>
             )}
 

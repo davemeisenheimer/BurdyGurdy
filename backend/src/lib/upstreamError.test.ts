@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyUpstreamError, identifyUpstreamService } from './upstreamError';
+import { classifyUpstreamError, describeUpstreamFailure, identifyUpstreamService } from './upstreamError';
 
 describe('classifyUpstreamError', () => {
   it('classifies a 500 response as upstream-5xx with the status code', () => {
@@ -105,5 +105,37 @@ describe('identifyUpstreamService', () => {
   it('returns undefined when there is no config on the error', () => {
     expect(identifyUpstreamService({})).toBeUndefined();
     expect(identifyUpstreamService(undefined)).toBeUndefined();
+  });
+});
+
+describe('describeUpstreamFailure', () => {
+  it('describes an HTTP error with its status code', () => {
+    expect(describeUpstreamFailure({ response: { status: 403 } })).toBe('HTTP 403');
+  });
+
+  it('flags 429 as rate-limited and includes retry-after when present', () => {
+    const err = { response: { status: 429, headers: { 'retry-after': '30' } } };
+    expect(describeUpstreamFailure(err)).toBe('HTTP 429 (rate-limited, retry-after 30)');
+  });
+
+  it('describes a 429 without a retry-after header', () => {
+    expect(describeUpstreamFailure({ response: { status: 429 } })).toBe('HTTP 429 (rate-limited)');
+  });
+
+  it('describes a timeout', () => {
+    expect(describeUpstreamFailure({ code: 'ECONNABORTED', message: 'timeout of 10000ms exceeded' })).toBe('timeout');
+  });
+
+  it('describes a network failure with its error code', () => {
+    expect(describeUpstreamFailure({ code: 'ECONNRESET', request: {} })).toBe('network (ECONNRESET)');
+  });
+
+  it('uses the message of gate cooldown errors as-is', () => {
+    const err = { name: 'HostCoolingDownError', message: 'Wikipedia is cooling down (9s left)' };
+    expect(describeUpstreamFailure(err)).toBe('Wikipedia is cooling down (9s left)');
+  });
+
+  it('falls back to the message for unrecognised errors', () => {
+    expect(describeUpstreamFailure(new Error('boom'))).toBe('unknown (boom)');
   });
 });

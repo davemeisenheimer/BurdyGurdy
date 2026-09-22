@@ -1,10 +1,14 @@
-import axios from 'axios';
+import { gatedGet, wikiGate } from './upstreamGates';
+import { isAbortLike } from '../lib/hostGate';
 import { cache } from '../cache';
+import { describeUpstreamFailure } from '../lib/upstreamError';
+import { USER_AGENT } from '../lib/userAgent';
 
 const TTL       = 7 * 24 * 60 * 60 * 1000; // 7 days  - Wikipedia content is stable
+const EMPTY_TTL = 24 * 60 * 60 * 1000;     // 24 hours - every candidate answered and none had usable photos
 const RETRY_TTL = 5 * 60 * 1000;            // 5 minutes - not-found/failed lookups, retried soon
                                              // rather than locked in for a week (mirrors macaulay.ts)
-const HEADERS = { 'User-Agent': 'BurdyGurdy/1.0 (bird identification learning app)' };
+const HEADERS = { 'User-Agent': USER_AGENT };
 const TIMEOUT_MS = 10_000;
 
 export interface AttributedPhoto {
@@ -50,7 +54,7 @@ export async function getWikipediaRangeMapLegend(sciName: string, comName: strin
 
   for (const name of candidates) {
     try {
-      const res = await axios.get('https://en.wikipedia.org/w/api.php', {
+      const res = await gatedGet(wikiGate, 'https://en.wikipedia.org/w/api.php', {
         params: {
           action:   'parse',
           format:   'json',
@@ -107,11 +111,15 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, '').trim();
 }
 
-/** Batch-fetch attribution metadata for a list of Wikimedia file titles. */
-async function fetchWikiAttribution(titles: string[]): Promise<Map<string, string>> {
+/**
+ * Batch-fetch attribution metadata for a list of Wikimedia file titles.
+ * Resolves to null when the lookup itself failed (as opposed to an empty map: nothing found),
+ * so the caller can avoid caching generic credits for long.
+ */
+async function fetchWikiAttribution(titles: string[], signal?: AbortSignal): Promise<Map<string, string> | null> {
   if (titles.length === 0) return new Map();
   try {
-    const res = await axios.get('https://en.wikipedia.org/w/api.php', {
+    const res = await gatedGet(wikiGate, 'https://en.wikipedia.org/w/api.php', {
       params: {
         action: 'query',
         titles: titles.join('|'),
@@ -123,6 +131,7 @@ async function fetchWikiAttribution(titles: string[]): Promise<Map<string, strin
       },
       headers: HEADERS,
       timeout: TIMEOUT_MS,
+      signal,
     });
     const pages = res.data?.query?.pages ?? {};
     const map = new Map<string, string>();
@@ -138,8 +147,9 @@ async function fetchWikiAttribution(titles: string[]): Promise<Map<string, strin
       map.set(page.title, parts.join(' · '));
     }
     return map;
-  } catch {
-    return new Map();
+  } catch (err) {
+    if (!isAbortLike(err)) console.warn(`[wiki-photos] attribution lookup failed: ${describeUpstreamFailure(err)}`);
+    return null;
   }
 }
 
@@ -148,8 +158,8 @@ async function fetchWikiAttribution(titles: string[]): Promise<Map<string, strin
  * Returns AttributedPhoto objects with CC attribution, excluding range maps,
  * icons, flags, and diagrams. Requires known width of at least 300px.
  */
-export async function getWikipediaPhotos(sciName: string, comName: string): Promise<AttributedPhoto[]> {
-  const cacheKey = `wikiphotos6:${sciName}`;
+export async function getWikipediaPhotos(sciName: string, comName: string, signal?: AbortSignal): Promise<AttributedPhoto[]> {
+  const cacheKey = `wikiphotos7:${sciName}`;
   const hit = cache.get<AttributedPhoto[]>(cacheKey);
   if (hit !== undefined) return hit;
 
@@ -165,11 +175,16 @@ export async function getWikipediaPhotos(sciName: string, comName: string): Prom
     'Spiza_americana_male_94_231051626_13e01e8125_o_cropped_flipped.png',
   ]);
 
+  // Per-candidate outcomes, logged in one line if no photos are found overall.
+  const outcomes: string[] = [];
+  // Errors other than "page not found" mean we couldn't ask, which is not the same as "no photos".
+  const failures: unknown[] = [];
+
   for (const title of candidates) {
     try {
-      const res = await axios.get(
+      const res = await gatedGet(wikiGate,
         `https://en.wikipedia.org/api/rest_v1/page/media-list/${encodeURIComponent(title)}`,
-        { headers: HEADERS, timeout: TIMEOUT_MS },
+        { headers: HEADERS, timeout: TIMEOUT_MS, signal },
       );
       const items: Array<{
         title?: string;
@@ -203,20 +218,35 @@ export async function getWikipediaPhotos(sciName: string, comName: string): Prom
       }
 
       if (found.length > 0) {
-        const attribution = await fetchWikiAttribution(found.map(f => f.title));
+        const attribution = await fetchWikiAttribution(found.map(f => f.title), signal);
         const photos: AttributedPhoto[] = found.map(f => ({
           url: f.url,
-          credit: attribution.get(f.title) ?? 'Wikimedia Commons',
+          credit: attribution?.get(f.title) ?? 'Wikimedia Commons',
           source: 'wiki' as const,
           imageKey: f.title.replace(/^File:/i, ''),
         }));
-        cache.set(cacheKey, photos, TTL);
+        // If the attribution lookup failed the credits are generic; don't keep them for a week.
+        cache.set(cacheKey, photos, attribution ? TTL : RETRY_TTL);
         return photos;
       }
-    } catch { /* try next candidate */ }
+      outcomes.push(`${title}: ${items.length} media items, none usable`);
+    } catch (err) {
+      if (isAbortLike(err)) throw err;
+      if ((err as { response?: { status?: number } })?.response?.status === 404) {
+        outcomes.push(`${title}: no such page`);
+      } else {
+        outcomes.push(`${title}: ${describeUpstreamFailure(err)}`);
+        failures.push(err);
+      }
+    }
   }
 
-  cache.set(cacheKey, [], RETRY_TTL);
+  // Some candidate could not be checked: report a failure rather than a (cacheable) empty result.
+  if (failures.length > 0) throw failures[0];
+
+  // Every candidate answered and none had usable photos: a genuine absence.
+  console.warn(`[wiki-photos] ${sciName}: no photos (${outcomes.join('; ')})`);
+  cache.set(cacheKey, [], EMPTY_TTL);
   return [];
 }
 
@@ -240,7 +270,7 @@ export async function getWikipediaRangeMap(sciName: string, comName: string): Pr
 
   for (const title of candidates) {
     try {
-      const res = await axios.get(
+      const res = await gatedGet(wikiGate,
         `https://en.wikipedia.org/api/rest_v1/page/media-list/${encodeURIComponent(title)}`,
         { headers: HEADERS, timeout: TIMEOUT_MS },
       );
@@ -295,7 +325,7 @@ export async function getWikipediaSummary(sciName: string, comName: string): Pro
 
   for (const name of candidates) {
     try {
-      const res = await axios.get('https://en.wikipedia.org/w/api.php', {
+      const res = await gatedGet(wikiGate, 'https://en.wikipedia.org/w/api.php', {
         params: {
           action:      'query',
           format:      'json',

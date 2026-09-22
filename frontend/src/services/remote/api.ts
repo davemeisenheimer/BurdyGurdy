@@ -3,6 +3,13 @@ import type { QuizQuestion, QuestionType, BirdSpecies, AttributedPhoto } from '.
 
 export const api = axios.create({ baseURL: (import.meta.env.VITE_API_URL ?? '') + '/api' });
 
+/**
+ * Bird info, photos and recent sightings are supplementary content shown after an answer. They have a
+ * timeout so a stalled request turns into an error message (or a missing section) instead of leaving
+ * "Loading..." on screen forever. Generous, because the backend may make several upstream calls.
+ */
+const SUPPLEMENTARY_REQUEST_TIMEOUT_MS = 30_000;
+
 export async function fetchQuizQuestions(
   regionCode: string,
   count: number,
@@ -104,7 +111,7 @@ export async function fetchBirdInfo(
   const params: Record<string, string> = {};
   if (comName) params.comName = comName;
   if (sciName) params.sciName = sciName;
-  const res = await api.get<BirdInfoData>(`/birds/info/${speciesCode}`, { params });
+  const res = await api.get<BirdInfoData>(`/birds/info/${speciesCode}`, { params, timeout: SUPPLEMENTARY_REQUEST_TIMEOUT_MS });
   const data = res.data;
   // xeno-canto occasionally returns recordings with a null `file` field at runtime
   data.recordings = data.recordings.filter(r => !!r.file);
@@ -129,7 +136,7 @@ export interface RecentSighting {
 
 /** Throws on failure - see fetchBirdInfo's note on why these no longer swallow to []. */
 export async function fetchRecentSightings(speciesCode: string, regionCode: string, maxResults = 5): Promise<RecentSighting[]> {
-  const res = await api.get<RecentSighting[]>(`/birds/recent/${speciesCode}`, { params: { regionCode, maxResults } });
+  const res = await api.get<RecentSighting[]>(`/birds/recent/${speciesCode}`, { params: { regionCode, maxResults }, timeout: SUPPLEMENTARY_REQUEST_TIMEOUT_MS });
   return res.data;
 }
 
@@ -212,11 +219,15 @@ export async function fetchTaxonomy(codes: string[]): Promise<TaxonomyEntry[]> {
   return res.data;
 }
 
-export async function fetchBirdPhotos(speciesCode: string, comName?: string, sciName?: string, forQuestion = false): Promise<{ primary: AttributedPhoto | null; optional: AttributedPhoto[] }> {
+/**
+ * `unavailable` is true when there are no photos only because the photo sources could not be asked
+ * (rate limited, down, timed out) - as opposed to the bird genuinely having none.
+ */
+export async function fetchBirdPhotos(speciesCode: string, comName?: string, sciName?: string, forQuestion = false): Promise<{ primary: AttributedPhoto | null; optional: AttributedPhoto[]; unavailable: boolean }> {
   const params: Record<string, string> = {};
   if (comName) params.comName = comName;
   if (sciName) params.sciName = sciName;
   if (forQuestion) params.forQuestion = 'true';
-  const res = await api.get<{ primary: AttributedPhoto | null; optional: AttributedPhoto[] }>(`/birds/photos/${speciesCode}`, { params });
-  return { primary: res.data.primary ?? null, optional: res.data.optional ?? [] };
+  const res = await api.get<{ primary: AttributedPhoto | null; optional: AttributedPhoto[]; unavailable?: boolean }>(`/birds/photos/${speciesCode}`, { params, timeout: SUPPLEMENTARY_REQUEST_TIMEOUT_MS });
+  return { primary: res.data.primary ?? null, optional: res.data.optional ?? [], unavailable: res.data.unavailable ?? false };
 }

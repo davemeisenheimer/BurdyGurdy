@@ -19,9 +19,10 @@ export interface ClassifiedUpstreamError {
 }
 
 interface AxiosLikeError {
+  name?: string;
   code?: string;
   message?: string;
-  response?: { status?: number };
+  response?: { status?: number; headers?: Record<string, unknown> };
   request?: unknown;
   config?: { url?: string; baseURL?: string };
 }
@@ -51,6 +52,26 @@ export function classifyUpstreamError(err: unknown): ClassifiedUpstreamError {
   }
 
   return { code: 'unknown' };
+}
+
+/**
+ * One-line description of an upstream failure for server logs, e.g. "HTTP 429 (rate-limited, retry-after 30)",
+ * "timeout", "network (ECONNRESET)". Complements classifyUpstreamError, which drives client-facing messages.
+ */
+export function describeUpstreamFailure(err: unknown): string {
+  const e = (err ?? {}) as AxiosLikeError;
+  // Errors raised by our own HostGate (cooldown / queue wait) already carry a readable message.
+  if (e.name === 'HostCoolingDownError' || e.name === 'GateQueueTimeoutError') return e.message ?? e.name;
+  const { code, statusCode } = classifyUpstreamError(err);
+  if (statusCode !== undefined) {
+    const retryAfter = e.response?.headers?.['retry-after'];
+    const extras = [code === 'rate-limited' ? 'rate-limited' : '', retryAfter !== undefined ? `retry-after ${String(retryAfter)}` : '']
+      .filter(Boolean).join(', ');
+    return `HTTP ${statusCode}${extras ? ` (${extras})` : ''}`;
+  }
+  if (code === 'network' && e.code) return `network (${e.code})`;
+  if (code === 'unknown') return `unknown (${e.message ?? String(err)})`;
+  return code;
 }
 
 // ── Service attribution ──────────────────────────────────────────────────────

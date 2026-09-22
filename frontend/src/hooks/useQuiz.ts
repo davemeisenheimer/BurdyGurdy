@@ -54,6 +54,8 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
   const [revealPhotos, setRevealPhotos] = useState<{ primary: AttributedPhoto | null; optional: AttributedPhoto[] }>({ primary: null, optional: [] });
   const [revealRangeMapUrl, setRevealRangeMapUrl] = useState<string | null>(null);
   const [revealSightings, setRevealSightings] = useState<RecentSighting[]>([]);
+  // True when the reveal has no photos only because the photo sources could not be asked.
+  const [revealPhotosUnavailable, setRevealPhotosUnavailable] = useState(false);
   const [questionPhoto, setQuestionPhoto] = useState<{ questionId: string; photo: AttributedPhoto } | null>(null);
   const [questionPhotoFetching, setQuestionPhotoFetching] = useState(false);
   // Pre-fetched photo for the *next* question stored as a ref so it doesn't
@@ -191,38 +193,51 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentQuestion?.id, nextQuestion_?.id, state.status, randomizeQuestionPhotos]);
 
-  // Fetch reveal photos and range map when the question changes.
+  // Fetch reveal photos, range map and sightings when the question changes.
   // Intentionally depends only on question id - NOT state.status - so answering
   // (active → answered) does not cancel an in-flight fetch.
+  // The three requests are independent: each fills in its own part of the reveal as it arrives, and a
+  // failure or stall in one (e.g. bird info) never costs the others (e.g. the photo carousel).
   useEffect(() => {
     if (!currentQuestion) return;
     setRevealPhotos({ primary: null, optional: [] });
+    setRevealPhotosUnavailable(false);
     setRevealRangeMapUrl(null);
+    setRevealSightings([]);
     let cancelled = false;
-    Promise.all([
-      fetchBirdPhotos(currentQuestion.speciesCode, currentQuestion.comName, currentQuestion.sciName),
-      fetchBirdInfo(currentQuestion.speciesCode, currentQuestion.comName, currentQuestion.sciName),
-      config.regionCode ? fetchRecentSightings(currentQuestion.speciesCode, config.regionCode, 1) : Promise.resolve([]),
-    ]).then(async ([{ primary, optional }, info, sightings]) => {
-      if (cancelled) return;
-      const [blocked, adminBlocked] = await Promise.all([
-        db.blockedPhotos.toArray(),
-        db.adminBlockedMedia.toArray(),
-      ]);
-      // Reveal carousel only hides fully-blocked photos - 'question'-scoped blocks should still show here.
-      const fullyBlocked     = adminBlocked.filter(b => b.speciesCode === currentQuestion.speciesCode && b.blockScope === 'full');
-      const blockedUserUrls  = new Set(blocked.map(b => b.url));
-      const adminBlockedUrls = new Set(fullyBlocked.map(b => b.url));
-      const adminBlockedKeys = new Set(fullyBlocked.filter(b => b.imageKey).map(b => b.imageKey!));
-      const isPhotoBlocked   = (p: AttributedPhoto) =>
-        blockedUserUrls.has(p.url) || adminBlockedUrls.has(p.url) || (!!p.imageKey && adminBlockedKeys.has(p.imageKey));
-      setRevealPhotos({
-        primary: primary && !isPhotoBlocked(primary) ? primary : null,
-        optional: optional.filter(p => !isPhotoBlocked(p)),
-      });
-      setRevealRangeMapUrl(info?.rangeMapUrl ?? null);
-      setRevealSightings(sightings);
-    }).catch(() => {});
+
+    fetchBirdPhotos(currentQuestion.speciesCode, currentQuestion.comName, currentQuestion.sciName)
+      .then(async ({ primary, optional, unavailable }) => {
+        const [blocked, adminBlocked] = await Promise.all([
+          db.blockedPhotos.toArray(),
+          db.adminBlockedMedia.toArray(),
+        ]);
+        if (cancelled) return;
+        // Reveal carousel only hides fully-blocked photos - 'question'-scoped blocks should still show here.
+        const fullyBlocked     = adminBlocked.filter(b => b.speciesCode === currentQuestion.speciesCode && b.blockScope === 'full');
+        const blockedUserUrls  = new Set(blocked.map(b => b.url));
+        const adminBlockedUrls = new Set(fullyBlocked.map(b => b.url));
+        const adminBlockedKeys = new Set(fullyBlocked.filter(b => b.imageKey).map(b => b.imageKey!));
+        const isPhotoBlocked   = (p: AttributedPhoto) =>
+          blockedUserUrls.has(p.url) || adminBlockedUrls.has(p.url) || (!!p.imageKey && adminBlockedKeys.has(p.imageKey));
+        setRevealPhotos({
+          primary: primary && !isPhotoBlocked(primary) ? primary : null,
+          optional: optional.filter(p => !isPhotoBlocked(p)),
+        });
+        setRevealPhotosUnavailable(unavailable);
+      })
+      .catch(() => { if (!cancelled) setRevealPhotosUnavailable(true); });
+
+    fetchBirdInfo(currentQuestion.speciesCode, currentQuestion.comName, currentQuestion.sciName)
+      .then(info => { if (!cancelled) setRevealRangeMapUrl(info?.rangeMapUrl ?? null); })
+      .catch(() => {});
+
+    if (config.regionCode) {
+      fetchRecentSightings(currentQuestion.speciesCode, config.regionCode, 1)
+        .then(sightings => { if (!cancelled) setRevealSightings(sightings); })
+        .catch(() => {});
+    }
+
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentQuestion?.id]);
@@ -233,6 +248,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
       setRevealPhotos({ primary: null, optional: [] });
       setRevealRangeMapUrl(null);
       setRevealSightings([]);
+      setRevealPhotosUnavailable(false);
     }
   }, [state.status]);
 
@@ -469,6 +485,7 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
     revealPhotos,
     revealRangeMapUrl,
     revealSightings,
+    revealPhotosUnavailable,
     questionPhoto: questionPhoto !== null && questionPhoto.questionId === currentQuestion?.id ? questionPhoto.photo : null,
     questionPhotoFetching: questionPhoto?.questionId !== currentQuestion?.id && questionPhotoFetching,
     roundLevelUps,

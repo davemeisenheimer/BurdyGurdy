@@ -44,6 +44,7 @@ import { MasteryFactDialog } from './components/ui/MasteryFactDialog';
 import { FastTrackDialog } from './components/ui/FastTrackDialog';
 import { PasswordResetDialog } from './components/ui/PasswordResetDialog';
 import { CloudSyncOverlay } from './components/ui/CloudSyncOverlay';
+import { StartingOverlay } from './components/ui/StartingOverlay';
 import type { LevelUpEvent } from './types';
 import { markNotificationsRead } from './lib/notifications';
 import { fetchFriendProgress, getReceivedPendingInvites, sendBeaconNotification } from './lib/friends';
@@ -52,6 +53,12 @@ interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
+
+/** Max time to wait for the end-of-round award check before showing the result screen anyway. */
+const VICTORY_CHECK_TIMEOUT_MS = 5000;
+
+/** Max time to wait for the pre-quiz "region window changed?" check before starting the quiz without it. */
+const REGION_CHECK_TIMEOUT_MS = 8000;
 
 const RECENT_DAYS: Record<'day' | 'week' | 'month', number> = { day: 1, week: 7, month: 30 };
 const activityKey = (userId: string) => `lastActivity_${userId}`;
@@ -122,6 +129,10 @@ export default function App() {
   const [syncVersion, setSyncVersion]           = useState(0);
   const [cloudSyncing, setCloudSyncing]         = useState(false);
   const cloudSyncingRef  = useRef(false);
+  // True while a round is being started, before the quiz screen takes over. Drives the "Checking for
+  // new birds" overlay and stops repeat presses of Play from launching overlapping starts.
+  const startingRef = useRef(false);
+  const [starting, setStarting] = useState(false);
   const quizActiveRef    = useRef(false);
   const accessTokenRef   = useRef<string | null>(null);
   const [masteryFactEvent, setMasteryFactEvent] = useState<LevelUpEvent | null>(null);
@@ -178,7 +189,7 @@ export default function App() {
   } = useNotifications({ user, screen, onViewNotifications: () => setScreen('notifications') });
 
   const isAdmin = user?.user_metadata?.is_admin === true;
-  const { state, currentQuestion, isCorrect, currentFavourited, currentExcluded, revealPhotos, revealRangeMapUrl, revealSightings, questionPhoto, questionPhotoFetching, roundLevelUps, roundNoLongerStruggling, isFirstEncounter, currentMastery, pendingFastTrack, startQuiz, submitAnswer, toggleFavourite, toggleExcluded, nextQuestion, confirmFastTrack, removeOptionalPhoto } = useQuiz(config, settings.randomizeQuestionPhotos, user?.id, settings.birderLevel, settings.alwaysFastTrack);
+  const { state, currentQuestion, isCorrect, currentFavourited, currentExcluded, revealPhotos, revealRangeMapUrl, revealSightings, revealPhotosUnavailable, questionPhoto, questionPhotoFetching, roundLevelUps, roundNoLongerStruggling, isFirstEncounter, currentMastery, pendingFastTrack, startQuiz, submitAnswer, toggleFavourite, toggleExcluded, nextQuestion, confirmFastTrack, removeOptionalPhoto } = useQuiz(config, settings.randomizeQuestionPhotos, user?.id, settings.birderLevel, settings.alwaysFastTrack);
 
   // Reset mastery-fact tracking at the start of each new round
   useEffect(() => {
@@ -677,6 +688,18 @@ export default function App() {
   }, [applyRegionUpdate, config.regionCode, config.recentDays, config.questionTypes, settings]);
 
   const handleStart = async (newConfig: QuizConfig) => {
+    if (startingRef.current) return;
+    startingRef.current = true;
+    setStarting(true);
+    try {
+      await startRound(newConfig);
+    } finally {
+      startingRef.current = false;
+      setStarting(false);
+    }
+  };
+
+  const startRound = async (newConfig: QuizConfig) => {
     const existing = await loadQuizPrefs();
     const newPrefs = {
       ...existing,
@@ -702,16 +725,26 @@ export default function App() {
       }
     }
 
-    // Check whether the region sightings window has changed since the last quiz
+    // Check whether the region sightings window has changed since the last quiz. The check is a nicety,
+    // so it must never hold the round hostage: if it fails or takes too long, start the quiz without it.
     if (newConfig.mode === 'adaptive') {
-      const back = fullConfig.recentDays ?? 30;
-      const [currentSpecies, allRecords, presenceMap] = await Promise.all([
-        getRegionSpecies(fullConfig.regionCode, back),
-        db.progress.toArray(),
-        fetchRegionalPresence(fullConfig.regionCode),
+      let abandoned = false;
+      const check = (async () => {
+        const back = fullConfig.recentDays ?? 30;
+        const [currentSpecies, allRecords, presenceMap] = await Promise.all([
+          getRegionSpecies(fullConfig.regionCode, back),
+          db.progress.toArray(),
+          fetchRegionalPresence(fullConfig.regionCode),
+        ]);
+        refreshRegionalPresence(fullConfig.regionCode);
+        // We gave up waiting and the quiz is starting: don't pop the dialog over it.
+        if (abandoned) return false;
+        return applyRegionUpdate(fullConfig.regionCode, back, currentSpecies, allRecords, fullConfig, expandQuestionTypes(fullConfig.questionTypes, settings), presenceMap);
+      })();
+      const showed = await Promise.race([
+        check.catch(() => false),
+        new Promise<boolean>(resolve => setTimeout(() => { abandoned = true; resolve(false); }, REGION_CHECK_TIMEOUT_MS)),
       ]);
-      refreshRegionalPresence(fullConfig.regionCode);
-      const showed = await applyRegionUpdate(fullConfig.regionCode, back, currentSpecies, allRecords, fullConfig, expandQuestionTypes(fullConfig.questionTypes, settings), presenceMap);
       if (showed) {
         // Preload quiz questions while the dialog is open
         setConfig(fullConfig);
@@ -804,14 +837,32 @@ export default function App() {
       const snapshot = await loadSnapshot();
       const snapshotKey = snapshot?.savedAt ?? new Date().toISOString();
       const graduatedCodes = new Set(roundLevelUps.filter(e => e.graduated).map(e => e.speciesCode));
-      const tier = await findEarnedAward(config.regionCode, config.recentDays ?? 30, expandedTypes, snapshotKey, graduatedCodes);
-      if (tier) {
+      const showVictory = (tier: NonNullable<Awaited<ReturnType<typeof findEarnedAward>>>) => {
         setAwardTier(tier);
         sendFriendNotification('victory', {
           masteryDesc: describeMastery(expandedTypes),
           windowDesc: describeWindow(settings.recentWindow),
           regionCode: config.regionCode,
         });
+      };
+      // The award check may hit the network (region species fetch), which can hang when
+      // upstream services are down. Never hold the results screen hostage to it.
+      const awardPromise = findEarnedAward(config.regionCode, config.recentDays ?? 30, expandedTypes, snapshotKey, graduatedCodes);
+      const raced = await Promise.race([
+        awardPromise,
+        new Promise<'timeout'>(resolve => setTimeout(() => resolve('timeout'), VICTORY_CHECK_TIMEOUT_MS)),
+      ]);
+      if (raced === 'timeout') {
+        setScreen('result');
+        // The award is marked seen once computed, so if it arrives late still present it
+        // (unless the user has already navigated away from the result screen).
+        awardPromise.then(tier => {
+          if (!tier) return;
+          showVictory(tier);
+          setScreen(s => (s === 'result' ? 'victory' : s));
+        }).catch(() => {});
+      } else if (raced) {
+        showVictory(raced);
         setScreen('victory');
       } else {
         setScreen('result');
@@ -1143,6 +1194,7 @@ export default function App() {
           revealPhotos={revealPhotos}
           revealRangeMapUrl={revealRangeMapUrl}
           revealSightings={revealSightings}
+          revealPhotosUnavailable={revealPhotosUnavailable}
           questionPhoto={questionPhoto}
           questionPhotoFetching={questionPhotoFetching}
           isFirstEncounter={isFirstEncounter}
@@ -1159,6 +1211,21 @@ export default function App() {
           onReportError={(data) => handleReportError({ ...data, speciesCode: currentQuestion.speciesCode, comName: currentQuestion.comName })}
           onSightingClick={handleSightingClick}
         />
+      )}
+
+      {screen === 'quiz' && state.status === 'complete' && (
+        <div className="min-h-screen flex items-center justify-center p-6">
+          <div className="text-center">
+            <img src="/BurdyGurdyProgress.gif" alt="" className="h-16 w-auto mb-4 mx-auto" />
+            <p className="text-slate-500 mb-4">Finishing round...</p>
+            <button
+              onClick={() => setScreen('home')}
+              className="px-6 py-2 border-2 border-slate-300 hover:border-slate-400 text-slate-700 font-semibold rounded-lg"
+            >
+              Home Screen
+            </button>
+          </div>
+        </div>
       )}
 
       {screen === 'result' && (
@@ -1323,6 +1390,7 @@ export default function App() {
 
       {/* Cloud sync overlay - blocks interaction while downloading from cloud */}
       {cloudSyncing && <CloudSyncOverlay />}
+      {starting && screen !== 'quiz' && <StartingOverlay />}
 
       {/* Fast-track dialog - shown mid-quiz when user aces easy on their first attempt */}
       {pendingFastTrack && (
