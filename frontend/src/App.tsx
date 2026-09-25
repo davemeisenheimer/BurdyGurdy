@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { QuizConfig, BirdProgress, CachedSpecies, QuestionType } from './types';
+import type { QuizConfig, BirdProgress, CachedSpecies, FieldId, QuestionType } from './types';
 import { HomeScreen } from './components/screens/HomeScreen';
 import { QuizScreen } from './components/screens/QuizScreen';
 import { ResultScreen } from './components/screens/ResultScreen';
@@ -47,7 +47,7 @@ import { CloudSyncOverlay } from './components/ui/CloudSyncOverlay';
 import { StartingOverlay } from './components/ui/StartingOverlay';
 import type { LevelUpEvent } from './types';
 import { markNotificationsRead } from './lib/notifications';
-import { fetchFriendProgress, getReceivedPendingInvites, sendBeaconNotification } from './lib/friends';
+import { fetchFriendProgress, fetchFriendFieldIds, getReceivedPendingInvites, sendBeaconNotification } from './lib/friends';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -122,6 +122,7 @@ export default function App() {
   const [rightPanelTab, setRightPanelTab] = useState<'info' | 'curation' | 'facts' | 'database'>('info');
   const [progressSelectedSpecies, setProgressSelectedSpecies] = useState<{ speciesCode: string; comName: string } | null>(null);
   const [friendProgressRecords, setFriendProgressRecords] = useState<BirdProgress[]>([]);
+  const [friendFieldIds, setFriendFieldIds]               = useState<FieldId[]>([]);
   const [friendProgressName, setFriendProgressName]       = useState('');
   const [friendVictoryLog, setFriendVictoryLog]           = useState<VictoryLogEntry[]>([]);
   const [hasPendingInvites, setHasPendingInvites]         = useState(false);
@@ -938,11 +939,13 @@ export default function App() {
   }, [user?.email]);
 
   async function handleViewFriendLifeList(friendUserId: string, displayName: string) {
-    const [records, log] = await Promise.all([
+    const [records, log, fieldIds] = await Promise.all([
       fetchFriendProgress(friendUserId).catch(() => []),
       fetchFriendVictoryLog(friendUserId).catch(() => []),
+      fetchFriendFieldIds(friendUserId).catch(() => []),
     ]);
     setFriendProgressRecords(records);
+    setFriendFieldIds(fieldIds);
     setFriendVictoryLog(log);
     setFriendProgressName(displayName);
     setScreen('friendprogress');
@@ -1321,6 +1324,7 @@ export default function App() {
           onRecentProgress={() => setScreen('friendrecentprogress')}
           overrideRecords={friendProgressRecords}
           overrideVictoryLog={friendVictoryLog}
+          overrideFieldIds={friendFieldIds}
           friendDisplayName={friendProgressName}
         />
       )}
@@ -1334,6 +1338,7 @@ export default function App() {
           onSelectBird={isDesktop ? setProgressSelectedSpecies : s => { setProgressSelectedSpecies(s); setPrevScreen('friendrecentprogress'); setScreen('birdinfo'); }}
           selectedSpeciesCode={isDesktop ? progressSelectedSpecies?.speciesCode : undefined}
           overrideRecords={friendProgressRecords}
+          overrideFieldIds={friendFieldIds}
           friendDisplayName={friendProgressName}
         />
       )}

@@ -7,7 +7,8 @@ import { supabase } from '../../lib/supabase';
 import { api } from './api';
 import { db } from '../../lib/db';
 import { STRUGGLING_WINDOW } from '../../lib/struggling';
-import type { BirdProgress } from '../../types';
+import type { BirdProgress, FieldId } from '../../types';
+import type { FieldIdChange } from '../local/fieldIds';
 import { loadQuizPrefs, saveQuizPrefs } from '../../lib/settings';
 import type { AppSettings, QuizConfigPrefs } from '../../lib/settings';
 import type { VictoryLogEntry } from '../../lib/victory';
@@ -83,6 +84,14 @@ export async function uploadProgress(userId: string): Promise<boolean> {
     }
   }
 
+  // Field-ID ticks ride along with every progress upload, so a tick whose immediate upload
+  // failed (e.g. offline) still reaches the cloud. Un-tick deletions are pushed at un-tick time.
+  const fieldIds = await db.fieldIds.toArray();
+  if (fieldIds.length > 0 && !(await upsertFieldIds(userId, fieldIds))) {
+    setNeedsUpload(userId, true);
+    return false;
+  }
+
   // Stamp last_upload_at so other devices detect this upload on reactivation.
   // Uses UPDATE (not upsert) to avoid creating a partial row; uploadSettings
   // creates the full row on first sign-in.
@@ -137,6 +146,21 @@ export async function downloadAndReplace(userId: string, cloudTs: number | null)
     console.warn('sync: downloadAndReplace failed:', error?.message);
     return -1;
   }
+
+  // Field-ID ticks are replaced alongside progress. A user can have ticks without any quiz
+  // progress, so they're handled before the no-progress early return below. As with progress,
+  // an entirely empty cloud never wipes local ticks.
+  const [{ data: fieldIdRows, error: fieldIdError }, { data: detailRows, error: detailError }] = await Promise.all([
+    supabase.from('user_field_ids').select('*').eq('user_id', userId),
+    supabase.from('user_field_id_details').select('*').eq('user_id', userId),
+  ]);
+  if (fieldIdError || !fieldIdRows || detailError || !detailRows) {
+    console.warn('sync: field ID download failed:', (fieldIdError ?? detailError)?.message);
+  } else if (data.length > 0 || fieldIdRows.length > 0) {
+    await db.fieldIds.clear();
+    await db.fieldIds.bulkPut(mergeFieldIdRows(fieldIdRows, detailRows));
+  }
+
   if (data.length === 0) return 0; // no cloud records - don't wipe local
 
   const local = await db.progress.toArray();
@@ -301,6 +325,136 @@ export async function deleteAllUserBlockedPhotos(userId: string): Promise<void> 
     .delete()
     .eq('user_id', userId);
   if (error) console.warn('sync: blocked photos delete failed:', error.message);
+}
+
+// ── Field IDs (seen/heard in the wild) ─────────────────────────────────────────
+
+// A tick is split across two tables: user_field_ids (friends can read it - the tick and its date)
+// and user_field_id_details (owner-only - location and notes). Locally it's one FieldId record.
+
+export interface FieldIdRow {
+  species_code:      string;
+  question_type:     FieldId['questionType'];
+  com_name:          string;
+  mastered_by_field: boolean;
+  confirmed_at:      number;
+  sighted_on:        string | null;
+}
+
+export interface FieldIdDetailRow {
+  species_code:  string;
+  question_type: FieldId['questionType'];
+  location_name: string | null;
+  location_lat:  number | null;
+  location_lng:  number | null;
+  notes:         string | null;
+}
+
+/** Pure - exported for unit tests. */
+export function fieldIdToRows(userId: string, f: FieldId): {
+  row:    FieldIdRow & { user_id: string };
+  detail: FieldIdDetailRow & { user_id: string };
+} {
+  return {
+    row: {
+      user_id:           userId,
+      species_code:      f.speciesCode,
+      question_type:     f.questionType,
+      com_name:          f.comName,
+      mastered_by_field: f.masteredByField,
+      confirmed_at:      f.confirmedAt,
+      sighted_on:        f.sightedOn ?? null,
+    },
+    detail: {
+      user_id:       userId,
+      species_code:  f.speciesCode,
+      question_type: f.questionType,
+      location_name: f.locationName ?? null,
+      location_lat:  f.locationLat  ?? null,
+      location_lng:  f.locationLng  ?? null,
+      notes:         f.notes        ?? null,
+    },
+  };
+}
+
+/** Pure - exported for unit tests and friends.ts. `detail` is absent for a friend's ticks. */
+export function fieldIdFromRow(row: FieldIdRow, detail?: FieldIdDetailRow): FieldId {
+  return {
+    speciesCode:     row.species_code,
+    questionType:    row.question_type,
+    comName:         row.com_name,
+    masteredByField: row.mastered_by_field,
+    confirmedAt:     Number(row.confirmed_at),
+    sightedOn:       row.sighted_on ?? undefined,
+    locationName:    detail?.location_name ?? undefined,
+    locationLat:     detail?.location_lat  ?? undefined,
+    locationLng:     detail?.location_lng  ?? undefined,
+    notes:           detail?.notes         ?? undefined,
+  };
+}
+
+/** Pure - exported for unit tests. Joins each tick row with its (optional) detail row. */
+export function mergeFieldIdRows(rows: FieldIdRow[], details: FieldIdDetailRow[]): FieldId[] {
+  const detailByKey = new Map(details.map(d => [`${d.species_code}|${d.question_type}`, d]));
+  return rows.map(r => fieldIdFromRow(r, detailByKey.get(`${r.species_code}|${r.question_type}`)));
+}
+
+/** Upserts ticks, then their detail rows (which reference the ticks). Returns false on error. */
+async function upsertFieldIds(userId: string, fieldIds: FieldId[]): Promise<boolean> {
+  const split = fieldIds.map(f => fieldIdToRows(userId, f));
+  const onConflict = 'user_id,species_code,question_type';
+  const { error } = await supabase.from('user_field_ids').upsert(split.map(s => s.row), { onConflict });
+  if (error) {
+    console.warn('sync: field ID upload failed:', error.message);
+    return false;
+  }
+  const { error: detailError } = await supabase.from('user_field_id_details').upsert(split.map(s => s.detail), { onConflict });
+  if (detailError) {
+    console.warn('sync: field ID details upload failed:', detailError.message);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Mirrors a local tick change to the cloud for the signed-in user (no-op for guests).
+ * When this device is current, a full uploadProgress() carries the tick and any progress
+ * change, and stamps last_upload_at so other devices pick the change up (and don't re-upload
+ * a tick removed here). When the cloud is newer, only the tick itself is pushed - a full
+ * upload would overwrite the other device's newer progress (same rule as the hide handler).
+ */
+export async function syncFieldIdChange(change: FieldIdChange): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const userId = session?.user.id;
+  if (!userId) return;
+
+  if (change.removed) {
+    // Its user_field_id_details row goes with it (on delete cascade).
+    const { error } = await supabase
+      .from('user_field_ids')
+      .delete()
+      .eq('user_id', userId)
+      .eq('species_code', change.removed.speciesCode)
+      .eq('question_type', change.removed.questionType);
+    if (error) console.warn('sync: field ID delete failed:', error.message);
+  }
+  if (change.progressDeleted) await deleteCloudProgressRecords(userId, [change.progressDeleted]);
+
+  const cloudTs = await getCloudUploadTime(userId).catch(() => null);
+  const localSyncedAt = getLocalSyncedAt(userId) ?? 0;
+  if (cloudTs === null || localSyncedAt >= cloudTs) {
+    await uploadProgress(userId);
+  } else if (change.upserted) {
+    await upsertFieldIds(userId, [change.upserted]);
+  }
+}
+
+export async function deleteAllCloudFieldIds(userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('user_field_ids')
+    .delete()
+    .eq('user_id', userId);
+  if (error) console.warn('sync: field IDs delete failed:', error.message);
 }
 
 // ── Media reports ─────────────────────────────────────────────────────────────

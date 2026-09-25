@@ -1,4 +1,5 @@
 import { isStrugglingByWindow } from './struggling';
+import type { BirderLevel } from '../types';
 import { MASTERY_ADVANCE_STREAK, GRADUATION_STREAK } from '@birdygurdy/shared';
 
 export { MASTERY_ADVANCE_STREAK, GRADUATION_STREAK };
@@ -36,4 +37,11 @@ export function masteryLabel(level: number, graduated = false): string {
 /** True when the mastered bird's rolling window shows fewer than STRUGGLING_MIN_CORRECT correct. */
 export function isStruggling(recentAnswers: boolean[]): boolean {
   return isStrugglingByWindow(recentAnswers);
+}
+
+/** The mastery level a newly-seeded palette bird starts at, based on the user's birder level. */
+export function birderLevelToInitialMastery(level?: BirderLevel): number {
+  if (level === 'intermediate') return 1;
+  if (level === 'advanced')     return 2;
+  return 0;
 }

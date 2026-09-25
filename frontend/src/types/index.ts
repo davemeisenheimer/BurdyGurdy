@@ -131,3 +131,18 @@ export interface BirdProgress {
   noPhoto?: boolean;           // graduated automatically because no photos exist for this question type
   recentAnswers?: boolean[];   // rolling window of last STRUGGLING_WINDOW answers (mastered birds only)
 }
+
+/** A user-reported "I identified this bird in the wild" tick - image: seen it, song: heard it. */
+export interface FieldId {
+  speciesCode: string;
+  questionType: 'image' | 'song';
+  comName: string;
+  masteredByField: boolean;    // true when this tick is what mastered the bird's progress record
+  confirmedAt: number;         // timestamp (ms) the tick was made
+  sightedOn?: string;          // local date of the sighting, YYYY-MM-DD (shared with friends)
+  // Private sighting details - synced to the owner-only user_field_id_details table, never shown to friends.
+  locationName?: string;
+  locationLat?: number;
+  locationLng?: number;
+  notes?: string;
+}

@@ -13,6 +13,7 @@ import { db } from './lib/db';
     db.regionSpecies.clear(),
     db.blockedPhotos.clear(),
     db.keyValue.clear(),
+    db.fieldIds.clear(),
   ]);
   console.log('BirdyGurdy: all client-side data cleared. Reload the page.');
 };

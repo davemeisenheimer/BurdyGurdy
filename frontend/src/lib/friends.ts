@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { api } from '../services/remote/api';
-import type { BirdProgress } from '../types';
+import { fieldIdFromRow } from '../services/remote/sync';
+import type { BirdProgress, FieldId } from '../types';
 
 export interface Profile {
   id: string;
@@ -209,6 +210,15 @@ export async function fetchFriendProgress(friendUserId: string): Promise<BirdPro
     consecutiveCorrect: d.consecutive_correct ?? 0,
     isMastered:         d.in_history  ?? false,
   }));
+}
+
+/** Fetches a friend's seen/heard-in-the-wild ticks (requires the friends-can-read RLS policy on user_field_ids). */
+export async function fetchFriendFieldIds(friendUserId: string): Promise<FieldId[]> {
+  const { data } = await supabase
+    .from('user_field_ids')
+    .select('species_code, question_type, com_name, mastered_by_field, confirmed_at, sighted_on')
+    .eq('user_id', friendUserId);
+  return (data ?? []).map(row => fieldIdFromRow(row));
 }
 
 /** Sends a notification to the current user's friends via the backend. Best-effort. */

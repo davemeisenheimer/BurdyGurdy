@@ -92,7 +92,7 @@ export async function recordAnswer(
 // ── Palette seeding & promotion ───────────────────────────────────────────────
 
 /** Adds a single species+type record to the palette. Returns true if a new record was created. */
-async function addToPaletteForType(
+export async function addToPaletteForType(
   speciesCode: string,
   comName: string,
   type: QuestionType,

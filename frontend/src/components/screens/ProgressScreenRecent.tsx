@@ -1,4 +1,4 @@
-import { useEffect, useState, Fragment } from 'react';
+import { useCallback, useEffect, useState, Fragment } from 'react';
 import { db } from '../../lib/db';
 import { getRegionSpecies } from '../../services/local/region';
 import { categoriseRecentBirds, summariseCounts } from '../../lib/recentProgress';
@@ -6,7 +6,10 @@ import { DEV_SHOW_PALETTE_SPLIT } from '../../lib/devFlags';
 import { MASTERED_BADGE_COLOR } from '../../lib/mastery';
 import { TYPE_LABELS } from '../ui/ProgressTypePill';
 import { BirdMasteryCard } from '../ui/BirdMasteryCard';
-import type { QuestionType, CachedSpecies, BirdProgress } from '../../types';
+import { FieldIdButtons } from '../ui/FieldIdButtons';
+import { useFieldIds } from '../../hooks/useFieldIds';
+import type { FieldIdMap } from '../../services/local/fieldIds';
+import type { QuestionType, CachedSpecies, BirdProgress, FieldId } from '../../types';
 import type { RecentBirdEntry, RecentProgressCategory } from '../../lib/recentProgress';
 
 interface Props {
@@ -17,6 +20,8 @@ interface Props {
   onSelectBird?: (species: { speciesCode: string; comName: string }) => void;
   selectedSpeciesCode?: string;
   overrideRecords?: BirdProgress[];
+  /** A friend's field-ID ticks, shown alongside overrideRecords. */
+  overrideFieldIds?: FieldId[];
   friendDisplayName?: string;
   onRegionRefresh?: () => void;
 }
@@ -41,7 +46,7 @@ const SECTION_COLORS: Record<RecentProgressCategory, string> = {
   mastered: 'text-emerald-700',
 };
 
-export function ProgressScreenRecent({ regionCode, recentDays, questionTypes, onBack, onSelectBird, selectedSpeciesCode, overrideRecords, friendDisplayName, onRegionRefresh }: Props) {
+export function ProgressScreenRecent({ regionCode, recentDays, questionTypes, onBack, onSelectBird, selectedSpeciesCode, overrideRecords, overrideFieldIds, friendDisplayName, onRegionRefresh }: Props) {
   const [cachedSpecies, setCachedSpecies]       = useState<CachedSpecies[]>([]);
   const [progressRecords, setProgressRecords]   = useState<BirdProgress[]>([]);
   const [loading, setLoading]                   = useState(true);
@@ -50,7 +55,7 @@ export function ProgressScreenRecent({ regionCode, recentDays, questionTypes, on
     questionTypes.length === 1 ? questionTypes[0] : 'all',
   );
 
-  useEffect(() => {
+  const load = useCallback(() => {
     (async () => {
       setLoading(true);
       const [species, records] = await Promise.all([
@@ -69,7 +74,20 @@ export function ProgressScreenRecent({ regionCode, recentDays, questionTypes, on
       setLoading(false);
       if (!overrideRecords) onRegionRefresh?.();
     })().catch(() => setLoading(false));
-  }, [regionCode, recentDays, overrideRecords]); // eslint-disable-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [regionCode, recentDays, overrideRecords]);
+
+  const { fieldIds, reloadFieldIds } = useFieldIds(overrideFieldIds);
+
+  // Cheap, local-only re-read of the ticks and progress records - used after a field-ID change so
+  // mastery badges stay in sync without re-fetching the (cached, but still async) region species list.
+  const handleFieldIdChanged = useCallback(() => {
+    if (overrideRecords !== undefined) return; // read-only (friend's data) - nothing to reload
+    reloadFieldIds();
+    db.progress.toArray().then(setProgressRecords).catch(() => {});
+  }, [overrideRecords, reloadFieldIds]);
+
+  useEffect(() => { load(); }, [load]);
 
   // Types actually present in DB records for species in the recent window
   const recentCodes = new Set(cachedSpecies.map(s => s.speciesCode));
@@ -176,7 +194,15 @@ export function ProgressScreenRecent({ regionCode, recentDays, questionTypes, on
 
                 <div className="space-y-2">
                   {section.map(bird => (
-                    <BirdCard key={bird.speciesCode} bird={bird} onSelectBird={onSelectBird} isSelected={bird.speciesCode === selectedSpeciesCode} />
+                    <BirdCard
+                      key={bird.speciesCode}
+                      bird={bird}
+                      onSelectBird={onSelectBird}
+                      isSelected={bird.speciesCode === selectedSpeciesCode}
+                      fieldIds={fieldIds}
+                      readOnly={overrideRecords !== undefined}
+                      onFieldIdChanged={handleFieldIdChanged}
+                    />
                   ))}
                 </div>
               </Fragment>
@@ -190,7 +216,16 @@ export function ProgressScreenRecent({ regionCode, recentDays, questionTypes, on
 
 // ── BirdCard ──────────────────────────────────────────────────────────────────
 
-function BirdCard({ bird, onSelectBird, isSelected }: { bird: RecentBirdEntry; onSelectBird?: (species: { speciesCode: string; comName: string }) => void; isSelected?: boolean }) {
+interface BirdCardProps {
+  bird: RecentBirdEntry;
+  onSelectBird?: (species: { speciesCode: string; comName: string }) => void;
+  isSelected?: boolean;
+  fieldIds: FieldIdMap;
+  readOnly?: boolean;
+  onFieldIdChanged?: () => void;
+}
+
+function BirdCard({ bird, onSelectBird, isSelected, fieldIds, readOnly = false, onFieldIdChanged }: BirdCardProps) {
   const baseCard   = isSelected ? 'bg-sky-50 border-sky-400 shadow-sm' : 'bg-white border-slate-200';
   const handleClick = onSelectBird
     ? () => onSelectBird({ speciesCode: bird.speciesCode, comName: bird.comName })
@@ -204,13 +239,22 @@ function BirdCard({ bird, onSelectBird, isSelected }: { bird: RecentBirdEntry; o
           <span className="font-medium text-slate-700">{bird.comName}</span>
           <span className="text-xs text-slate-400 ml-2 italic">{bird.sciName}</span>
         </div>
-        {DEV_SHOW_PALETTE_SPLIT && (
-          <span className={`text-xs px-2 py-0.5 rounded-full ${
-            bird.isSeeded ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'
-          }`}>
-            {bird.isSeeded ? 'Seeded' : 'Unseen'}
-          </span>
-        )}
+        <div className="flex items-center gap-2 shrink-0 ml-2">
+          {DEV_SHOW_PALETTE_SPLIT && (
+            <span className={`text-xs px-2 py-0.5 rounded-full ${
+              bird.isSeeded ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'
+            }`}>
+              {bird.isSeeded ? 'Seeded' : 'Unseen'}
+            </span>
+          )}
+          <FieldIdButtons
+            speciesCode={bird.speciesCode}
+            comName={bird.comName}
+            fieldIds={fieldIds}
+            readOnly={readOnly}
+            onChanged={onFieldIdChanged}
+          />
+        </div>
       </div>
     );
   }
@@ -227,9 +271,18 @@ function BirdCard({ bird, onSelectBird, isSelected }: { bird: RecentBirdEntry; o
             Mastered
           </span>
         </div>
-        {pct !== null && (
-          <span className="text-sm font-semibold text-slate-500">{pct}%</span>
-        )}
+        <div className="flex items-center gap-2 shrink-0 ml-2">
+          {pct !== null && (
+            <span className="text-sm font-semibold text-slate-500">{pct}%</span>
+          )}
+          <FieldIdButtons
+            speciesCode={bird.speciesCode}
+            comName={bird.comName}
+            fieldIds={fieldIds}
+            readOnly={readOnly}
+            onChanged={onFieldIdChanged}
+          />
+        </div>
       </div>
     );
   }
@@ -237,7 +290,11 @@ function BirdCard({ bird, onSelectBird, isSelected }: { bird: RecentBirdEntry; o
   // easy / medium / hard
   return (
     <BirdMasteryCard
+      speciesCode={bird.speciesCode}
       comName={bird.comName}
+      fieldIds={fieldIds}
+      readOnly={readOnly}
+      onFieldIdChanged={onFieldIdChanged}
       records={bird.records}
       isSelected={isSelected}
       onClick={handleClick}

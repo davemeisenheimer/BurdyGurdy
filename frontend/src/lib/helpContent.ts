@@ -170,4 +170,38 @@ export const HELP_CONTENT: Record<string, HelpEntry> = {
       + 'the other species seen in the past 24 hours.',
     ],
   },
+
+  // ── Field identification (🔭/🎤 on bird cards) ─────────────────────────────
+  fieldIdRecord: {
+    title: 'Just record my field sighting',
+    body: [
+      "Use this button to indicate whether you've identified this bird, live in the field. "
+      + 'Your quizzes are not affected: your progress for this bird is not is not affected.',
+      'Your friends can see your field sightings, and their dates, when they view your Life List. Tap the button '
+      + 'again to see, edit or remove the sighting.',
+    ],
+  },
+  fieldIdPalette: {
+    title: 'Add bird to learning palette',
+    body: [
+      'Records your field sighting and also adds this bird to your learning palette, so it starts showing up in your '
+      + 'quizzes right away instead of waiting its turn. This option only appears for birds that have not already been '
+      + 'added to your learning palette. If you are already familiar with this bird in the field, it makes sense to add it '
+      + 'to your learning palette and have a chance to master it in the context of BurdyGurdy.',
+      "Each kind of question (photo, song, and so on) has its own learning palette, so this is offered whenever the "
+      + "bird isn't yet in the palette for this kind - even if you're already learning it for others. Removing the "
+      + 'field sighting later will not remove it from your learning palette once it is added.',
+    ],
+  },
+  fieldIdMaster: {
+    title: 'Promote bird to mastered',
+    body: [
+      'Records your field sighting and marks this bird as mastered straight away, without having to earn mastery via quizzes. '
+      + 'Mastered birds still come up occasionally for review, so you will have your chance to see this bird in the game.',
+      "This is a good choice for a bird you already know intimately - as you may well do if you've identified it in "
+      + 'the field yourself - so your quizzes can focus on the birds you are still learning.',
+      "If you remove the field sighting later, the bird goes back to where it was - unless you've since mastered it "
+      + 'through your quizzes.',
+    ],
+  },
 };

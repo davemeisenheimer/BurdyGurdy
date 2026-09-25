@@ -3,6 +3,8 @@ import type { BirdProgress, QuestionType } from '../../types';
 import { masteryThreshold, MASTERY_LABELS, masteryBadgeClass } from '../../lib/mastery';
 import { MasteryBadge } from './MasteryBadge';
 import { ProgressTypePill, TYPE_LABELS } from './ProgressTypePill';
+import { FieldIdButtons } from './FieldIdButtons';
+import type { FieldIdMap } from '../../services/local/fieldIds';
 
 export interface SightingInfo {
   locName:          string;
@@ -46,14 +48,21 @@ function formatSightingTime(obsDt: string): string {
 }
 
 interface Props {
+  speciesCode: string;
   comName:     string;
   records:     BirdProgress[];
   sighting?:   SightingInfo;
   isSelected?: boolean;
+  /** Seen/heard-in-the-wild ticks to show on the field-ID buttons. */
+  fieldIds:    FieldIdMap;
+  /** Disables the field-ID buttons - use when showing someone else's (e.g. a friend's) progress. */
+  readOnly?:   boolean;
+  /** Called after a field-ID tick change is saved, so the parent can reload its ticks and records. */
+  onFieldIdChanged?: () => void;
   onClick?:    () => void;
 }
 
-export function BirdMasteryCard({ comName, records, sighting, isSelected = false, onClick }: Props) {
+export function BirdMasteryCard({ speciesCode, comName, records, sighting, isSelected = false, fieldIds, readOnly = false, onFieldIdChanged, onClick }: Props) {
   const [selectedType, setSelectedType] = useState<QuestionType>(
     () => records.length > 0 ? findPoorestType(records) : 'song',
   );
@@ -75,13 +84,22 @@ export function BirdMasteryCard({ comName, records, sighting, isSelected = false
       onClick={onClick}
     >
       {records.length === 0 ? (
-        <>
-          <p className="font-semibold text-slate-800">{comName}</p>
-          <span className="text-[10px] text-slate-400">Not studied</span>
-        </>
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="font-semibold text-slate-800">{comName}</p>
+            <span className="text-[10px] text-slate-400">Not studied</span>
+          </div>
+          <FieldIdButtons
+            speciesCode={speciesCode}
+            comName={comName}
+            fieldIds={fieldIds}
+            readOnly={readOnly}
+            onChanged={onFieldIdChanged}
+          />
+        </div>
       ) : (
         <>
-          {/* Top row: name + mastery badge | accuracy */}
+          {/* Top row: name + mastery badge | accuracy + field-ID buttons */}
           <div className="flex items-start justify-between mb-2">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-semibold text-slate-800">{comName}</span>
@@ -105,9 +123,18 @@ export function BirdMasteryCard({ comName, records, sighting, isSelected = false
                 );
               })()}
             </div>
-            <div className="text-right shrink-0 ml-2">
-              <span className="text-sm font-semibold text-slate-700">{Math.round(displayAccuracy * 100)}%</span>
-              <span className="text-xs text-slate-400 ml-1">{TYPE_LABELS[selectedType] ?? selectedType}</span>
+            <div className="flex items-center gap-2 shrink-0 ml-2">
+              <div className="text-right">
+                <span className="text-sm font-semibold text-slate-700">{Math.round(displayAccuracy * 100)}%</span>
+                <span className="text-xs text-slate-400 ml-1">{TYPE_LABELS[selectedType] ?? selectedType}</span>
+              </div>
+              <FieldIdButtons
+                speciesCode={speciesCode}
+                comName={comName}
+                fieldIds={fieldIds}
+                readOnly={readOnly}
+                onChanged={onFieldIdChanged}
+              />
             </div>
           </div>
 

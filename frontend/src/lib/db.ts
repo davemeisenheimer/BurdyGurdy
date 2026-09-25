@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { BirdProgress, RegionSpeciesCache } from '../types';
+import type { BirdProgress, FieldId, RegionSpeciesCache } from '../types';
 
 export interface AdminBlockedMediaEntry {
   url:         string;
@@ -17,6 +17,7 @@ class BirdyGurdyDB extends Dexie {
   blockedPhotos!:     Table<{ url: string }>;
   adminBlockedMedia!: Table<AdminBlockedMediaEntry>;
   keyValue!:          Table<{ key: string; value: string }>;
+  fieldIds!:          Table<FieldId>;
 
   constructor(name: string) {
     super(name);
@@ -150,6 +151,16 @@ class BirdyGurdyDB extends Dexie {
       blockedPhotos: 'url',
       adminBlockedMedia: '[url+speciesCode]',
       keyValue: 'key',
+    });
+    // v14: fieldIds - the user's "seen it"/"heard it" in-the-wild ticks, kept apart from
+    //      quiz progress so a tick never affects quizzing unless the user chooses that.
+    this.version(14).stores({
+      progress: '[speciesCode+questionType], speciesCode, weight, lastAsked',
+      regionSpecies: 'regionCode',
+      blockedPhotos: 'url',
+      adminBlockedMedia: '[url+speciesCode]',
+      keyValue: 'key',
+      fieldIds: '[speciesCode+questionType], speciesCode',
     });
   }
 }

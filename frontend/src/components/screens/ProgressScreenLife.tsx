@@ -8,12 +8,15 @@ import { MASTERY_LABELS, masteryBadgeClass } from '../../lib/mastery';
 import { MasteryBadge } from '../ui/MasteryBadge';
 import { ProgressTypePill, TYPE_LABELS } from '../ui/ProgressTypePill';
 import { FocusModeToggle } from '../ui/FocusModeToggle';
-import { deleteCloudProgress } from '../../services/remote/sync';
+import { FieldIdButtons } from '../ui/FieldIdButtons';
+import { useFieldIds } from '../../hooks/useFieldIds';
+import type { FieldIdMap } from '../../services/local/fieldIds';
+import { deleteCloudProgress, deleteAllCloudFieldIds } from '../../services/remote/sync';
 import { clearChallengeSnapshots } from '../../lib/victory';
 import { getVictoryLog } from '../../lib/victory';
 import type { VictoryLogEntry } from '../../lib/victory';
 import { AchievementsScreen } from './AchievementsScreen';
-import type { BirdProgress, QuestionType } from '../../types';
+import type { BirdProgress, FieldId, QuestionType } from '../../types';
 
 interface Props {
   onBack: () => void;
@@ -34,6 +37,8 @@ interface Props {
   overrideRecords?: BirdProgress[];
   /** When provided, shows this achievement log instead of loading from local DB. */
   overrideVictoryLog?: VictoryLogEntry[];
+  /** A friend's field-ID ticks, shown alongside overrideRecords. */
+  overrideFieldIds?: FieldId[];
   /** Display name shown in the header when viewing a friend's list. */
   friendDisplayName?: string;
   /** Called after the user clears their entire progress history. */
@@ -112,7 +117,7 @@ function getGroupLabel(bird: BirdSummary, viewRecord: BirdProgress | null, typeF
   return MASTERY_LABELS[maxMastery] ?? 'Hard';
 }
 
-export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggling, showFocusModeToggle, onToggleFocusStruggling, onSelectBird, selectedSpeciesCode, regionCode, recentDays, onRecentProgress, syncKey, overrideRecords, overrideVictoryLog, friendDisplayName, onHistoryCleared, onRegionRefresh }: Props) {
+export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggling, showFocusModeToggle, onToggleFocusStruggling, onSelectBird, selectedSpeciesCode, regionCode, recentDays, onRecentProgress, syncKey, overrideRecords, overrideVictoryLog, overrideFieldIds, friendDisplayName, onHistoryCleared, onRegionRefresh }: Props) {
   const readOnly = overrideRecords !== undefined;
   const [birds, setBirds]               = useState<BirdSummary[]>([]);
   const [filter, setFilter]             = useState<Filter>('learning');
@@ -196,6 +201,13 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
 
   useEffect(() => { load(); }, [load]);
 
+  const { fieldIds, reloadFieldIds } = useFieldIds(overrideFieldIds, syncKey);
+
+  const handleFieldIdChanged = useCallback(() => {
+    reloadFieldIds();
+    load();
+  }, [reloadFieldIds, load]);
+
   useEffect(() => {
     if (overrideVictoryLog !== undefined) return;
     getVictoryLog().then(setVictoryLog).catch(() => {});
@@ -229,8 +241,9 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
 
   const handleClearHistory = async (clearCloud: boolean) => {
     await db.progress.clear();
+    await db.fieldIds.clear();
     await db.regionSpecies.toCollection().modify({ promotionIndex: 0 });
-    if (clearCloud && userId) await deleteCloudProgress(userId);
+    if (clearCloud && userId) await Promise.all([deleteCloudProgress(userId), deleteAllCloudFieldIds(userId)]);
     const prefs = await loadQuizPrefs();
     await saveQuizPrefs({ ...prefs, selectionMode: 'all', selectedSpeciesCodes: [], selectedFamilies: [], selectedOrders: [] });
     await clearChallengeSnapshots();
@@ -537,6 +550,8 @@ export function ProgressScreenLife({ onBack, userId, questionTypes, focusStruggl
                   isSelected={bird.speciesCode === selectedSpeciesCode}
                   onSelectBird={onSelectBird}
                   onUnexclude={handleUnexclude}
+                  fieldIds={fieldIds}
+                  onFieldIdChanged={handleFieldIdChanged}
                 />
               </Fragment>
             );
@@ -582,9 +597,11 @@ interface BirdCardProps {
   isSelected:    boolean;
   onSelectBird?: (species: { speciesCode: string; comName: string }) => void;
   onUnexclude:   (speciesCode: string) => void;
+  fieldIds:      FieldIdMap;
+  onFieldIdChanged?: () => void;
 }
 
-function BirdCard({ bird, filter, typeFilter, accuracyMode, readOnly, isSelected, onSelectBird, onUnexclude }: BirdCardProps) {
+function BirdCard({ bird, filter, typeFilter, accuracyMode, readOnly, isSelected, onSelectBird, onUnexclude, fieldIds, onFieldIdChanged }: BirdCardProps) {
   const [selectedType, setSelectedType] = useState<QuestionType>(() => findDefaultType(bird, filter, typeFilter));
 
   const selectedRecord = bird.records.find(r => r.questionType === selectedType) ?? bird.records[0];
@@ -634,6 +651,13 @@ function BirdCard({ bird, filter, typeFilter, accuracyMode, readOnly, isSelected
             <span className="text-sm font-semibold text-slate-700">{Math.round(displayAccuracy * 100)}%</span>
             <span className="text-xs text-slate-400 ml-1">{TYPE_LABELS[selectedType] ?? selectedType}</span>
           </div>
+          <FieldIdButtons
+            speciesCode={bird.speciesCode}
+            comName={bird.comName}
+            fieldIds={fieldIds}
+            readOnly={readOnly}
+            onChanged={onFieldIdChanged}
+          />
           {bird.excluded && !readOnly && (
             <button
               onClick={e => { e.stopPropagation(); onUnexclude(bird.speciesCode); }}

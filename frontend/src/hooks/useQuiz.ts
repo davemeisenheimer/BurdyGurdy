@@ -19,6 +19,7 @@ import {
   maintainLevel0Palette, fastTrackToHard,
 } from '../services/local/progress';
 import { isStrugglingByWindow } from '../lib/struggling';
+import { birderLevelToInitialMastery } from '../lib/mastery';
 import { getRegionSpecies } from '../services/local/region';
 import { uploadUserBlockedPhoto } from '../services/remote/sync';
 import { describeUpstreamError, type UpstreamErrorPayload } from '../lib/upstreamErrorMessages';
@@ -32,12 +33,6 @@ export interface QuizState {
   selectedAnswer: string | null;
   score: { correct: number; total: number };
   error: string | null;
-}
-
-function birderLevelToInitialMastery(level?: BirderLevel): number {
-  if (level === 'intermediate') return 1;
-  if (level === 'advanced')     return 2;
-  return 0;
 }
 
 export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, userId?: string | null, birderLevel?: BirderLevel, alwaysFastTrack = false) {

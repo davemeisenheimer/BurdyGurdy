@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, Suspense } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from 'react';
 import type { RegionalSighting } from '../../services/remote/api';
 import { fetchRegionalSightings, fetchSpeciesSightings } from '../../services/remote/api';
 import { db } from '../../lib/db';
@@ -6,6 +6,7 @@ import type { BirdProgress } from '../../types';
 import type { MapMode } from '../bird/SightingsMap';
 import { MapModeToggle } from '../ui/MapModeToggle';
 import { BirdMasteryCard } from '../ui/BirdMasteryCard';
+import { useFieldIds } from '../../hooks/useFieldIds';
 import { lazyWithReload } from '../../lib/lazyWithReload';
 import { describeUpstreamError, type UpstreamErrorPayload } from '../../lib/upstreamErrorMessages';
 
@@ -58,6 +59,15 @@ export function SightingsScreen({ regionCode, isDesktop, onBack, onSightingsLoad
   // True when the map was opened via a blue tile (not by tapping a list item).
   // Controls whether the back arrow returns to the previous screen or to the list.
   const [directMap, setDirectMap] = useState(!isDesktop && !!externalSelected);
+
+  const { fieldIds, reloadFieldIds } = useFieldIds();
+
+  // Re-reads the (local, cheap) ticks and progress records - used after a field-ID change so the
+  // mastery badge shown alongside it stays in sync, without re-fetching remote sightings.
+  const handleFieldIdChanged = useCallback(() => {
+    reloadFieldIds();
+    db.progress.toArray().then(records => setProgressMap(buildProgressMap(records))).catch(() => {});
+  }, [reloadFieldIds]);
 
   useEffect(() => {
     let cancelled = false;
@@ -210,8 +220,11 @@ export function SightingsScreen({ regionCode, isDesktop, onBack, onSightingsLoad
               return (
                 <BirdMasteryCard
                   key={i}
+                  speciesCode={s.speciesCode}
                   comName={s.comName}
                   records={records}
+                  fieldIds={fieldIds}
+                  onFieldIdChanged={handleFieldIdChanged}
                   sighting={{
                     locName:         s.locName,
                     obsDt:           s.obsDt,
