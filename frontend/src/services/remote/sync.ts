@@ -1,7 +1,7 @@
 /**
- * Cloud sync - uploads local IndexedDB progress to Supabase and merges
- * remote records back. Merge rule: whichever record has the higher
- * `lastAsked` timestamp is considered more recent and wins.
+ * Cloud sync - uploads local IndexedDB progress to Supabase, and replaces
+ * local progress with the cloud copy when another device has uploaded more
+ * recently (see downloadAndReplace).
  */
 import { supabase } from '../../lib/supabase';
 import { api } from './api';
@@ -98,85 +98,6 @@ export async function uploadProgress(userId: string): Promise<boolean> {
   setLocalSyncedAt(userId, ts);
   setNeedsUpload(userId, false);
   return true;
-}
-
-// ── Download & merge ──────────────────────────────────────────────────────────
-
-type LocalSnapshot  = { lastAsked: number; isMastered?: boolean; masteryLevel?: number } | null;
-type RemoteSnapshot = { last_asked: number; in_history?: boolean; mastery_level?: number };
-
-/** Pure predicate - exported for unit tests. */
-export function decideTakeRemote(local: LocalSnapshot, remote: RemoteSnapshot): boolean {
-  const localHistory  = local?.isMastered   ?? false;
-  const remoteHistory = remote.in_history   ?? false;
-  const localLevel    = local?.masteryLevel  ?? 0;
-  const remoteLevel   = remote.mastery_level ?? 0;
-  return (
-    !local
-    || (local.lastAsked === 0 && remote.last_asked > 0)
-    || (remoteHistory && !localHistory)
-    || (!remoteHistory && !localHistory && remoteLevel > localLevel)
-    || (remoteHistory === localHistory && remoteLevel === localLevel && remote.last_asked > local.lastAsked)
-  );
-}
-
-/**
- * Downloads all cloud records for the user and merges them into local
- * IndexedDB. Remote record wins when its `last_asked` is newer than the
- * local one; otherwise the local record is kept (and will be uploaded on
- * the next sync).
- */
-/** Returns the number of remote records found (0 = brand-new account). */
-export async function downloadAndMerge(userId: string): Promise<number> {
-  const { data, error } = await supabase
-    .from('bird_progress')
-    .select('*')
-    .eq('user_id', userId);
-
-  if (error || !data) {
-    console.warn('sync: download failed:', error?.message);
-    return 0;
-  }
-
-  await Promise.all(
-    data.map(async remote => {
-      const local = await db.progress.get([remote.species_code, remote.question_type] as [string, string]);
-      const shouldTakeRemote = decideTakeRemote(local ?? null, remote);
-      if (shouldTakeRemote) {
-        const record: BirdProgress = {
-          speciesCode:        remote.species_code,
-          questionType:       remote.question_type,
-          comName:            remote.com_name,
-          correct:            remote.correct,
-          incorrect:          remote.incorrect,
-          lastAsked:          remote.last_asked,
-          weight:             remote.weight,
-          favourited:         remote.favourited,
-          excluded:           remote.excluded,
-          masteryLevel:       remote.mastery_level,
-          consecutiveCorrect: remote.consecutive_correct,
-          isMastered:         remote.in_history,
-          recentAnswers:      remote.recent_answers ?? local?.recentAnswers,
-        };
-        // Seed recentAnswers for mastered records that are missing a window.
-        // This happens when a cloud record was uploaded before the feature existed,
-        // or when the record arrives on a fresh device before local v9 migration had
-        // anything to seed.  Mirrors the v9 DB migration's backfill logic.
-        if (record.isMastered && !record.recentAnswers) {
-          const total = record.correct + record.incorrect;
-          const accuracy = total > 0 ? record.correct / total : 1;
-          const correctCount = Math.round(accuracy * STRUGGLING_WINDOW);
-          record.recentAnswers = [
-            ...Array(STRUGGLING_WINDOW - correctCount).fill(false),
-            ...Array(correctCount).fill(true),
-          ];
-        }
-        await db.progress.put(record);
-      }
-    }),
-  );
-
-  return data.length;
 }
 
 // ── Smart sync helpers ────────────────────────────────────────────────────────
