@@ -9,7 +9,7 @@ import { cache } from '../cache';
 import {
   PALETTE_AND_SM_RATIO, XC_FETCH_BATCH_SIZE, MASTERED_FLOOR_WEIGHT,
 } from '@birdygurdy/shared';
-import { buildCandidates, applyPaletteSMGuarantee, applyAffinityBoosts, pickFromPool, splitCandidates } from '../lib/candidateLogic';
+import { buildCandidates, applyPaletteSMGuarantee, applyAffinityBoosts, pickFromPool, splitCandidates, otherPickTarget } from '../lib/candidateLogic';
 import { filterRecordings, weightedSampleByDuration } from '../lib/recordingFilter';
 import { selectDistractors, pickRandom } from '../lib/distractorLogic';
 import { classifyUpstreamError, identifyUpstreamService } from '../lib/upstreamError';
@@ -286,8 +286,8 @@ router.post('/questions', async (req, res) => {
 
       // Unmastered and struggling birds use target=count+5 so replacement fill lets them
       // repeat to fill a round (e.g. 3 struggling birds across 5 questions).
-      // Non-struggling mastered birds use target=pool size - each appears at most once,
-      // preventing a single recently-mastered species from crowding out review slots.
+      // Non-struggling mastered birds use target=min(pool size, count+5) - each appears at most
+      // once, preventing a single recently-mastered species from crowding out review slots.
       const pickedRU = pickFromPool(ruCandidates, count + 5);
       const pickedSM = pickFromPool(smCandidates, count + 5);
       const anchorSpecies = [...ruCandidates, ...smCandidates].map(c => c.species);
@@ -323,7 +323,7 @@ router.post('/questions', async (req, res) => {
           : otherCandidates;
       }
 
-      const pickedOther = pickFromPool(effectiveOther, effectiveOther.length);
+      const pickedOther = pickFromPool(effectiveOther, otherPickTarget(effectiveOther.length, count));
       console.log(`[quiz] RU: ${ruCandidates.length}, SM: ${smCandidates.length}, other: ${otherCandidates.length} (effective: ${effectiveOther.length}), min: ${palettePlusStrugglingMin}/${count}`);
       picked = [...pickedRU, ...pickedSM, ...pickedOther];
     } else {

@@ -183,6 +183,18 @@ export function applyPaletteSMGuarantee<T extends { speciesCode: string; type: s
 }
 
 /**
+ * How many "other" (non-unmastered, non-struggling) candidates to pick for a round.
+ *
+ * At most `count` of them can make the round, so `count + 5` leaves the same spare headroom the
+ * unmastered and struggling pools get (for birds that turn out to have no photo or audio).
+ * Never more than the pool, so each bird is picked at most once. Picking the whole pool made the
+ * server fetch xeno-canto recordings for every bird in the region (~300) before building a round.
+ */
+export function otherPickTarget(poolSize: number, count: number): number {
+  return Math.min(poolSize, count + 5);
+}
+
+/**
  * Weighted sampling without replacement up to `target`.
  * If the pool is smaller than target, round-robin replacement fill is used so
  * every bird appears floor(target/pool.size) or ceil(...) times - weighted

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildCandidates, applyPaletteSMGuarantee, pickFromPool, splitCandidates } from './candidateLogic';
+import { buildCandidates, applyPaletteSMGuarantee, pickFromPool, splitCandidates, otherPickTarget } from './candidateLogic';
 import type { PoolSpecies, Candidate } from './candidateLogic';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -443,5 +443,17 @@ describe('pickFromPool', () => {
     const result = pickFromPool(pool, 10);
     const firstFive = result.slice(0, 5).map(c => c.species.speciesCode);
     expect(new Set(firstFive).size).toBe(5); // all unique in first pass
+  });
+});
+
+describe('otherPickTarget', () => {
+  it('caps a large pool at count + 5 (283 "other" birds in a 5-question round -> 10)', () => {
+    expect(otherPickTarget(283, 5)).toBe(10);
+    expect(otherPickTarget(283, 10)).toBe(15);
+  });
+
+  it('uses the whole pool when it is smaller than count + 5, so no bird repeats', () => {
+    expect(otherPickTarget(3, 10)).toBe(3);
+    expect(otherPickTarget(0, 10)).toBe(0);
   });
 });
