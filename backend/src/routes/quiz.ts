@@ -14,6 +14,7 @@ import { filterRecordings, weightedSampleByDuration } from '../lib/recordingFilt
 import { selectDistractors, pickRandom } from '../lib/distractorLogic';
 import { classifyUpstreamError, identifyUpstreamService } from '../lib/upstreamError';
 import type { PoolSpecies, Candidate } from '../lib/candidateLogic';
+import { createStageTimer } from '../lib/stageTimer';
 
 const router = Router();
 
@@ -127,7 +128,16 @@ async function getBlockedPhotoUrls(): Promise<Set<string>> {
 // ── Route ────────────────────────────────────────────────────────────────────
 
 // POST /api/quiz/questions
+/** A round slower than this logs a per-stage timing breakdown. */
+const SLOW_QUIZ_MS = 3_000;
+/** If a round is still being built after this long, log which stages it is waiting on. */
+const HANGING_QUIZ_MS = 10_000;
+
 router.post('/questions', async (req, res) => {
+  const timer = createStageTimer();
+  const hangTimer = setTimeout(() => {
+    console.warn(`[quiz] still building after ${HANGING_QUIZ_MS}ms - waiting on: ${timer.pending().join(', ') || '(none)'} | ${timer.summary()}`);
+  }, HANGING_QUIZ_MS);
   try {
     const {
       regionCode    = 'CA-ON-OT',
@@ -153,12 +163,12 @@ router.post('/questions', async (req, res) => {
     const paletteCodes = new Set<string>(paletteSpeciesCodes as string[]);
 
     const [observations, taxonomy, backyardCodes, top100Codes, historicalCodes, blockedPhotoUrls] = await Promise.all([
-      getRegionalSpecies(regionCode, back),
-      getTaxonomy(),
-      getBackyardSpeciesRanking(regionCode),
-      getCommonSpeciesCodes(regionCode),
-      getSpeciesList(regionCode),
-      getBlockedPhotoUrls(),
+      timer.track('eBird recent observations', getRegionalSpecies(regionCode, back)),
+      timer.track('eBird taxonomy', getTaxonomy()),
+      timer.track('eBird backyard ranking', getBackyardSpeciesRanking(regionCode)),
+      timer.track('eBird common species', getCommonSpeciesCodes(regionCode)),
+      timer.track('eBird species list', getSpeciesList(regionCode)),
+      timer.track('blocked photos (Supabase)', getBlockedPhotoUrls()),
     ]);
 
     // Use backyard (private location) ranking as primary; fall back to top100 if too sparse
@@ -324,17 +334,19 @@ router.post('/questions', async (req, res) => {
     // On a warm cache this loop completes instantly (all cache hits).
     // On a cold start it serialises requests in small batches instead of firing ~40+ at once.
     const xcUnique = [...new Set(picked.map(c => c.species.sciName))];
-    for (let i = 0; i < xcUnique.length; i += XC_FETCH_BATCH_SIZE) {
-      await Promise.all(xcUnique.slice(i, i + XC_FETCH_BATCH_SIZE).map(n => getRecordings(n)));
-    }
+    await timer.stage(`xeno-canto recordings (${xcUnique.length} species)`, async () => {
+      for (let i = 0; i < xcUnique.length; i += XC_FETCH_BATCH_SIZE) {
+        await Promise.all(xcUnique.slice(i, i + XC_FETCH_BATCH_SIZE).map(n => getRecordings(n)));
+      }
+    });
 
     // Load the stored photo slots for every candidate in one query, so the per-question photo
     // lookups below are answered from memory instead of each hitting the database.
     if (picked.some(c => ['image', 'image-latin', 'image-song'].includes(c.type as string))) {
-      await warmSlots(picked.map(c => c.species.speciesCode));
+      await timer.track('photo slots (Supabase)', warmSlots(picked.map(c => c.species.speciesCode)));
     }
 
-    const questions: QuizQuestion[] = await Promise.all(
+    const questions: QuizQuestion[] = await timer.track(`build ${picked.length} questions (photos, audio)`, Promise.all(
       picked.map(async ({ species, type }, i) => {
         const masteryKey   = `${species.speciesCode}:${type}`;
         const masteryLevel = (masteryLevels as Record<string, number>)[masteryKey] ?? 0;
@@ -462,7 +474,7 @@ router.post('/questions', async (req, res) => {
 
         return q;
       }),
-    );
+    ));
 
     const allValid = questions.filter(q => {
       const t = q.type as string;
@@ -485,8 +497,10 @@ router.post('/questions', async (req, res) => {
       finalQuestions = allValid.slice(0, count);
     }
 
+    if (timer.elapsed() >= SLOW_QUIZ_MS) console.warn(`[quiz] slow round (${regionCode}, ${count} questions): ${timer.summary()}`);
     res.json(finalQuestions);
   } catch (err: unknown) {
+    console.warn(`[quiz] failed round timing: ${timer.summary()}`);
     const message    = err instanceof Error ? err.message : String(err);
     const axiosMsg   = (err as { response?: { status: number; data: unknown } })?.response;
     const classified = classifyUpstreamError(err);
@@ -501,6 +515,8 @@ router.post('/questions', async (req, res) => {
       // instead of showing this raw message to the user.
       detail: message,
     });
+  } finally {
+    clearTimeout(hangTimer);
   }
 });
 

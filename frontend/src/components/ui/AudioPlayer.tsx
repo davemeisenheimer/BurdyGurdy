@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { DEV_LOG_AUDIO_ERRORS } from '../../lib/devFlags';
 import { SpectrogramPlayer } from './SpectrogramPlayer';
 import { toProxyUrl } from '../../lib/audioProxy';
+import { releaseAudioElement } from '../../lib/audioElement';
 
 interface Track {
   audioUrl: string;
@@ -36,7 +37,7 @@ export function AudioPlayer({ url, tracks, onAudioUnavailable, durationSeconds }
     setActiveAudioUrl(allTracks[0].audioUrl);
     setAudioError(false);
     const playTimer = setTimeout(() => { audio.play().catch(() => {}); }, 0);
-    return () => { clearTimeout(playTimer); audio.pause(); };
+    return () => { clearTimeout(playTimer); releaseAudioElement(audio); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url]);
 
@@ -50,7 +51,7 @@ export function AudioPlayer({ url, tracks, onAudioUnavailable, durationSeconds }
     audio.load();
     setActiveAudioUrl(allTracks[0].audioUrl);
     const playTimer = setTimeout(() => { audio.play().catch(() => {}); }, 0);
-    return () => { clearTimeout(playTimer); audio.pause(); };
+    return () => { clearTimeout(playTimer); releaseAudioElement(audio); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retryKey]);
 

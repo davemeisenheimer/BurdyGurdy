@@ -131,7 +131,12 @@ const HOT_RETRY_TTL = 5 * 60 * 1000;
 
 interface TrackedSource<T> extends SourceOutcome {
   value?: T;
+  /** How long the request took to settle; unset while pending (or if abandoned). */
+  ms?: number;
 }
+
+/** A photo lookup slower than this logs a timing breakdown, even when it succeeds. */
+const SLOW_LOOKUP_MS = 3_000;
 
 /**
  * Starts a source request and records how it ended on the returned object. An abort (the attempt's
@@ -148,9 +153,10 @@ function trackSource<T>(
 ): { source: TrackedSource<T>; done: Promise<void> } {
   const source: TrackedSource<T> = { name, state: 'pending' };
   const done = start().then(
-    value => { source.state = 'ok'; source.value = value; },
+    value => { source.state = 'ok'; source.value = value; source.ms = Date.now() - t0; },
     err => {
       if (isAbortLike(err)) return;
+      source.ms = Date.now() - t0;
       if (isBlocked(err)) { source.state = 'blocked'; return; }
       source.state = 'failed';
       source.reason = describeUpstreamFailure(err);
@@ -266,6 +272,7 @@ async function lookupPhotoSet(speciesCode: string, comName?: string, sciName?: s
   const now = Date.now();
 
   const slots = await loadSlots(speciesCode);
+  const slotsMs = Date.now() - now;
   const hadSlot = new Set(slots.keys());
   const outcomes = new Map<PhotoSource, TrackedSource<AttributedPhoto[]>>();
   const hasAnyPhotos = () => PHOTO_SOURCES.some(
@@ -307,6 +314,14 @@ async function lookupPhotoSet(speciesCode: string, comName?: string, sciName?: s
 
   const photoSet = buildPhotoSet(finalPhotos);
   const hasPhotos = photoSet.primary !== null || photoSet.optional.length > 0;
+
+  const totalMs = Date.now() - now;
+  if (totalMs >= SLOW_LOOKUP_MS) {
+    const perSource = [...outcomes.values()]
+      .map(o => `${o.name} ${o.state}${o.ms !== undefined ? ` ${o.ms}ms` : ''}${o.reason ? ` (${o.reason})` : ''}`)
+      .join(', ');
+    console.warn(`[photos] ${speciesCode} (${sc}): slow lookup ${totalMs}ms - stored slots ${slotsMs}ms, ${attempt} attempt(s)${perSource ? `, ${perSource}` : ''}`);
+  }
   const complete = sourcesAllKnown(lookupStates);
   const hotKey = `photoset7:${speciesCode}`;
 

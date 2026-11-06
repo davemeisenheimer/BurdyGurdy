@@ -35,6 +35,7 @@ export const DEFAULTS: AppSettings = {
 const SETTINGS_KEY   = 'settings';
 const QUIZ_PREFS_KEY = 'quizPrefs';
 const FOCUS_KEY      = 'focusStruggling';
+const MASTERY_DIALOG_COUNT_KEY = 'masteryDialogCount';
 
 export const STAY_SIGNED_IN_KEY = 'burdygurdy_stay_signed_in';
 
@@ -123,6 +124,17 @@ export async function loadFocusStruggling(): Promise<boolean> {
 
 export async function saveFocusStruggling(val: boolean): Promise<void> {
   await kvSet(FOCUS_KEY, String(val));
+}
+
+// ── Mastery dialog show count (drives the occasional feedback callout) ─────────
+
+/** Increments and returns the number of times the mastery fact dialog has been shown. */
+export async function incrementMasteryDialogCount(): Promise<number> {
+  const raw = await kvGet(MASTERY_DIALOG_COUNT_KEY);
+  const prev = raw ? parseInt(raw, 10) : 0;
+  const next = (Number.isFinite(prev) ? prev : 0) + 1;
+  await kvSet(MASTERY_DIALOG_COUNT_KEY, String(next));
+  return next;
 }
 
 /** Wipes user-specific settings back to factory defaults and returns them.

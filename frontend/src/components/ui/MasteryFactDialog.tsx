@@ -15,9 +15,13 @@ const TYPE_LABELS: Partial<Record<QuestionType, string>> = {
 interface Props {
   event:   LevelUpEvent;
   onClose: () => void;
+  /** When provided, a feedback link (or callout) is shown. Should close this dialog and open the feedback form. */
+  onFeedback?: () => void;
+  /** Show the prominent feedback callout instead of the small link. */
+  showFeedbackCallout?: boolean;
 }
 
-export function MasteryFactDialog({ event, onClose }: Props) {
+export function MasteryFactDialog({ event, onClose, onFeedback, showFeedbackCallout }: Props) {
   const [result, setResult]   = useState<FactResult | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -71,6 +75,21 @@ export function MasteryFactDialog({ event, onClose }: Props) {
           )}
         </div>
 
+        {/* Feedback callout - shown occasionally in place of the small link */}
+        {onFeedback && showFeedbackCallout && (
+          <div className="mx-5 mb-4 rounded-xl border border-forest-200 bg-white px-4 py-3">
+            <p className="text-sm text-slate-700 leading-snug mb-2.5">
+              Enjoying BurdyGurdy? We'd love to hear what you like - and what you don't.
+            </p>
+            <button
+              onClick={onFeedback}
+              className="w-full py-2 bg-sky-100 border border-sky-200 hover:bg-sky-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
+            >
+              Share your thoughts
+            </button>
+          </div>
+        )}
+
         {/* Favicon + button */}
         <div className="px-5 pb-5 flex flex-col items-center gap-3">
           <img src="/favicon.png" alt="" aria-hidden className="w-12 h-12 object-contain" />
@@ -80,6 +99,11 @@ export function MasteryFactDialog({ event, onClose }: Props) {
           >
             Continue
           </button>
+          {onFeedback && !showFeedbackCallout && (
+            <button onClick={onFeedback} className="text-xs text-slate-500 hover:text-slate-700 underline underline-offset-2">
+              Enjoying BurdyGurdy? Share your thoughts
+            </button>
+          )}
         </div>
 
       </div>

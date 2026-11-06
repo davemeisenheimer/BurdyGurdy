@@ -14,6 +14,7 @@ import { NotificationsScreen } from './components/screens/NotificationsScreen';
 import { CurationPanel } from './components/panels/CurationPanel';
 import { FactsCurationPanel } from './components/panels/FactsCurationPanel';
 import { DatabasePanel } from './components/panels/DatabasePanel';
+import { FeedbackPanel } from './components/panels/FeedbackPanel';
 import { BirdInfoPanel } from './components/panels/BirdInfoPanel';
 import { SightingsMapPanel } from './components/panels/SightingsMapPanel';
 import { SightingsScreen } from './components/screens/SightingsScreen';
@@ -22,7 +23,7 @@ import { Toast } from './components/ui/Toast';
 import { DialogGeneric } from './components/ui/DialogGeneric';
 import { useQuiz } from './hooks/useQuiz';
 import { useNotifications } from './hooks/useNotifications';
-import { loadSettings, saveSettings, loadQuizPrefs, saveQuizPrefs, resetUserSettings, loadFocusStruggling, saveFocusStruggling, DEFAULTS as SETTINGS_DEFAULTS, STAY_SIGNED_IN_KEY } from './lib/settings';
+import { loadSettings, saveSettings, loadQuizPrefs, saveQuizPrefs, resetUserSettings, loadFocusStruggling, saveFocusStruggling, incrementMasteryDialogCount, DEFAULTS as SETTINGS_DEFAULTS, STAY_SIGNED_IN_KEY } from './lib/settings';
 import type { AppSettings, QuizConfigPrefs } from './lib/settings';
 import { findEarnedAward, getVictorySeen, mergeVictorySeen, getVictoryLog, mergeVictoryLog, describeMastery, describeWindow, computeChallengeSnapshot, storeChallengeSnapshot } from './lib/victory';
 import type { AwardTier, VictoryLogEntry } from './lib/victory';
@@ -41,6 +42,9 @@ import { computeStrugglingCount } from './lib/struggling';
 import { expandQuestionTypes } from './lib/questionTypes';
 import type { ReportErrorData } from './components/ui/ReportErrorModal';
 import { MasteryFactDialog } from './components/ui/MasteryFactDialog';
+import { FeedbackDialog } from './components/ui/FeedbackDialog';
+import { shouldShowFeedbackCallout } from './lib/feedback';
+import type { FeedbackSource } from './lib/feedback';
 import { FastTrackDialog } from './components/ui/FastTrackDialog';
 import { PasswordResetDialog } from './components/ui/PasswordResetDialog';
 import { CloudSyncOverlay } from './components/ui/CloudSyncOverlay';
@@ -119,7 +123,7 @@ export default function App() {
   const [recentProgressBack, setRecentProgressBack] = useState<'result' | 'progress'>('result');
   const [lifeListBack, setLifeListBack] = useState<'home' | 'result'>('home');
   const [sightingsBack, setSightingsBack] = useState<typeof screen>('home');
-  const [rightPanelTab, setRightPanelTab] = useState<'info' | 'curation' | 'facts' | 'database'>('info');
+  const [rightPanelTab, setRightPanelTab] = useState<'info' | 'curation' | 'facts' | 'database' | 'feedback'>('info');
   const [progressSelectedSpecies, setProgressSelectedSpecies] = useState<{ speciesCode: string; comName: string } | null>(null);
   const [friendProgressRecords, setFriendProgressRecords] = useState<BirdProgress[]>([]);
   const [friendFieldIds, setFriendFieldIds]               = useState<FieldId[]>([]);
@@ -137,6 +141,8 @@ export default function App() {
   const quizActiveRef    = useRef(false);
   const accessTokenRef   = useRef<string | null>(null);
   const [masteryFactEvent, setMasteryFactEvent] = useState<LevelUpEvent | null>(null);
+  const [masteryFeedbackCallout, setMasteryFeedbackCallout] = useState(false);
+  const [feedbackSource, setFeedbackSource] = useState<FeedbackSource | null>(null);
   const hasShownFactThisRoundRef = useRef(false);
   const prevGraduatedCountRef    = useRef(0);
   const [awardTier, setAwardTier] = useState<AwardTier>('localLegend');
@@ -204,8 +210,12 @@ export default function App() {
   useEffect(() => {
     const graduated = roundLevelUps.filter(e => e.graduated);
     if (graduated.length > prevGraduatedCountRef.current && !hasShownFactThisRoundRef.current) {
+      setMasteryFeedbackCallout(false);
       setMasteryFactEvent(graduated[graduated.length - 1]);
       hasShownFactThisRoundRef.current = true;
+      incrementMasteryDialogCount()
+        .then(count => setMasteryFeedbackCallout(shouldShowFeedbackCallout(count)))
+        .catch(() => {});
     }
     prevGraduatedCountRef.current = graduated.length;
   }, [roundLevelUps]);
@@ -1007,7 +1017,7 @@ export default function App() {
 
         {isAdmin && settings.enableAdminFeatures && screen !== 'sightings' && (
           <div className="shrink-0 flex border-b border-slate-200 bg-white">
-            {(['info', 'curation', 'facts', 'database'] as const).map(tab => (
+            {(['info', 'curation', 'facts', 'database', 'feedback'] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setRightPanelTab(tab)}
@@ -1017,7 +1027,7 @@ export default function App() {
                     : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
                 }`}
               >
-                {tab === 'info' ? 'Bird Info' : tab === 'curation' ? 'Curation' : tab === 'facts' ? 'Facts' : 'Database'}
+                {tab === 'info' ? 'Bird Info' : tab === 'curation' ? 'Curation' : tab === 'facts' ? 'Facts' : tab === 'database' ? 'Database' : 'Feedback'}
               </button>
             ))}
           </div>
@@ -1064,6 +1074,11 @@ export default function App() {
         {screen !== 'sightings' && isAdmin && settings.enableAdminFeatures && rightPanelTab === 'database' && (
           <div className="flex-1 min-h-0 overflow-hidden">
             <DatabasePanel />
+          </div>
+        )}
+        {screen !== 'sightings' && isAdmin && settings.enableAdminFeatures && rightPanelTab === 'feedback' && (
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <FeedbackPanel />
           </div>
         )}
       </div>}
@@ -1157,6 +1172,7 @@ export default function App() {
           }}
           user={user}
           onInstallApp={handleInstallApp}
+          onSendFeedback={user ? () => setFeedbackSource('settings') : undefined}
         />
       )}
 
@@ -1173,12 +1189,20 @@ export default function App() {
         <div className="min-h-screen flex items-center justify-center p-6">
           <div className="text-center">
             <p className="text-red-600 font-medium mb-4">{state.error}</p>
-            <button
-              onClick={() => setScreen('home')}
-              className="px-6 py-2 bg-forest-600 text-white rounded-lg"
-            >
-              Back to Home
-            </button>
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={() => { doStart(config); }}
+                className="px-6 py-2 bg-forest-600 text-white rounded-lg"
+              >
+                Try again
+              </button>
+              <button
+                onClick={() => setScreen('home')}
+                className="px-6 py-2 bg-sky-100 border border-sky-200 text-slate-700 rounded-lg"
+              >
+                Back to Home
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1306,6 +1330,8 @@ export default function App() {
             setNotifications(prev => prev.filter(n => !ids.includes(n.id)));
           }}
           onOpenCuration={isDesktop ? () => { setRightPanelTab('curation'); setScreen('home'); } : undefined}
+          onOpenFeedbackPanel={isDesktop && isAdmin && settings.enableAdminFeatures ? () => { setRightPanelTab('feedback'); setScreen('home'); } : undefined}
+          onSendFeedback={user ? () => setFeedbackSource('notifications') : undefined}
         />
       )}
 
@@ -1413,6 +1439,18 @@ export default function App() {
         <MasteryFactDialog
           event={masteryFactEvent}
           onClose={() => setMasteryFactEvent(null)}
+          onFeedback={user ? () => { setMasteryFactEvent(null); setFeedbackSource('mastery'); } : undefined}
+          showFeedbackCallout={masteryFeedbackCallout}
+        />
+      )}
+
+      {/* Feedback form - opened from Notifications, Settings, or the mastery fact dialog */}
+      {feedbackSource && user && (
+        <FeedbackDialog
+          source={feedbackSource}
+          userEmail={user.email}
+          regionCode={config.regionCode}
+          onClose={() => setFeedbackSource(null)}
         />
       )}
 

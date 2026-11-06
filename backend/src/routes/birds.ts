@@ -687,8 +687,10 @@ router.get('/photos/:speciesCode', async (req, res) => {
       ? await getSpeciesPhotoUrlsForQuestion(req.params.speciesCode, comName, sciName)
       : await getSpeciesPhotoUrls(req.params.speciesCode, comName, sciName);
     res.json(photos);
-  } catch {
-    res.json({ primary: null, optional: [] });
+  } catch (err) {
+    console.error(`[photos] ${req.params.speciesCode}: lookup threw - ${(err as Error).message}`);
+    // Report as unavailable (couldn't ask) rather than a genuine "no photos"
+    res.json({ primary: null, optional: [], unavailable: true });
   }
 });
 

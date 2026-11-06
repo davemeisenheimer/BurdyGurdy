@@ -8,6 +8,8 @@ import quizRouter from './routes/quiz';
 import friendsRouter from './routes/friends';
 import proxyRouter from './routes/proxy';
 import adminRouter from './routes/admin';
+import feedbackRouter from './routes/feedback';
+import { requestTiming } from './lib/requestTiming';
 
 dotenv.config();
 
@@ -16,13 +18,17 @@ const PORT = process.env.PORT ?? 3001;
 
 const allowedOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:5173').split(',').map(s => s.trim());
 app.use(cors({ origin: allowedOrigins }));
-app.use(express.json());
+// Signed-in quiz requests carry the user's palette/history/mastery keys, which outgrow the 100kb
+// default for players with a long history (413 Payload Too Large).
+app.use(express.json({ limit: '2mb' }));
+app.use(requestTiming);
 
 app.use('/api/birds', birdsRouter);
 app.use('/api/quiz', quizRouter);
 app.use('/api/friends', friendsRouter);
 app.use('/api/proxy', proxyRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/feedback', feedbackRouter);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 

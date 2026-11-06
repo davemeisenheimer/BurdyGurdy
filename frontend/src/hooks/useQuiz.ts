@@ -22,7 +22,7 @@ import { isStrugglingByWindow } from '../lib/struggling';
 import { birderLevelToInitialMastery } from '../lib/mastery';
 import { getRegionSpecies } from '../services/local/region';
 import { uploadUserBlockedPhoto } from '../services/remote/sync';
-import { describeUpstreamError, type UpstreamErrorPayload } from '../lib/upstreamErrorMessages';
+import { describeRequestError } from '../lib/requestDiagnostics';
 
 export type QuizStatus = 'idle' | 'loading' | 'active' | 'answered' | 'complete' | 'error';
 
@@ -363,9 +363,9 @@ export function useQuiz(config: QuizConfig, randomizeQuestionPhotos = false, use
         error: null,
       });
     } catch (err: unknown) {
-      const axiosData = (err as { response?: { data?: UpstreamErrorPayload } })?.response?.data;
+      console.error('[quiz] failed to start:', err);
       const fallback = 'Failed to load questions. Try a different region, bird group, or question type, or check your connection and try again.';
-      setState(s => ({ ...s, status: 'error', error: describeUpstreamError(axiosData, fallback) }));
+      setState(s => ({ ...s, status: 'error', error: describeRequestError(err, fallback) }));
     }
   }, [config]);
 

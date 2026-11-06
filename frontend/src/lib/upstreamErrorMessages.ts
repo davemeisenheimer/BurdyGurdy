@@ -32,7 +32,7 @@ export function describeUpstreamError(payload: UpstreamErrorPayload | undefined 
 
   switch (payload?.code) {
     case 'timeout':
-      return `${service} is responding slowly right now. This usually clears up in a few minutes — please try again shortly.`;
+      return `${service} is responding slowly right now. This usually clears up in a few minutes - please try again shortly.`;
     case 'rate-limited':
       return `${service} is temporarily limiting requests. Please wait a moment and try again.`;
     case 'upstream-5xx': {
@@ -42,7 +42,7 @@ export function describeUpstreamError(payload: UpstreamErrorPayload | undefined 
     case 'upstream-4xx':
       return fallback;
     case 'network':
-      return `Couldn't reach ${service} — check your internet connection and try again.`;
+      return `Couldn't reach ${service} - check your internet connection and try again.`;
     default:
       return fallback;
   }

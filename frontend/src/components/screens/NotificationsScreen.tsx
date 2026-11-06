@@ -8,6 +8,8 @@ interface Props {
   onNotificationsRead: (ids: string[]) => void;
   onDeleteNotifications: (ids: string[]) => void;
   onOpenCuration?: () => void;
+  onOpenFeedbackPanel?: () => void;
+  onSendFeedback?: () => void;
 }
 
 function timeLabel(iso: string): string {
@@ -24,7 +26,7 @@ function timeLabel(iso: string): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-export function NotificationsScreen({ notifications, onBack, onNotificationsRead, onDeleteNotifications, onOpenCuration }: Props) {
+export function NotificationsScreen({ notifications, onBack, onNotificationsRead, onDeleteNotifications, onOpenCuration, onOpenFeedbackPanel, onSendFeedback }: Props) {
   const [expandedSender, setExpandedSender] = useState<string | null>(null);
 
   // Group by sender, sorted by most recent
@@ -62,6 +64,14 @@ export function NotificationsScreen({ notifications, onBack, onNotificationsRead
       <div className="shrink-0 flex items-center gap-3 px-4 py-4 bg-sky-700">
         <button onClick={onBack} className="text-white/80 hover:text-white text-4xl leading-none">←</button>
         <h1 className="font-semibold text-white">Notifications</h1>
+        {onSendFeedback && (
+          <button
+            onClick={onSendFeedback}
+            className="ml-auto text-xs px-3 py-1.5 rounded-full bg-white/15 hover:bg-white/25 text-white font-medium"
+          >
+            Send feedback
+          </button>
+        )}
       </div>
       <div className="max-w-2xl mx-auto w-full px-4 flex flex-col flex-1 min-h-0">
 
@@ -118,6 +128,14 @@ export function NotificationsScreen({ notifications, onBack, onNotificationsRead
                             className="mt-2 text-xs px-3 py-1 rounded-full bg-sky-100 text-sky-700 hover:bg-sky-200 font-medium"
                           >
                             Open Curation Panel
+                          </button>
+                        )}
+                        {n.type === 'new_feedback' && onOpenFeedbackPanel && (
+                          <button
+                            onClick={onOpenFeedbackPanel}
+                            className="mt-2 text-xs px-3 py-1 rounded-full bg-sky-100 text-sky-700 hover:bg-sky-200 font-medium"
+                          >
+                            Open Feedback Panel
                           </button>
                         )}
                         <p className="text-xs text-slate-400 mt-1">

@@ -1,7 +1,38 @@
 import axios from 'axios';
+import type { InternalAxiosRequestConfig } from 'axios';
 import type { QuizQuestion, QuestionType, BirdSpecies, AttributedPhoto } from '../../types';
+import { classifyRequestError, describeErrorForLog, shouldLogRequest } from '../../lib/requestDiagnostics';
 
 export const api = axios.create({ baseURL: (import.meta.env.VITE_API_URL ?? '') + '/api' });
+
+// Log failed and slow requests so a hang or error is visible in the console. Measured from when the
+// request is queued in the browser: compare with the backend's own timing log to tell "slow server"
+// from "stuck in the browser" (e.g. queued behind other connections - shows as Stalled in DevTools).
+const requestStart = new WeakMap<InternalAxiosRequestConfig, number>();
+const describeRequest = (c?: InternalAxiosRequestConfig) => `${(c?.method ?? 'get').toUpperCase()} ${c?.url ?? '?'}`;
+api.interceptors.request.use(config => { requestStart.set(config, performance.now()); return config; });
+api.interceptors.response.use(
+  res => {
+    const ms = Math.round(performance.now() - (requestStart.get(res.config) ?? performance.now()));
+    if (shouldLogRequest(ms, false, false)) console.warn(`[api] slow: ${describeRequest(res.config)} took ${ms}ms`);
+    return res;
+  },
+  err => {
+    const config = (err as { config?: InternalAxiosRequestConfig }).config;
+    const ms = Math.round(performance.now() - ((config && requestStart.get(config)) ?? performance.now()));
+    const c = classifyRequestError(err);
+    if (shouldLogRequest(ms, true, c.kind === 'cancelled')) {
+      console.warn(`[api] failed: ${describeRequest(config)} - ${describeErrorForLog(c)} after ${ms}ms`);
+    }
+    return Promise.reject(err);
+  },
+);
+
+/**
+ * Requests the "Loading birds" screen waits on. Without a timeout a stalled request leaves the
+ * spinner up forever with nothing logged. Generous: a full round can legitimately take a while.
+ */
+const CRITICAL_REQUEST_TIMEOUT_MS = 45_000;
 
 /**
  * Bird info, photos and recent sightings are supplementary content shown after an answer. They have a
@@ -43,7 +74,7 @@ export async function fetchQuizQuestions(
     bannedAudioUrls,
     birderLevel,
     speciesFilter,
-  });
+  }, { timeout: CRITICAL_REQUEST_TIMEOUT_MS });
   return res.data;
 }
 
@@ -78,7 +109,7 @@ export async function fetchAllSpecies(): Promise<AllSpeciesEntry[]> {
 }
 
 export async function fetchRegionSpecies(regionCode: string, back = 30): Promise<BirdSpecies[]> {
-  const res = await api.get<BirdSpecies[]>(`/birds/region/${regionCode}`, { params: { back } });
+  const res = await api.get<BirdSpecies[]>(`/birds/region/${regionCode}`, { params: { back }, timeout: CRITICAL_REQUEST_TIMEOUT_MS });
   return res.data;
 }
 

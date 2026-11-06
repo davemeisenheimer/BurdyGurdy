@@ -4,7 +4,7 @@ export interface AppNotification {
   id: string;
   senderUserId: string;
   senderDisplayName: string;
-  type: 'login' | 'victory' | 'logout' | 'session' | 'report_resolved' | 'new_report';
+  type: 'login' | 'victory' | 'logout' | 'session' | 'report_resolved' | 'new_report' | 'new_feedback' | 'feedback_reply';
   data: Record<string, unknown>;
   createdAt: string;
   read: boolean;
@@ -93,6 +93,15 @@ export function formatNotificationMessage(n: AppNotification): string {
       };
       const issue = issueLabel[d.issueType ?? ''] ?? (d.issueType ?? 'issue');
       return `New ${d.mediaType ?? 'media'} report for ${d.comName ?? 'a bird'} - ${issue} (submitted by ${name}).`;
+    }
+    case 'new_feedback': {
+      const d = n.data as { excerpt?: string };
+      return d.excerpt ? `New feedback from ${name}: "${d.excerpt}"` : `New feedback from ${name}.`;
+    }
+    case 'feedback_reply': {
+      const d = n.data as { reply?: string; excerpt?: string };
+      const about = d.excerpt ? ` to your feedback "${d.excerpt}"` : ' to your feedback';
+      return d.reply ? `${name} replied${about}: "${d.reply}"` : `${name} replied${about}.`;
     }
     default:
       return `New notification from ${name}.`;

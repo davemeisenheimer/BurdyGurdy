@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { SpectrogramCanvas } from './SpectrogramCanvas';
 import { useAudioProgress } from '../../hooks/useAudioProgress';
 import { toProxyUrl } from '../../lib/audioProxy';
+import { useReleaseAudioOnUnmount } from '../../hooks/useReleaseAudioOnUnmount';
 
 interface Props {
   audioUrl?: string;
@@ -70,6 +71,11 @@ export function SpectrogramPlayer({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioUrl, isControlled]);
 
+  // Uncontrolled: release the download on unmount. Not done on audioUrl change - React has already
+  // set the new src by the time that cleanup runs, and changing src aborts the old download anyway.
+  // Autoplay above is deferred by a timeout, so the src restored here is back before it plays.
+  useReleaseAudioOnUnmount(internalRef, toProxyUrl(audioUrl));
+
   // Prefer the known hint until the hook resolves the actual duration
   const shownDuration = durationHint !== undefined ? Math.round(durationHint) : displayDuration;
 
@@ -81,6 +87,7 @@ export function SpectrogramPlayer({
         <audio
           ref={internalRef}
           src={toProxyUrl(audioUrl)}
+          preload="none"
           loop
           onPlay={() => setInternalPlaying(true)}
           onPause={() => setInternalPlaying(false)}

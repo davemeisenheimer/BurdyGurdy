@@ -31,6 +31,7 @@ interface Props {
   onToggleFocusStruggling?: () => void;
   user?: SupabaseUser | null;
   onInstallApp?: (() => Promise<void>) | null;
+  onSendFeedback?: () => void;
 }
 
 interface ToggleRowProps {
@@ -63,7 +64,7 @@ const BIRDER_LEVELS: { level: BirderLevel; label: string; desc: string }[] = [
   { level: 'advanced',     label: 'Advanced',     desc: 'Skips easy and medium difficulty questions.' },
 ];
 
-export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, regionCode, onRegionChange, onClearBlockedPhotos, isAdmin, recentDays, questionTypes, onProgressTrimmed, focusStruggling, showFocusModeToggle, strugglingCount, onToggleFocusStruggling, user, onInstallApp }: Props) {
+export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, regionCode, onRegionChange, onClearBlockedPhotos, isAdmin, recentDays, questionTypes, onProgressTrimmed, focusStruggling, showFocusModeToggle, strugglingCount, onToggleFocusStruggling, user, onInstallApp, onSendFeedback }: Props) {
   const [settings, setSettings] = useState(initialSettings);
   const [regionDisplayName, setRegionDisplayName] = useState<string | undefined>(undefined);
   const [showMap, setShowMap] = useState(false);
@@ -348,6 +349,22 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
             ) : (
               <p className="text-xs text-slate-500">Tap the browser menu ⋮ and select "Add to Home screen".</p>
             )}
+          </div>
+        )}
+
+        {/* Feedback - signed-in users only */}
+        {user && onSendFeedback && (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mt-4">
+            <p className="font-medium text-slate-800 text-sm mb-1">Feedback</p>
+            <p className="text-xs text-slate-500 mb-3">
+              Tell us what you like, what you don't, or what you'd change. We read every message.
+            </p>
+            <button
+              onClick={onSendFeedback}
+              className="text-xs px-3 py-1.5 border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors"
+            >
+              Send feedback
+            </button>
           </div>
         )}
 

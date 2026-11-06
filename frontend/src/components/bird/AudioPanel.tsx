@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import type { BirdInfoData } from '../../services/remote/api';
 import { SpectrogramPlayer } from '../ui/SpectrogramPlayer';
 import { toProxyUrl } from '../../lib/audioProxy';
+import { useReleaseAudioOnUnmount } from '../../hooks/useReleaseAudioOnUnmount';
 
 interface Props {
   recordings:   BirdInfoData['recordings'];
@@ -14,20 +15,31 @@ interface Props {
 
 export function AudioPanel({ recordings, autoplay = false, pauseRef, fillHeight = false }: Props) {
   const [idx, setIdx]         = useState(0);
-  const [playing, setPlaying] = useState(false);
+  // Starts as `autoplay` so the pause effect below doesn't cancel the mount-time autoplay:
+  // it runs in the same pass, before the autoplay effect's setPlaying(true) is applied.
+  const [playing, setPlaying] = useState(autoplay);
   const audioRef = useRef<HTMLAudioElement>(null);
   const rec = recordings[idx];
+  const src = toProxyUrl(rec?.file);
+
+  // Stop and release the download on unmount so audio doesn't outlive the component.
+  // Must stay above the autoplay effect: it restores src after StrictMode's fake unmount.
+  useReleaseAudioOnUnmount(audioRef, src);
 
   useEffect(() => {
     const audio = audioRef.current;
     setIdx(0);
+    // A play() from an earlier run can reject after this run started playing (e.g. StrictMode's
+    // fake unmount aborts it) - ignore it rather than pausing the current playback.
+    let stale = false;
     if (autoplay && audio) {
       // Attempt autoplay (desktop only - iOS blocks this, which is expected browser behaviour)
-      audio.play().catch(() => setPlaying(false));
+      audio.play().catch(() => { if (!stale) setPlaying(false); });
       setPlaying(true);
     } else {
       setPlaying(false);
     }
+    return () => { stale = true; };
   }, [recordings]);
 
   useEffect(() => {
@@ -43,11 +55,6 @@ export function AudioPanel({ recordings, autoplay = false, pauseRef, fillHeight 
     if (!audioRef.current) return;
     if (!playing) audioRef.current.pause();
   }, [playing, idx]);
-
-  // Pause on unmount so audio doesn't outlive the component
-  useEffect(() => {
-    return () => { audioRef.current?.pause(); };
-  }, []);
 
   if (recordings.length === 0) return null;
 
@@ -66,8 +73,9 @@ export function AudioPanel({ recordings, autoplay = false, pauseRef, fillHeight 
 
   return (
     <div className={`flex flex-col bg-slate-900 overflow-hidden ${fillHeight ? 'h-full' : ''}`}>
-      {/* Audio element - src managed via toProxyUrl for Content-Length / seekable range */}
-      <audio ref={audioRef} src={toProxyUrl(rec.file)} onEnded={() => setPlaying(false)} />
+      {/* Audio element - src managed via toProxyUrl for Content-Length / seekable range.
+          preload="none": don't open a download until the user (or autoplay) plays it. */}
+      <audio ref={audioRef} src={src} preload="none" onEnded={() => setPlaying(false)} />
 
       {/* Spectrogram + position indicator + duration pill */}
       {(!!rec.file || fillHeight) && (
