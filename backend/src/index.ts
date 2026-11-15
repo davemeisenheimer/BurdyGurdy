@@ -9,6 +9,7 @@ import friendsRouter from './routes/friends';
 import proxyRouter from './routes/proxy';
 import adminRouter from './routes/admin';
 import feedbackRouter from './routes/feedback';
+import mailoutRouter from './routes/mailout';
 import { requestTiming } from './lib/requestTiming';
 
 dotenv.config();
@@ -29,6 +30,7 @@ app.use('/api/friends', friendsRouter);
 app.use('/api/proxy', proxyRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/feedback', feedbackRouter);
+app.use('/api/mailout', mailoutRouter);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 

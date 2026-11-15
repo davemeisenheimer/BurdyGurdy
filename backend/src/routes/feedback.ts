@@ -1,8 +1,7 @@
 import { Router } from 'express';
-import type { Request, Response } from 'express';
 import { Resend } from 'resend';
 import type { User } from '@supabase/supabase-js';
-import { getSupabaseAdmin } from '../lib/supabase';
+import { authenticate } from '../lib/authenticate';
 import {
   validateFeedbackSubmission,
   validateFeedbackReply,
@@ -12,11 +11,8 @@ import {
   FEEDBACK_STATUSES,
 } from '../lib/feedback';
 import type { FeedbackStatus } from '../lib/feedback';
-import { classifyAuthFailure } from '../lib/authFailure';
 
 const router = Router();
-
-type AdminClient = ReturnType<typeof getSupabaseAdmin>;
 
 function displayNameOf(user: User): string {
   return (user.user_metadata?.full_name as string | undefined) ??
@@ -30,43 +26,10 @@ function getResend(): { resend: Resend; fromEmail: string } | null {
   return { resend: new Resend(apiKey), fromEmail: process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev' };
 }
 
-/** Verifies the Bearer token. Sends the error response and returns null on failure. */
-async function authenticate(
-  req: Request,
-  res: Response,
-  requireAdmin: boolean,
-): Promise<{ admin: AdminClient; caller: User } | null> {
-  const token = req.headers.authorization?.startsWith('Bearer ')
-    ? req.headers.authorization.slice(7)
-    : null;
-  if (!token) { res.status(401).json({ error: 'Missing auth token' }); return null; }
-
-  let admin: AdminClient;
-  try { admin = getSupabaseAdmin(); }
-  catch (e) { res.status(500).json({ error: (e as Error).message }); return null; }
-
-  const { data: { user: caller }, error: authErr } = await admin.auth.getUser(token);
-  if (authErr || !caller) {
-    const kind = authErr ? classifyAuthFailure(authErr) : 'invalid-token';
-    console.warn(`[feedback] auth failed (${kind}) on ${req.method} ${req.baseUrl}${req.path}: ${authErr?.message ?? 'no user returned'}`);
-    if (kind === 'auth-unavailable') {
-      res.status(503).json({ error: 'Could not verify sign-in right now', code: kind });
-    } else {
-      res.status(401).json({ error: 'Invalid token', code: kind });
-    }
-    return null;
-  }
-  if (requireAdmin && caller.user_metadata?.is_admin !== true) {
-    res.status(403).json({ error: 'Forbidden' });
-    return null;
-  }
-  return { admin, caller };
-}
-
 // POST /api/feedback
 // Submits user feedback. Requires authentication. Notifies all admins in-app and by email.
 router.post('/', async (req, res) => {
-  const auth = await authenticate(req, res, false);
+  const auth = await authenticate(req, res, false, 'feedback');
   if (!auth) return;
   const { admin, caller } = auth;
 
@@ -131,7 +94,7 @@ router.post('/', async (req, res) => {
 // GET /api/feedback?status=new
 // Lists feedback for admins, newest first. Optional status filter.
 router.get('/', async (req, res) => {
-  const auth = await authenticate(req, res, true);
+  const auth = await authenticate(req, res, true, 'feedback');
   if (!auth) return;
 
   const status = typeof req.query.status === 'string' ? req.query.status : null;
@@ -154,7 +117,7 @@ router.get('/', async (req, res) => {
 // PATCH /api/feedback/:id/status
 // Admin-only. Marks a feedback item new/read (replied is set by the reply endpoint).
 router.patch('/:id/status', async (req, res) => {
-  const auth = await authenticate(req, res, true);
+  const auth = await authenticate(req, res, true, 'feedback');
   if (!auth) return;
 
   const status = req.body?.status as FeedbackStatus | undefined;
@@ -168,7 +131,7 @@ router.patch('/:id/status', async (req, res) => {
 // POST /api/feedback/:id/reply
 // Admin-only. Saves the reply, notifies the user in-app, and emails them if they opted in.
 router.post('/:id/reply', async (req, res) => {
-  const auth = await authenticate(req, res, true);
+  const auth = await authenticate(req, res, true, 'feedback');
   if (!auth) return;
   const { admin, caller } = auth;
 

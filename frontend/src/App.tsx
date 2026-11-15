@@ -15,6 +15,7 @@ import { CurationPanel } from './components/panels/CurationPanel';
 import { FactsCurationPanel } from './components/panels/FactsCurationPanel';
 import { DatabasePanel } from './components/panels/DatabasePanel';
 import { FeedbackPanel } from './components/panels/FeedbackPanel';
+import { MailoutPanel } from './components/panels/MailoutPanel';
 import { BirdInfoPanel } from './components/panels/BirdInfoPanel';
 import { SightingsMapPanel } from './components/panels/SightingsMapPanel';
 import { SightingsScreen } from './components/screens/SightingsScreen';
@@ -123,7 +124,7 @@ export default function App() {
   const [recentProgressBack, setRecentProgressBack] = useState<'result' | 'progress'>('result');
   const [lifeListBack, setLifeListBack] = useState<'home' | 'result'>('home');
   const [sightingsBack, setSightingsBack] = useState<typeof screen>('home');
-  const [rightPanelTab, setRightPanelTab] = useState<'info' | 'curation' | 'facts' | 'database' | 'feedback'>('info');
+  const [rightPanelTab, setRightPanelTab] = useState<'info' | 'curation' | 'facts' | 'database' | 'feedback' | 'mailout'>('info');
   const [progressSelectedSpecies, setProgressSelectedSpecies] = useState<{ speciesCode: string; comName: string } | null>(null);
   const [friendProgressRecords, setFriendProgressRecords] = useState<BirdProgress[]>([]);
   const [friendFieldIds, setFriendFieldIds]               = useState<FieldId[]>([]);
@@ -1017,7 +1018,7 @@ export default function App() {
 
         {isAdmin && settings.enableAdminFeatures && screen !== 'sightings' && (
           <div className="shrink-0 flex border-b border-slate-200 bg-white">
-            {(['info', 'curation', 'facts', 'database', 'feedback'] as const).map(tab => (
+            {(['info', 'curation', 'facts', 'database', 'feedback', 'mailout'] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setRightPanelTab(tab)}
@@ -1027,7 +1028,7 @@ export default function App() {
                     : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
                 }`}
               >
-                {tab === 'info' ? 'Bird Info' : tab === 'curation' ? 'Curation' : tab === 'facts' ? 'Facts' : tab === 'database' ? 'Database' : 'Feedback'}
+                {tab === 'info' ? 'Bird Info' : tab === 'curation' ? 'Curation' : tab === 'facts' ? 'Facts' : tab === 'database' ? 'Database' : tab === 'feedback' ? 'Feedback' : 'Mailout'}
               </button>
             ))}
           </div>
@@ -1079,6 +1080,11 @@ export default function App() {
         {screen !== 'sightings' && isAdmin && settings.enableAdminFeatures && rightPanelTab === 'feedback' && (
           <div className="flex-1 min-h-0 overflow-hidden">
             <FeedbackPanel />
+          </div>
+        )}
+        {screen !== 'sightings' && isAdmin && settings.enableAdminFeatures && rightPanelTab === 'mailout' && (
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <MailoutPanel />
           </div>
         )}
       </div>}
