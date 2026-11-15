@@ -174,6 +174,12 @@ export function SettingsScreen({ initialSettings, onSave, onBack, isDesktop, reg
             onChange={v => update('autoplayRevealAudio', v)}
           />
           <ToggleRow
+            label="Show ID tips after wrong answers"
+            infoId="showIdTips"
+            checked={settings.showIdTips}
+            onChange={v => update('showIdTips', v)}
+          />
+          <ToggleRow
             label="Latin-answer questions"
             infoId="latinAnswerQuestions"
             checked={settings.includeLatinAnswerVariants}

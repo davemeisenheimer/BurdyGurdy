@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { PhotoCurationPanel } from './PhotoCurationPanel';
-import { AudioCurationPanel } from './AudioCurationPanel';
+import { PhotoCurationPanel } from '../PhotoCurationPanel';
+import { AudioCurationPanel } from '../AudioCurationPanel';
 import {
   fetchPendingReports, fetchBlockedReports,
   blockReport, invalidateReport, deleteReport, unblockReport,
   sendReportResolution,
-} from '../../lib/adminSync';
-import type { MediaReport } from '../../lib/adminSync';
-import { fetchAdminBlockedMedia } from '../../services/remote/sync';
+} from '../../../lib/adminSync';
+import type { MediaReport } from '../../../lib/adminSync';
+import { fetchAdminBlockedMedia } from '../../../services/remote/sync';
+import { TipsTab } from './TipsTab';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -453,7 +454,7 @@ function BlockedMediaTab({ refreshKey }: { refreshKey: number }) {
 
 // ── CurationPanel (tabbed) ────────────────────────────────────────────────────
 
-type Tab = 'photos' | 'audio' | 'reports' | 'blocked';
+type Tab = 'photos' | 'audio' | 'reports' | 'tips' | 'blocked';
 
 function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
@@ -485,6 +486,7 @@ export function CurationPanel() {
         <TabBtn active={tab === 'photos'}  onClick={() => setTab('photos')}>Photos</TabBtn>
         <TabBtn active={tab === 'audio'}   onClick={() => setTab('audio')}>Audio</TabBtn>
         <TabBtn active={tab === 'reports'} onClick={() => setTab('reports')}>Reports</TabBtn>
+        <TabBtn active={tab === 'tips'}    onClick={() => setTab('tips')}>Tips</TabBtn>
         <TabBtn active={tab === 'blocked'} onClick={() => setTab('blocked')}>Blocked</TabBtn>
       </div>
 
@@ -492,6 +494,7 @@ export function CurationPanel() {
         {tab === 'photos'  && <PhotoCurationPanel />}
         {tab === 'audio'   && <AudioCurationPanel />}
         {tab === 'reports' && <ReportsTab onBlocked={handleBlocked} />}
+        {tab === 'tips'    && <TipsTab />}
         {tab === 'blocked' && <BlockedMediaTab refreshKey={blockedRefresh} />}
       </div>
     </div>

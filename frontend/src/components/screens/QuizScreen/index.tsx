@@ -1,16 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
-import type { QuizQuestion, AttributedPhoto } from '../../types';
-import type { RecentSighting } from '../../services/remote/api';
-import { AudioPlayer } from '../ui/AudioPlayer';
-import { SpectrogramCanvas } from '../ui/SpectrogramCanvas';
-import { SpectrogramPlayer } from '../ui/SpectrogramPlayer';
-import { AnswerOption } from '../ui/AnswerOption';
-import { ProgressBar } from '../ui/ProgressBar';
-import { masteryBadgeClass, masteryLabel, masteryThreshold, MASTERY_LABELS } from '../../lib/mastery';
-import { isNonMasteredStruggling } from '../../lib/struggling';
-import { MasteryBadge } from '../ui/MasteryBadge';
-import { ReportErrorModal } from '../ui/ReportErrorModal';
-import type { ReportErrorData } from '../ui/ReportErrorModal';
+import type { QuizQuestion, AttributedPhoto } from '../../../types';
+import type { RecentSighting } from '../../../services/remote/api';
+import { AudioPlayer } from '../../ui/AudioPlayer';
+import { SpectrogramCanvas } from '../../ui/SpectrogramCanvas';
+import { SpectrogramPlayer } from '../../ui/SpectrogramPlayer';
+import { AnswerOption } from '../../ui/AnswerOption';
+import { ProgressBar } from '../../ui/ProgressBar';
+import { masteryBadgeClass, masteryLabel, masteryThreshold, MASTERY_LABELS } from '../../../lib/mastery';
+import { isNonMasteredStruggling } from '../../../lib/struggling';
+import { MasteryBadge } from '../../ui/MasteryBadge';
+import { ReportErrorModal } from '../../ui/ReportErrorModal';
+import type { ReportErrorData } from '../../ui/ReportErrorModal';
+import { isIdTipEligible } from '../../../lib/idTip';
+import { useIdTip } from './useIdTip';
+import { IdTipView } from './IdTipView';
+import { IdTipReportModal, type IdTipReportData } from './IdTipReportModal';
+import type { IdTipParams } from '../../../services/remote/api';
 
 interface Props {
   question: QuizQuestion;
@@ -32,6 +37,10 @@ interface Props {
   revealPhotosUnavailable?: boolean;
   showMediaInCarousel?: boolean;
   autoplayRevealAudio?: boolean;
+  /** Show an AI tip about the question photo after a wrong answer on a photo question. */
+  showIdTips?: boolean;
+  /** Sends a report about the ID tip. Only offered to signed-in players (userEmail set). */
+  onReportIdTip?: (data: IdTipParams & IdTipReportData) => Promise<void>;
   onRemoveOptionalPhoto: (url: string) => void;
   onAnswer: (answer: string) => void;
   onToggleFavourite: () => void;
@@ -102,6 +111,8 @@ export function QuizScreen({
   questionPhotoFetching = false,
   showMediaInCarousel = true,
   autoplayRevealAudio = true,
+  showIdTips = false,
+  onReportIdTip,
   onRemoveOptionalPhoto,
   onAnswer,
   onToggleFavourite,
@@ -149,6 +160,29 @@ export function QuizScreen({
   // to the base photo, which would cause a visible swap when the selected photo arrives.
   const basePhoto: AttributedPhoto | null = question.imageUrl ? { url: question.imageUrl, credit: question.imageCredit ?? '' } : null;
   const questionDisplayPhoto = questionPhoto ?? (questionPhotoFetching ? null : basePhoto);
+
+  // AI ID tip: after a wrong photo answer the tip view replaces the reveal until the player moves on
+  // to it; they can flip back and forth with the bottom buttons. If the tip fails, the reveal shows.
+  const tipEligible = isIdTipEligible({
+    enabled: showIdTips,
+    questionType: question.type,
+    selectedAnswer,
+    isCorrect,
+    noPhoto: question.noPhoto,
+    noAudio: question.noAudio,
+    photoUrl: questionDisplayPhoto?.url ?? null,
+  });
+  const tipParams: IdTipParams | null = tipEligible && questionDisplayPhoto && selectedAnswer
+    ? { speciesCode: question.speciesCode, comName: question.comName, sciName: question.sciName, guess: selectedAnswer, photoUrl: questionDisplayPhoto.url }
+    : null;
+  const idTip = useIdTip(tipParams);
+  const [showTipView, setShowTipView] = useState(true);
+  const [showTipReport, setShowTipReport] = useState(false);
+  const [tipReported, setTipReported] = useState(false);
+  useEffect(() => { setShowTipView(true); setShowTipReport(false); setTipReported(false); }, [question.id]);
+  const canReportTip = !!userEmail && !!onReportIdTip;
+  const tipAvailable = tipEligible && idTip.status !== 'failed';
+  const tipViewActive = tipAvailable && showTipView;
 
   const [photoIdx, setPhotoIdx] = useState(0);
   useEffect(() => { setPhotoIdx(0); }, [question.id]);
@@ -419,6 +453,17 @@ export function QuizScreen({
               </div>
             )}
 
+            {tipViewActive && questionDisplayPhoto && selectedAnswer ? (
+              <IdTipView
+                photo={questionDisplayPhoto}
+                guess={selectedAnswer}
+                status={idTip.status}
+                tip={idTip.tip}
+                onReport={canReportTip ? () => setShowTipReport(true) : undefined}
+                reported={tipReported}
+              />
+            ) : (<>
+
             {/* Photo sources could not be reached and we have nothing stored for this bird */}
             {revealPhotosUnavailable && !revealPhotos.primary && revealPhotos.optional.length === 0 && (
               <div className="shrink-0 px-5 py-2 border-b border-amber-100 bg-amber-50 text-amber-800 text-xs">
@@ -596,6 +641,7 @@ export function QuizScreen({
                 </div>
               )}
             </div>
+            </>)}
           </div>
         )}
       </div>
@@ -637,6 +683,30 @@ export function QuizScreen({
         >
           Skip question
         </button>
+      ) : answered && tipViewActive ? (
+        /* Tip view → on to the reveal */
+        <button
+          onClick={() => setShowTipView(false)}
+          className="shrink-0 w-full py-3 rounded-xl bg-forest-600 hover:bg-forest-700 text-white font-semibold text-lg cursor-pointer transition-all"
+        >
+          Next →
+        </button>
+      ) : answered && tipAvailable ? (
+        /* Reveal after a tip: go back to the tip, or move on */
+        <div className="shrink-0 flex gap-2">
+          <button
+            onClick={() => setShowTipView(true)}
+            className="flex-1 py-3 rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-50 active:bg-slate-100 font-semibold text-lg cursor-pointer transition-colors"
+          >
+            ← Back to Tip
+          </button>
+          <button
+            onClick={onNext}
+            className="flex-1 py-3 rounded-xl bg-forest-600 hover:bg-forest-700 text-white font-semibold text-lg cursor-pointer transition-all"
+          >
+            {currentIndex + 1 >= totalQuestions ? 'See Results' : 'Next Question'}
+          </button>
+        </div>
       ) : (
         /* Always occupies space; invisible until answered to prevent layout shift */
         <button
@@ -647,6 +717,23 @@ export function QuizScreen({
         >
           {currentIndex + 1 >= totalQuestions ? 'See Results' : 'Next Question'}
         </button>
+      )}
+
+      {/* ID tip report modal */}
+      {showTipReport && tipParams && idTip.tip && onReportIdTip && (
+        <IdTipReportModal
+          photoUrl={tipParams.photoUrl}
+          comName={question.comName}
+          guess={tipParams.guess}
+          tip={idTip.tip}
+          userEmail={userEmail}
+          onClose={() => setShowTipReport(false)}
+          onSubmit={async data => {
+            await onReportIdTip({ ...tipParams, ...data });
+            setTipReported(true);
+            setShowTipReport(false);
+          }}
+        />
       )}
 
       {/* Report error modal */}

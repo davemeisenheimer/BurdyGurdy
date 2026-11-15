@@ -10,6 +10,7 @@ import proxyRouter from './routes/proxy';
 import adminRouter from './routes/admin';
 import feedbackRouter from './routes/feedback';
 import mailoutRouter from './routes/mailout';
+import idTipRouter from './routes/idTip';
 import { requestTiming } from './lib/requestTiming';
 
 dotenv.config();
@@ -31,6 +32,7 @@ app.use('/api/proxy', proxyRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/feedback', feedbackRouter);
 app.use('/api/mailout', mailoutRouter);
+app.use('/api/id-tip', idTipRouter);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
@@ -57,4 +59,6 @@ app.listen(PORT, () => {
   console.log('Env check - RESEND_API_KEY:', process.env.RESEND_API_KEY ? 'SET' : 'MISSING');
   console.log('Env check - SUPABASE_URL:', process.env.SUPABASE_URL ? 'SET' : 'MISSING');
   console.log('Env check - SUPABASE_SERVICE_ROLE_KEY:', process.env.SUPABASE_SERVICE_ROLE_KEY ? 'SET' : 'MISSING');
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  console.log('Env check - ANTHROPIC_API_KEY:', anthropicKey ? `SET (${anthropicKey.length} chars)` : 'MISSING');
 });

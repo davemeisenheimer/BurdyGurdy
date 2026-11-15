@@ -33,6 +33,7 @@ import type { LocateResult, RegionalSighting, RecentSighting } from './services/
 import { db, switchToUserDb } from './lib/db';
 import { supabase } from './lib/supabase';
 import type { SupabaseUser } from './lib/supabase';
+import { submitIdTipReport } from './services/remote/idTipReports';
 import { uploadProgress, downloadAndReplace, uploadSettings, uploadAchievements, downloadSettings, fetchFriendVictoryLog, downloadUserBlockedPhotos, deleteAllUserBlockedPhotos, uploadUserBlockedPhoto, submitMediaReport, fetchAdminBlockedMedia, deleteCloudProgressRecords, uploadRegionSnapshot, downloadRegionSnapshot, getCloudUploadTime, getLocalSyncedAt, getNeedsUpload, fetchRegionalPresence, refreshRegionalPresence } from './services/remote/sync';
 import { checkBirdsToExpire, expireOldMasteredBirds, backfillProgressTaxonomy } from './services/local/progress';
 import { getRegionSpecies } from './services/local/region';
@@ -1234,6 +1235,8 @@ export default function App() {
           currentMastery={currentMastery}
           showMediaInCarousel={!isDesktop}
           autoplayRevealAudio={settings.autoplayRevealAudio}
+          showIdTips={settings.showIdTips}
+          onReportIdTip={data => submitIdTipReport({ ...data, regionCode: config.regionCode ?? null })}
           onRemoveOptionalPhoto={removeOptionalPhoto}
           onAnswer={submitAnswer}
           onToggleFavourite={toggleFavourite}

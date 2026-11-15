@@ -1,10 +1,11 @@
 import { supabase } from './supabase';
+import { idTipResolutionText } from './idTip';
 
 export interface AppNotification {
   id: string;
   senderUserId: string;
   senderDisplayName: string;
-  type: 'login' | 'victory' | 'logout' | 'session' | 'report_resolved' | 'new_report' | 'new_feedback' | 'feedback_reply';
+  type: 'login' | 'victory' | 'logout' | 'session' | 'report_resolved' | 'tip_report_resolved' | 'new_report' | 'new_feedback' | 'feedback_reply';
   data: Record<string, unknown>;
   createdAt: string;
   read: boolean;
@@ -90,9 +91,20 @@ export function formatNotificationMessage(n: AppNotification): string {
         nest:         'contains nest',
         egg:          'contains egg',
         other:        'other issue',
+        // ID tip report issues
+        wrong_fact:   'wrong about this species',
+        not_visible:  'feature not visible in photo',
+        mixed_up:     'mixes up the two birds',
+        unhelpful:    'unhelpful or confusing',
       };
       const issue = issueLabel[d.issueType ?? ''] ?? (d.issueType ?? 'issue');
       return `New ${d.mediaType ?? 'media'} report for ${d.comName ?? 'a bird'} - ${issue} (submitted by ${name}).`;
+    }
+    case 'tip_report_resolved': {
+      const d = n.data as { action?: string; comName?: string; guess?: string; note?: string };
+      const answered = d.guess ? ` (when you answered ${d.guess})` : '';
+      const msg = `Your report about the ID tip for ${d.comName ?? 'a bird'}${answered} has been reviewed. ${idTipResolutionText(d.action ?? '')}`;
+      return d.note ? `${msg} Note from reviewer: "${d.note}"` : msg;
     }
     case 'new_feedback': {
       const d = n.data as { excerpt?: string };

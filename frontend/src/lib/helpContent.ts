@@ -67,6 +67,13 @@ export const HELP_CONTENT: Record<string, HelpEntry> = {
       'Automatically plays the bird\'s song when the answer is revealed, so you can associate the sound with the species even on photo questions.',
     ],
   },
+  showIdTips: {
+    title: 'Show ID tips after wrong answers',
+    body: [
+      'When you miss a photo question, an AI looks at the photo and points out the field marks that identify the bird and set it apart from the one you picked.',
+      'Use the buttons at the bottom to move between the tip and the usual answer details. Tips are AI-generated and can occasionally be wrong.',
+    ],
+  },
   latinAnswerQuestions: {
     title: 'Latin-answer questions',
     body: [

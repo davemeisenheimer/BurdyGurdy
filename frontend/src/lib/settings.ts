@@ -5,6 +5,7 @@ export type { BirderLevel };
 
 export interface AppSettings {
   autoplayRevealAudio: boolean;
+  showIdTips: boolean;
   includeLatinAnswerVariants: boolean;
   includeSongAnswerVariants: boolean;
   randomizeQuestionPhotos: boolean;
@@ -19,6 +20,7 @@ export interface AppSettings {
 
 export const DEFAULTS: AppSettings = {
   autoplayRevealAudio: true,
+  showIdTips: true,
   includeLatinAnswerVariants: false,
   includeSongAnswerVariants: false,
   randomizeQuestionPhotos: true,

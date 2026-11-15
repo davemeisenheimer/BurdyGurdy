@@ -9,6 +9,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
     "@birdygurdy/shared": "*",
     "@supabase/supabase-js": "^2.100.1",
     "axios": "1.13.6",

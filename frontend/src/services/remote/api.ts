@@ -262,3 +262,19 @@ export async function fetchBirdPhotos(speciesCode: string, comName?: string, sci
   const res = await api.get<{ primary: AttributedPhoto | null; optional: AttributedPhoto[]; unavailable?: boolean }>(`/birds/photos/${speciesCode}`, { params, timeout: SUPPLEMENTARY_REQUEST_TIMEOUT_MS });
   return { primary: res.data.primary ?? null, optional: res.data.optional ?? [], unavailable: res.data.unavailable ?? false };
 }
+
+export interface IdTipParams {
+  speciesCode: string;
+  comName: string;
+  sciName: string;
+  /** The answer the player picked (a common or scientific name, depending on question type). */
+  guess: string;
+  /** The photo shown in the question. */
+  photoUrl: string;
+}
+
+/** Asks the backend for an AI tip on what in the photo identifies the bird. Rejects when no tip is available. */
+export async function fetchIdTip(params: IdTipParams, signal?: AbortSignal): Promise<string> {
+  const res = await api.post<{ tip: string }>('/id-tip', params, { signal, timeout: SUPPLEMENTARY_REQUEST_TIMEOUT_MS });
+  return res.data.tip;
+}
