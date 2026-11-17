@@ -12,6 +12,7 @@ import type { FieldIdChange } from '../local/fieldIds';
 import { loadQuizPrefs, saveQuizPrefs } from '../../lib/settings';
 import type { AppSettings, QuizConfigPrefs } from '../../lib/settings';
 import type { VictoryLogEntry } from '../../lib/victory';
+import { selectChanged, fingerprintAll, withoutKeys, type Fingerprints } from '../../lib/uploadFingerprints';
 
 // ── Upload ────────────────────────────────────────────────────────────────────
 
@@ -39,8 +40,57 @@ function setNeedsUpload(userId: string, val: boolean): void {
   else     localStorage.removeItem(needsUpKey(userId));
 }
 
+// ── Upload change detection ──────────────────────────────────────────────────
+// Fingerprints of rows as last uploaded/downloaded, stored in the per-user local DB. Uploads send
+// only rows whose fingerprint changed; downloads and cloud deletions keep the fingerprints honest.
+
+const PROGRESS_FP_KEY = 'uploadFingerprints:progress';
+const FIELD_ID_FP_KEY = 'uploadFingerprints:fieldIds';
+
+async function loadFingerprints(key: string): Promise<Fingerprints> {
+  try {
+    const row = await db.keyValue.get(key);
+    return row ? (JSON.parse(row.value) as Fingerprints) : {};
+  } catch {
+    return {}; // unreadable → everything counts as changed, i.e. the old full upload
+  }
+}
+
+async function saveFingerprints(key: string, fingerprints: Fingerprints): Promise<void> {
+  await db.keyValue.put({ key, value: JSON.stringify(fingerprints) }).catch(() => {});
+}
+
+async function forgetFingerprints(key: string, keys: string[]): Promise<void> {
+  if (keys.length > 0) await saveFingerprints(key, withoutKeys(await loadFingerprints(key), keys));
+}
+
+type ProgressRow = ReturnType<typeof progressToRow>;
+const progressRowKey = (r: ProgressRow) => `${r.species_code}|${r.question_type}`;
+const fieldIdKey = (f: Pick<FieldId, 'speciesCode' | 'questionType'>) => `${f.speciesCode}|${f.questionType}`;
+
+/** Pure - the cloud row for a local progress record. */
+function progressToRow(userId: string, r: BirdProgress) {
+  return {
+    user_id:             userId,
+    species_code:        r.speciesCode,
+    question_type:       r.questionType,
+    com_name:            r.comName,
+    correct:             r.correct,
+    incorrect:           r.incorrect,
+    last_asked:          r.lastAsked,
+    weight:              r.weight,
+    favourited:          r.favourited  ?? false,
+    excluded:            r.excluded    ?? false,
+    mastery_level:       r.masteryLevel       ?? 0,
+    consecutive_correct: r.consecutiveCorrect ?? 0,
+    in_history:          r.isMastered  ?? false,
+    recent_answers:      r.recentAnswers      ?? null,
+  };
+}
+
 /**
- * Upserts all local progress records to the cloud for the given user.
+ * Upserts changed local progress records (and field-ID ticks) to the cloud for the given user.
+ * Rows unchanged since the last successful upload or download are skipped.
  * Skips seeded-but-never-played records (lastAsked === 0) - these are
  * palette placeholders and uploading them would corrupt cloud progress
  * from other devices.
@@ -55,27 +105,13 @@ function setNeedsUpload(userId: string, val: boolean): void {
 export async function uploadProgress(userId: string): Promise<boolean> {
   const records = (await db.progress.toArray()).filter(r => r.lastAsked > 0);
 
-  if (records.length > 0) {
-    const rows = records.map(r => ({
-      user_id:             userId,
-      species_code:        r.speciesCode,
-      question_type:       r.questionType,
-      com_name:            r.comName,
-      correct:             r.correct,
-      incorrect:           r.incorrect,
-      last_asked:          r.lastAsked,
-      weight:              r.weight,
-      favourited:          r.favourited  ?? false,
-      excluded:            r.excluded    ?? false,
-      mastery_level:       r.masteryLevel       ?? 0,
-      consecutive_correct: r.consecutiveCorrect ?? 0,
-      in_history:          r.isMastered  ?? false,
-      recent_answers:      r.recentAnswers      ?? null,
-    }));
-
+  // Only rows that changed since the last successful upload are sent (see lib/uploadFingerprints).
+  const rows = records.map(r => progressToRow(userId, r));
+  const progress = selectChanged(rows, progressRowKey, await loadFingerprints(PROGRESS_FP_KEY));
+  if (progress.changed.length > 0) {
     const { error } = await supabase
       .from('bird_progress')
-      .upsert(rows, { onConflict: 'user_id,species_code,question_type' });
+      .upsert(progress.changed, { onConflict: 'user_id,species_code,question_type' });
 
     if (error) {
       console.warn('sync: upload failed:', error.message);
@@ -83,14 +119,16 @@ export async function uploadProgress(userId: string): Promise<boolean> {
       return false;
     }
   }
+  await saveFingerprints(PROGRESS_FP_KEY, progress.next);
 
   // Field-ID ticks ride along with every progress upload, so a tick whose immediate upload
   // failed (e.g. offline) still reaches the cloud. Un-tick deletions are pushed at un-tick time.
-  const fieldIds = await db.fieldIds.toArray();
-  if (fieldIds.length > 0 && !(await upsertFieldIds(userId, fieldIds))) {
+  const fieldIds = selectChanged(await db.fieldIds.toArray(), fieldIdKey, await loadFingerprints(FIELD_ID_FP_KEY));
+  if (fieldIds.changed.length > 0 && !(await upsertFieldIds(userId, fieldIds.changed))) {
     setNeedsUpload(userId, true);
     return false;
   }
+  await saveFingerprints(FIELD_ID_FP_KEY, fieldIds.next);
 
   // Stamp last_upload_at so other devices detect this upload on reactivation.
   // Uses UPDATE (not upsert) to avoid creating a partial row; uploadSettings
@@ -157,11 +195,20 @@ export async function downloadAndReplace(userId: string, cloudTs: number | null)
   if (fieldIdError || !fieldIdRows || detailError || !detailRows) {
     console.warn('sync: field ID download failed:', (fieldIdError ?? detailError)?.message);
   } else if (data.length > 0 || fieldIdRows.length > 0) {
+    const cloudFieldIds = mergeFieldIdRows(fieldIdRows, detailRows);
     await db.fieldIds.clear();
-    await db.fieldIds.bulkPut(mergeFieldIdRows(fieldIdRows, detailRows));
+    await db.fieldIds.bulkPut(cloudFieldIds);
+    await saveFingerprints(FIELD_ID_FP_KEY, fingerprintAll(cloudFieldIds, fieldIdKey));
+  } else {
+    // Cloud has no ticks at all: whatever is local must be uploaded in full next time.
+    await saveFingerprints(FIELD_ID_FP_KEY, {});
   }
 
-  if (data.length === 0) return 0; // no cloud records - don't wipe local
+  if (data.length === 0) {
+    // No cloud records - don't wipe local, and make sure the next upload sends everything.
+    await saveFingerprints(PROGRESS_FP_KEY, {});
+    return 0;
+  }
 
   const local = await db.progress.toArray();
   const localByKey = new Map(local.map(r => [`${r.speciesCode}|${r.questionType}`, r]));
@@ -215,6 +262,19 @@ export async function downloadAndReplace(userId: string, cloudTs: number | null)
   });
 
   await db.progress.bulkPut(records);
+  // Local now mirrors the cloud, so nothing needs uploading until something changes. Records whose
+  // recentAnswers were synthesised above aren't in the cloud in that form, so they're left out and
+  // get uploaded once.
+  const cloudLacksAnswers = new Set(
+    data.filter(remote => remote.recent_answers == null).map(remote => `${remote.species_code}|${remote.question_type}`),
+  );
+  await saveFingerprints(
+    PROGRESS_FP_KEY,
+    fingerprintAll(
+      records.filter(r => r.lastAsked > 0).map(r => progressToRow(userId, r)).filter(row => !cloudLacksAnswers.has(progressRowKey(row))),
+      progressRowKey,
+    ),
+  );
 
   // Filter selectedSpeciesCodes to only codes still present after sync.
   const downloadedCodes = new Set(records.map(r => r.speciesCode));
@@ -437,6 +497,8 @@ export async function syncFieldIdChange(change: FieldIdChange): Promise<void> {
       .eq('species_code', change.removed.speciesCode)
       .eq('question_type', change.removed.questionType);
     if (error) console.warn('sync: field ID delete failed:', error.message);
+    // So an identical re-tick is uploaded again rather than skipped as "unchanged".
+    await forgetFingerprints(FIELD_ID_FP_KEY, [fieldIdKey(change.removed)]);
   }
   if (change.progressDeleted) await deleteCloudProgressRecords(userId, [change.progressDeleted]);
 
@@ -455,6 +517,7 @@ export async function deleteAllCloudFieldIds(userId: string): Promise<void> {
     .delete()
     .eq('user_id', userId);
   if (error) console.warn('sync: field IDs delete failed:', error.message);
+  await saveFingerprints(FIELD_ID_FP_KEY, {});
 }
 
 // ── Media reports ─────────────────────────────────────────────────────────────
@@ -566,6 +629,7 @@ export async function deleteCloudProgress(userId: string): Promise<void> {
     .delete()
     .eq('user_id', userId);
   if (error) console.warn('sync: delete failed:', error.message);
+  await saveFingerprints(PROGRESS_FP_KEY, {});
 }
 
 /** Deletes specific species+questionType records from the cloud for the given user.
@@ -585,4 +649,6 @@ export async function deleteCloudProgressRecords(
     .eq('user_id', userId)
     .or(filter);
   if (error) console.warn('sync: targeted delete failed:', error.message);
+  // So a re-created record is uploaded again even if it happens to match the deleted one.
+  await forgetFingerprints(PROGRESS_FP_KEY, records.map(r => `${r.speciesCode}|${r.questionType}`));
 }
