@@ -209,3 +209,25 @@ export function indexTaxonomy(
   taxonomy.forEach((t, i) => map.set(t.speciesCode, { familyComName: t.familyComName, familySciName: t.familySciName, taxonIndex: i }));
   return map;
 }
+
+// ── Error logging ────────────────────────────────────────────────────────────
+
+/**
+ * One-line description of an error for logs, including its underlying cause chain. The Anthropic
+ * SDK's "Connection error." hides the real network failure (ECONNRESET, ETIMEDOUT, ...) in `cause`.
+ */
+export function describeError(err: unknown, maxDepth = 3): string {
+  const parts: string[] = [];
+  let current: unknown = err;
+  for (let depth = 0; current != null && depth <= maxDepth; depth++) {
+    if (current instanceof Error) {
+      const code = (current as { code?: unknown }).code;
+      parts.push(typeof code === 'string' && !current.message.includes(code) ? `${current.message} [${code}]` : current.message);
+      current = (current as { cause?: unknown }).cause;
+    } else {
+      parts.push(String(current));
+      break;
+    }
+  }
+  return parts.join(' <- caused by: ');
+}

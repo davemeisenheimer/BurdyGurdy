@@ -6,7 +6,7 @@ import {
   validateIdTipRequest, validateIdTipReport, validateIdTipResolution, validateIdTipSave,
   photoBelongsToSpecies, idTipCacheKey, guessKey, createRateLimiter,
   idTipResolutionText, ID_TIP_ISSUE_LABELS,
-  countReportsByTip, indexTaxonomy, tipKeyString,
+  countReportsByTip, indexTaxonomy, tipKeyString, describeError,
 } from '../lib/idTip';
 import { getTaxonomy } from '../services/ebird';
 import { escapeHtml } from '../lib/feedback';
@@ -97,7 +97,7 @@ router.post('/', async (req, res) => {
     if (!tip) return res.status(502).json({ error: 'No tip available for this photo' });
     res.json({ tip });
   } catch (err) {
-    console.error(`[id-tip] ${r.speciesCode} vs "${r.guess}": ${(err as Error).message}`);
+    console.error(`[id-tip] ${r.speciesCode} vs "${r.guess}": ${describeError(err)}`);
     res.status(502).json({ error: 'Could not generate a tip' });
   }
 });
@@ -331,7 +331,7 @@ router.post('/admin/draft', async (req, res) => {
     if (!tip) return res.status(502).json({ error: 'The model returned no tip for this photo' });
     res.json({ tip });
   } catch (err) {
-    console.error(`[id-tip-admin] draft ${parsed.value.speciesCode}: ${(err as Error).message}`);
+    console.error(`[id-tip-admin] draft ${parsed.value.speciesCode}: ${describeError(err)}`);
     res.status(502).json({ error: 'Could not generate a tip' });
   }
 });

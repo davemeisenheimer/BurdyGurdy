@@ -5,12 +5,14 @@ import { USER_AGENT } from '../lib/userAgent';
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // API limit for a base64 image
 const IMAGE_FETCH_TIMEOUT_MS = 10_000;
 const MODEL_TIMEOUT_MS = 30_000;
+/** Retries with the SDK's growing back-off, so a brief network blip to the API doesn't lose the tip. */
+const MODEL_MAX_RETRIES = 3;
 
 type ImageMediaType = 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
 
 let client: Anthropic | null | undefined;
 function getClient(): Anthropic | null {
-  if (client === undefined) client = process.env.ANTHROPIC_API_KEY ? new Anthropic({ timeout: MODEL_TIMEOUT_MS, maxRetries: 1 }) : null;
+  if (client === undefined) client = process.env.ANTHROPIC_API_KEY ? new Anthropic({ timeout: MODEL_TIMEOUT_MS, maxRetries: MODEL_MAX_RETRIES }) : null;
   return client;
 }
 

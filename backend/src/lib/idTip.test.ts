@@ -18,6 +18,7 @@ import {
   countReportsByTip,
   tipKeyString,
   indexTaxonomy,
+  describeError,
 } from './idTip';
 
 const valid = {
@@ -208,5 +209,26 @@ describe('indexTaxonomy', () => {
     expect(idx.get('coohaw')).toEqual({ familyComName: 'Hawks, Eagles, and Kites', familySciName: 'Accipitridae', taxonIndex: 1 });
     expect(idx.get('dowwoo')?.taxonIndex).toBe(2);
     expect(idx.get('nope')).toBeUndefined();
+  });
+});
+
+describe('describeError', () => {
+  it('returns the message of a plain error', () => {
+    expect(describeError(new Error('image fetch 403'))).toBe('image fetch 403');
+  });
+
+  it('follows the cause chain and adds error codes', () => {
+    const socket = Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' });
+    const fetchErr = Object.assign(new Error('fetch failed'), { cause: Object.assign(new Error('socket closed'), { code: 'UND_ERR_SOCKET' }) });
+    const sdk = new Error('Connection error.', { cause: fetchErr });
+    expect(describeError(sdk)).toBe('Connection error. <- caused by: fetch failed <- caused by: socket closed [UND_ERR_SOCKET]');
+    // A code already in the message isn't repeated
+    expect(describeError(socket)).toBe('read ECONNRESET');
+  });
+
+  it('handles non-Error values and stops at maxDepth', () => {
+    expect(describeError('boom')).toBe('boom');
+    const deep = new Error('a', { cause: new Error('b', { cause: new Error('c') }) });
+    expect(describeError(deep, 1)).toBe('a <- caused by: b');
   });
 });
